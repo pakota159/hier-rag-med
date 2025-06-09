@@ -1,0 +1,78 @@
+# HierRAGMed Configuration
+
+# Data Configuration
+data:
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+  vector_db_dir: "data/vectordb"
+  chunk_size: 512
+  chunk_overlap: 50
+  max_chunks_per_doc: 10
+
+# Model Configuration
+models:
+  embedding:
+    name: "sentence-transformers/all-MiniLM-L6-v2"
+    device: "mps"  # M1 MacBook GPU
+    batch_size: 32
+    max_length: 512
+
+  llm:
+    provider: "ollama"
+    model_name: "llama2:7b-chat"
+    temperature: 0.7
+    max_tokens: 1024
+    top_p: 0.95
+    context_window: 4096
+
+# Retrieval Configuration
+retrieval:
+  top_k: 5
+  similarity_threshold: 0.7
+  rerank_top_k: 3
+  hybrid_search: true
+  alpha: 0.5  # Weight for hybrid search
+
+# Generation Configuration
+generation:
+  system_prompt: |
+    You are a medical AI assistant that provides accurate and helpful responses 
+    based on the retrieved medical context. Always cite your sources and 
+    acknowledge uncertainty when appropriate.
+  
+  few_shot_examples: true
+  max_retries: 3
+  timeout: 30
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "rouge"
+    - "bleu"
+    - "exact_match"
+    - "f1"
+  test_split: 0.2
+  random_seed: 42
+
+# Web Interface Configuration
+web:
+  host: "0.0.0.0"
+  port: 8501
+  debug: false
+  theme: "light"
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/hierragmed.log"
+  max_size: 10485760  # 10MB
+  backup_count: 5
+
+# Docker Configuration
+docker:
+  image_name: "hierragmed"
+  container_name: "hierragmed-app"
+  gpu: true
+  memory_limit: "16g"
+  cpu_limit: "4" 

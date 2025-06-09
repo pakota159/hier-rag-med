@@ -1,0 +1,23 @@
+# Core dependencies
+langchain>=0.1.0
+chromadb>=0.4.22
+sentence-transformers>=2.2.2
+ollama>=0.1.6
+
+# Web interface
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.6.0
+
+# Document processing
+PyPDF2>=3.0.0
+tqdm>=4.66.0
+
+# Evaluation
+rouge-score>=0.1.2
+scikit-learn>=1.4.0
+
+# Utilities
+loguru>=0.7.2
+pyyaml>=6.0.1
+numpy>=1.26.0 
