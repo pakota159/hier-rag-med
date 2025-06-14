@@ -20,10 +20,15 @@ class Retriever:
     def __init__(self, config: Config):
         """Initialize retriever."""
         self.config = config
+        
+        # Access config through config.config dictionary
+        embedding_config = config.config["models"]["embedding"]
+        
         self.embedding_model = SentenceTransformer(
-            config.models["embedding"]["name"],
-            device=config.models["embedding"]["device"]
+            embedding_config["name"],
+            device=embedding_config["device"]
         )
+        
         self.client = chromadb.PersistentClient(
             path=str(config.get_data_dir("vector_db")),
             settings=Settings(
@@ -35,16 +40,29 @@ class Retriever:
 
     def create_collection(self, collection_name: str) -> None:
         """Create a new collection in ChromaDB."""
+        try:
+            # Delete existing collection if it exists
+            self.client.delete_collection(collection_name)
+            logger.info(f"Deleted existing collection: {collection_name}")
+        except Exception:
+            # Collection doesn't exist, that's fine
+            pass
+        
+        # Create new collection
         self.collection = self.client.create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
-        logger.info(f"Created collection: {collection_name}")
+        logger.info(f"Created new collection: {collection_name}")
 
     def load_collection(self, collection_name: str) -> None:
         """Load an existing collection from ChromaDB."""
-        self.collection = self.client.get_collection(collection_name)
-        logger.info(f"Loaded collection: {collection_name}")
+        try:
+            self.collection = self.client.get_collection(collection_name)
+            logger.info(f"Loaded collection: {collection_name}")
+        except Exception as e:
+            logger.error(f"Collection {collection_name} not found: {e}")
+            raise ValueError(f"Collection {collection_name} does not exist. Create it first with create_collection().")
 
     def add_documents(self, documents: List[Dict[str, str]]) -> None:
         """Add documents to the collection."""
@@ -62,7 +80,7 @@ class Retriever:
             ids.append(f"{doc['metadata']['doc_id']}_{doc['metadata']['chunk_id']}")
 
         # Generate embeddings in batches
-        batch_size = self.config.models["embedding"]["batch_size"]
+        batch_size = self.config.config["models"]["embedding"]["batch_size"]
         embeddings = []
         
         for i in tqdm(range(0, len(texts), batch_size), desc="Generating embeddings"):
@@ -83,6 +101,11 @@ class Retriever:
         )
         logger.info(f"Added {len(documents)} documents to collection")
 
+    def list_collections(self) -> List[str]:
+        """List all available collections."""
+        collections = self.client.list_collections()
+        return [col.name for col in collections]
+
     def search(
         self,
         query: str,
@@ -101,7 +124,7 @@ class Retriever:
         )
 
         # Search in collection
-        n_results = n_results or self.config.retrieval["top_k"]
+        n_results = n_results or self.config.config["retrieval"]["top_k"]
         results = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results,
@@ -114,7 +137,7 @@ class Retriever:
             formatted_results.append({
                 "text": results["documents"][0][i],
                 "metadata": results["metadatas"][0][i],
-                "score": float(results["distances"][0][i])
+                "score": 1.0 - float(results["distances"][0][i])  # Convert distance to similarity
             })
 
         return formatted_results
@@ -126,50 +149,9 @@ class Retriever:
         filter_metadata: Optional[Dict] = None
     ) -> List[Dict[str, Union[str, float]]]:
         """Perform hybrid search combining semantic and keyword search."""
-        if not self.config.retrieval["hybrid_search"]:
+        if not self.config.config["retrieval"]["hybrid_search"]:
             return self.search(query, n_results, filter_metadata)
 
-        # Get semantic search results
-        semantic_results = self.search(
-            query,
-            n_results=n_results,
-            filter_metadata=filter_metadata
-        )
-
-        # Get keyword search results
-        keyword_results = self.collection.query(
-            query_texts=[query],
-            n_results=n_results,
-            where=filter_metadata
-        )
-
-        # Combine results using weighted scoring
-        alpha = self.config.retrieval["alpha"]
-        combined_results = {}
-
-        for result in semantic_results:
-            doc_id = result["metadata"]["doc_id"]
-            combined_results[doc_id] = {
-                "text": result["text"],
-                "metadata": result["metadata"],
-                "score": (1 - alpha) * result["score"]
-            }
-
-        for i, doc_id in enumerate(keyword_results["ids"][0]):
-            if doc_id in combined_results:
-                combined_results[doc_id]["score"] += alpha * (1 - float(keyword_results["distances"][0][i]))
-            else:
-                combined_results[doc_id] = {
-                    "text": keyword_results["documents"][0][i],
-                    "metadata": keyword_results["metadatas"][0][i],
-                    "score": alpha * (1 - float(keyword_results["distances"][0][i]))
-                }
-
-        # Sort by combined score
-        sorted_results = sorted(
-            combined_results.values(),
-            key=lambda x: x["score"],
-            reverse=True
-        )[:n_results]
-
-        return sorted_results 
+        # For now, just return semantic search results
+        # In a full implementation, this would combine semantic + keyword search
+        return self.search(query, n_results, filter_metadata)

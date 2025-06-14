@@ -17,6 +17,9 @@ class Config:
         self.config_path = config_path or Path("config.yaml")
         self.config = self._load_config()
 
+        # Create directories
+        self.get_data_dir("logs")
+        
         # Set up logging
         logger.add(
             self.get_data_dir("logs") / "hierragmed.log",
@@ -43,11 +46,11 @@ class Config:
             "models": {
                 "embedding": {
                     "name": "sentence-transformers/all-MiniLM-L6-v2",
-                    "device": "cpu",
-                    "batch_size": 32
+                    "device": "mps",  # M1 Mac
+                    "batch_size": 16
                 },
                 "llm": {
-                    "name": "mistral",
+                    "name": "mistral:7b-instruct",
                     "temperature": 0.7,
                     "context_window": 4096
                 }
@@ -56,6 +59,10 @@ class Config:
                 "top_k": 5,
                 "hybrid_search": True,
                 "alpha": 0.5
+            },
+            "processing": {
+                "chunk_size": 512,
+                "chunk_overlap": 100
             },
             "prompts": {
                 "system": "You are a helpful medical assistant. Use the provided context to answer the question accurately and concisely.",
@@ -77,4 +84,4 @@ class Config:
 
     def __getitem__(self, key: str):
         """Get configuration value."""
-        return self.config[key] 
+        return self.config[key]
