@@ -66,6 +66,8 @@ ollama pull mistral:7b-instruct
 
 ### 4. Run the Application
 
+streamlit run src/streamlit_app.py --server.port 8501
+
 ```bash
 # Activate environment
 conda activate rag-med
