@@ -64,13 +64,14 @@ ollama serve &
 ollama pull mistral:7b-instruct
 ```
 
-### 4. Run the Application
-
-streamlit run src/streamlit_app.py --server.port 8501
+### 4. Run Test
 
 ```bash
 # Activate environment
-conda activate rag-med
+streamlit run src/streamlit_app.py --server.port 8501
+```
+
+### 5. Actual
 
 # Start the application
 python -m src.main
