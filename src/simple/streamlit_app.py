@@ -487,30 +487,6 @@ def main():
         elif question_submitted:
             st.warning("⚠️ Please enter a medical question first.")
     
-    # Quick action buttons
-    st.markdown("---")
-    st.markdown("### 🚀 Quick Questions")
-    
-    quick_cols = st.columns(3)
-    quick_questions = [
-        "What are diabetes symptoms?",
-        "How to treat hypertension?", 
-        "Early signs of pregnancy?"
-    ]
-    
-    for i, quick_q in enumerate(quick_questions):
-        with quick_cols[i]:
-            if st.button(f"💫 {quick_q}", key=f"quick_{i}", use_container_width=True):
-                st.session_state.current_question = quick_q
-                st.session_state.process_question = True
-                try:
-                    st.rerun()
-                except:
-                    try:
-                        st.experimental_rerun()
-                    except:
-                        pass
-    
     # Footer with disclaimer
     st.markdown("---")
     st.markdown("""

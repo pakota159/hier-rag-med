@@ -11,7 +11,7 @@ import time
 
 # Get the project root directory
 project_root = Path(__file__).parent.parent if "tests" in str(Path(__file__).parent) else Path(__file__).parent
-src_path = project_root / "src"
+src_path = project_root / "src/simple"
 
 # Add src to Python path
 sys.path.insert(0, str(src_path))
