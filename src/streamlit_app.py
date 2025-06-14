@@ -1,19 +1,28 @@
 """
-Complete Streamlit chat app for HierRAGMed.
+Complete Streamlit chat app for HierRAGMed - Fixed for torch compatibility.
 """
 
 import streamlit as st
 import sys
 from pathlib import Path
 import time
+import os
+
+# Fix torch/streamlit compatibility issue
+os.environ["STREAMLIT_DISABLE_AUTOINDEX"] = "true"
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import Config
-from processing import DocumentProcessor
-from retrieval import Retriever
-from generation import Generator
+try:
+    from config import Config
+    from processing import DocumentProcessor
+    from retrieval import Retriever
+    from generation import Generator
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    st.error("Make sure you're running from the project root directory and all dependencies are installed.")
+    st.stop()
 
 # Page config
 st.set_page_config(
@@ -125,7 +134,12 @@ def setup_rag_system():
     try:
         with st.spinner("🔧 Setting up Medical RAG System..."):
             # Load config
-            config = Config(Path("config.yaml"))
+            config_path = Path("config.yaml")
+            if not config_path.exists():
+                st.error("❌ config.yaml not found. Please make sure you're running from the project root directory.")
+                return None, None
+                
+            config = Config(config_path)
             
             # Initialize components
             processor = DocumentProcessor(config.config["processing"])
@@ -147,15 +161,18 @@ def setup_rag_system():
                 if raw_data_path.exists():
                     for txt_file in raw_data_path.glob("*.txt"):
                         st.info(f"📄 Loading {txt_file.name}...")
-                        with open(txt_file, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        
-                        docs = processor.process_text(content, {
-                            "source": "medical_documents",
-                            "doc_id": txt_file.stem
-                        })
-                        all_docs.extend(docs)
-                        documents_found = True
+                        try:
+                            with open(txt_file, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            
+                            docs = processor.process_text(content, {
+                                "source": "medical_documents",
+                                "doc_id": txt_file.stem
+                            })
+                            all_docs.extend(docs)
+                            documents_found = True
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not read {txt_file.name}: {e}")
                 
                 # If no documents found, create sample data
                 if not documents_found:
@@ -221,6 +238,42 @@ Treatment:
   - Diuretics
   - Beta-blockers
   - Calcium channel blockers
+""",
+                        "pregnancy": """
+Pregnancy Information:
+
+Early Signs and Symptoms:
+• Missed menstrual period
+• Nausea and vomiting (morning sickness)
+• Breast tenderness and enlargement
+• Fatigue and increased sleepiness
+• Frequent urination
+• Food aversions or cravings
+• Mood changes
+• Light spotting (implantation bleeding)
+
+Pregnancy Trimesters:
+• First Trimester (Weeks 1-12):
+  - Organ development
+  - Morning sickness common
+  - Important prenatal vitamin intake
+• Second Trimester (Weeks 13-27):
+  - Often called "golden period"
+  - Energy levels improve
+  - Baby movements felt
+• Third Trimester (Weeks 28-40):
+  - Rapid baby growth
+  - Preparation for delivery
+  - More frequent doctor visits
+
+Prenatal Care:
+• Regular doctor visits
+• Prenatal vitamins with folic acid
+• Healthy diet and exercise
+• Avoid alcohol, smoking, and certain medications
+• Monitor weight gain
+• Stay hydrated
+• Get adequate rest
 """
                     }
                     
@@ -245,6 +298,18 @@ Treatment:
             
     except Exception as e:
         st.error(f"❌ Setup failed: {str(e)}")
+        st.error("Make sure Ollama is running and the mistral:7b-instruct model is available.")
+        with st.expander("🔧 Setup Instructions"):
+            st.code("""
+# Start Ollama
+ollama serve &
+
+# Pull the model
+ollama pull mistral:7b-instruct
+
+# Check if model is available
+ollama list
+""")
         return None, None
 
 def ask_question(question, retriever, generator):
@@ -302,6 +367,8 @@ def main():
         st.session_state.current_question = ""
     if 'process_question' not in st.session_state:
         st.session_state.process_question = False
+    if 'last_processed_question' not in st.session_state:
+        st.session_state.last_processed_question = ""
     
     # Sidebar
     with st.sidebar:
@@ -337,36 +404,36 @@ def main():
     st.markdown("""
     <div class="question-container">
         <h3 style="margin-top: 0; color: #2c3e50;">🔍 Ask Your Medical Question</h3>
+        <p style="margin: 0.5rem 0 0 0; color: #7f8c8d; font-size: 0.9em;">💡 Type your question and press Enter to submit</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Input form
-    with st.container():
-        col1, col2 = st.columns([5, 1])
-        
-        with col1:
-            user_question = st.text_input(
-                "Enter your question:",
-                value=st.session_state.current_question,
-                placeholder="e.g., What are the symptoms of diabetes?",
-                key="question_input",
-                label_visibility="collapsed"
-            )
-        
-        with col2:
-            ask_button = st.button("📤 Ask", type="primary", use_container_width=True)
+    # Input form - Enter to submit
+    user_question = st.text_input(
+        "Enter your question and press Enter:",
+        value=st.session_state.current_question,
+        placeholder="e.g., What are the symptoms of diabetes?",
+        key="question_input",
+        label_visibility="collapsed",
+        on_change=None
+    )
     
-    # Update current question if manually typed
-    if user_question != st.session_state.current_question:
+    # Check if question was submitted (Enter pressed) or triggered from sidebar
+    question_submitted = False
+    
+    # If user typed something new and it's different from stored question, they pressed Enter
+    if user_question and user_question != st.session_state.get('last_processed_question', ''):
+        question_submitted = True
         st.session_state.current_question = user_question
     
-    # Process question if ask button clicked or if triggered from sidebar/quick buttons
-    if (ask_button and user_question) or st.session_state.process_question:
+    # Process question if Enter was pressed or if triggered from sidebar/quick buttons
+    if question_submitted or st.session_state.process_question:
         question_to_process = st.session_state.current_question
         
         if question_to_process.strip():
-            # Reset the process flag
+            # Reset the process flag and store the processed question
             st.session_state.process_question = False
+            st.session_state.last_processed_question = question_to_process
             
             # Display user question with better styling
             st.markdown(f"""
@@ -417,9 +484,8 @@ def main():
             # Clear the current question after processing
             st.session_state.current_question = ""
         
-        elif ask_button:
+        elif question_submitted:
             st.warning("⚠️ Please enter a medical question first.")
-            st.session_state.process_question = False
     
     # Quick action buttons
     st.markdown("---")
