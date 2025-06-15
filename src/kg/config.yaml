@@ -1,0 +1,42 @@
+# KG-specific config
+data_dir: data/kg_raw
+
+# Same model configs as simple
+models:
+  embedding:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    device: mps
+    batch_size: 16
+  llm:
+    name: mistral:7b-instruct
+    temperature: 0.7
+    context_window: 4096
+
+# Retrieval with more documents
+retrieval:
+  top_k: 10  # Increase for larger knowledge base
+  hybrid_search: true
+  alpha: 0.5
+
+# Processing for larger docs
+processing:
+  chunk_size: 512
+  chunk_overlap: 100
+
+# Enhanced prompts for KG
+prompts:
+  system: |
+    You are an advanced medical assistant with access to comprehensive medical literature, 
+    clinical documentation, and medical terminology. Use this knowledge to provide accurate, 
+    evidence-based responses. Always prioritize patient safety and cite relevant medical sources.
+    
+  system_with_citations: |
+    You are an advanced medical assistant with access to PubMed research, clinical documentation,
+    and MeSH medical terminology. Provide evidence-based answers with proper citations using 
+    document numbers. Distinguish between research evidence [1], clinical documentation [2], 
+    and medical terminology [3] when citing sources.
+
+web:
+  host: 0.0.0.0
+  port: 8001  # Different port from simple
+  cors_origins: ["*"]

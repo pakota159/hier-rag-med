@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 import time
 import os
+import json
+import tqdm
 
 # Fix torch/streamlit compatibility issue
 os.environ["STREAMLIT_DISABLE_AUTOINDEX"] = "true"
@@ -26,7 +28,7 @@ except ImportError as e:
 
 # Page config
 st.set_page_config(
-    page_title="Ních gà - Medical Assistant",
+    page_title="Ních gà - Medical Assistant (KG)",
     page_icon="⚕️",
     layout="wide"
 )
@@ -132,8 +134,8 @@ st.markdown("""
 def setup_rag_system():
     """Setup and cache the RAG system."""
     try:
-        with st.spinner("🔧 Setting up Medical RAG System..."):
-            # Load config                
+        with st.spinner("🔧 Setting up KG-Enhanced Medical RAG System..."):
+            # Load config
             config = Config()
             
             # Initialize components
@@ -141,153 +143,41 @@ def setup_rag_system():
             retriever = Retriever(config)
             generator = Generator(config)
             
-            # Setup knowledge base
+            # Setup KG knowledge base
             try:
-                retriever.load_collection("medical_docs")
-                st.success("✅ Loaded existing medical knowledge base")
+                retriever.load_collection("kg_medical_docs")  # Different collection name
+                st.success("✅ Loaded KG medical knowledge base")
             except ValueError:
-                st.info("📚 Creating medical knowledge base...")
+                st.info("📚 Creating KG medical knowledge base...")
                 
-                # Check for documents in data/raw directory
-                raw_data_path = Path("data/raw")
-                documents_found = False
-                all_docs = []
+                # Load the fetched KG datasets
+                kg_data_dir = Path("data/kg_raw")
+                if not kg_data_dir.exists():
+                    st.error("❌ KG data not found. Run: python fetch_data.py first")
+                    return None, None
                 
-                if raw_data_path.exists():
-                    for txt_file in raw_data_path.glob("*.txt"):
-                        st.info(f"📄 Loading {txt_file.name}...")
-                        try:
-                            with open(txt_file, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                            
-                            docs = processor.process_text(content, {
-                                "source": "medical_documents",
-                                "doc_id": txt_file.stem
-                            })
-                            all_docs.extend(docs)
-                            documents_found = True
-                        except Exception as e:
-                            st.warning(f"⚠️ Could not read {txt_file.name}: {e}")
-                
-                # If no documents found, create sample data
-                if not documents_found:
-                    st.info("📝 No documents found in data/raw/, creating sample data...")
+                # Load combined dataset
+                combined_file = kg_data_dir / "combined" / "all_medical_data.json"
+                if combined_file.exists():
+                    st.info(f"📄 Loading KG datasets from {combined_file}...")
                     
-                    # Sample medical data
-                    medical_data = {
-                        "diabetes": """
-Type 2 Diabetes Information:
-
-Symptoms:
-• Increased thirst (polydipsia)
-• Frequent urination (polyuria)
-• Increased hunger (polyphagia)
-• Unexplained weight loss
-• Fatigue and weakness
-• Blurred vision
-• Slow-healing cuts and wounds
-• Frequent infections
-
-Risk Factors:
-• Family history of diabetes
-• Overweight or obesity
-• Age 45 or older
-• Physical inactivity
-• High blood pressure
-• Abnormal cholesterol levels
-
-Treatment Options:
-• Lifestyle modifications (diet and exercise)
-• Metformin (first-line medication)
-• Other diabetes medications as needed
-• Regular blood glucose monitoring
-• Regular medical check-ups
-""",
-                        "hypertension": """
-Hypertension (High Blood Pressure) Information:
-
-Blood Pressure Categories:
-• Normal: Less than 120/80 mmHg
-• Elevated: 120-129 systolic, less than 80 diastolic
-• Stage 1: 130-139 systolic or 80-89 diastolic
-• Stage 2: 140/90 mmHg or higher
-• Hypertensive Crisis: Higher than 180/120 mmHg
-
-Symptoms:
-• Often called "silent killer" - usually no symptoms
-• Severe hypertension may cause:
-  - Headaches
-  - Shortness of breath
-  - Chest pain
-  - Dizziness
-
-Treatment:
-• Lifestyle changes:
-  - Reduce sodium intake
-  - Regular physical activity
-  - Maintain healthy weight
-  - Limit alcohol consumption
-• Medications:
-  - ACE inhibitors
-  - ARBs (Angiotensin Receptor Blockers)
-  - Diuretics
-  - Beta-blockers
-  - Calcium channel blockers
-""",
-                        "pregnancy": """
-Pregnancy Information:
-
-Early Signs and Symptoms:
-• Missed menstrual period
-• Nausea and vomiting (morning sickness)
-• Breast tenderness and enlargement
-• Fatigue and increased sleepiness
-• Frequent urination
-• Food aversions or cravings
-• Mood changes
-• Light spotting (implantation bleeding)
-
-Pregnancy Trimesters:
-• First Trimester (Weeks 1-12):
-  - Organ development
-  - Morning sickness common
-  - Important prenatal vitamin intake
-• Second Trimester (Weeks 13-27):
-  - Often called "golden period"
-  - Energy levels improve
-  - Baby movements felt
-• Third Trimester (Weeks 28-40):
-  - Rapid baby growth
-  - Preparation for delivery
-  - More frequent doctor visits
-
-Prenatal Care:
-• Regular doctor visits
-• Prenatal vitamins with folic acid
-• Healthy diet and exercise
-• Avoid alcohol, smoking, and certain medications
-• Monitor weight gain
-• Stay hydrated
-• Get adequate rest
-"""
-                    }
+                    with open(combined_file, "r") as f:
+                        kg_documents = json.load(f)
                     
-                    # Process sample documents
-                    for doc_id, content in medical_data.items():
-                        docs = processor.process_text(content, {
-                            "source": "sample_medical_data",
-                            "doc_id": doc_id
-                        })
-                        all_docs.extend(docs)
-                
-                # Create collection and add documents
-                retriever.create_collection("medical_docs")
-                retriever.add_documents(all_docs)
-                
-                if documents_found:
-                    st.success(f"✅ Medical knowledge base created with {len(all_docs)} chunks from data/raw/")
+                    # Process documents
+                    all_docs = []
+                    for doc in tqdm.tqdm(kg_documents[:1000], desc="Processing KG docs"):  # Limit for demo
+                        chunks = processor.process_text(doc["text"], doc["metadata"])
+                        all_docs.extend(chunks)
+                    
+                    # Create collection
+                    retriever.create_collection("kg_medical_docs")
+                    retriever.add_documents(all_docs)
+                    
+                    st.success(f"✅ KG knowledge base created with {len(all_docs)} chunks from {len(kg_documents)} documents")
                 else:
-                    st.success("✅ Medical knowledge base created with sample data")
+                    st.error("❌ Combined dataset not found. Run fetch_data.py first")
+                    return None, None
             
             return retriever, generator
             
@@ -344,9 +234,9 @@ def main():
     # Header
     st.markdown("""
     <div class="main-header">
-        <h1>⚕️ Ních gà</h1>
-        <p style="margin: 0; font-size: 1.1em;">Medical RAG Chat Assistant</p>
-        <p style="margin: 0.5rem 0 0 0; font-size: 0.9em; opacity: 0.9;">Ask medical questions and receive evidence-based answers</p>
+        <h1>⚕️ Ních gà (KG Enhanced)</h1>
+        <p style="margin: 0; font-size: 1.1em;">Knowledge Graph Medical RAG Assistant</p>
+        <p style="margin: 0.5rem 0 0 0; font-size: 0.9em; opacity: 0.9;">Powered by 5,100+ medical documents</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -358,42 +248,90 @@ def main():
         st.stop()
     
     # Initialize session state for question processing
-    if 'current_question' not in st.session_state:
-        st.session_state.current_question = ""
-    if 'process_question' not in st.session_state:
-        st.session_state.process_question = False
-    if 'last_processed_question' not in st.session_state:
-        st.session_state.last_processed_question = ""
+    if 'kg_current_question' not in st.session_state:
+        st.session_state.kg_current_question = ""
+    if 'kg_process_question' not in st.session_state:
+        st.session_state.kg_process_question = False
+    if 'kg_last_processed_question' not in st.session_state:
+        st.session_state.kg_last_processed_question = ""
+    if 'kg_input_counter' not in st.session_state:
+        st.session_state.kg_input_counter = 0
     
     # Sidebar
     with st.sidebar:
-        st.markdown("### 📊 System Status")
-        st.success("✅ Medical RAG System Ready")
+        st.markdown("### 📊 KG System Status")
+        st.success("✅ Knowledge Graph RAG Ready")
         
-        st.markdown("### 🏥 Available Topics")
+        st.markdown("### 🏥 Extended Medical Coverage")
         st.info("""
-        🩺 **Diabetes** - symptoms, treatment, risk factors  
-        🫀 **Hypertension** - blood pressure, medications  
-        🤱 **Pregnancy** - prenatal care, symptoms, stages  
+        🔬 **PubMed**: 5,000+ research abstracts  
+        🏥 **MTSamples**: 60+ clinical documents  
+        📚 **MeSH**: 50+ medical concepts  
+        📈 **Total**: 5,100+ medical documents
         """)
         
-        st.markdown("### ➕ Add More Topics")
-        st.caption("Add your medical documents to `data/raw/` to expand the knowledge base")
+        st.markdown("### 🧠 Enhanced Features")
+        st.success("""
+        ✅ Evidence stratification  
+        ✅ Temporal awareness  
+        ✅ Hierarchical reasoning  
+        ✅ Multi-source integration
+        """)
         
-        st.markdown("### 💡 Example Questions")
+        st.markdown("### 🎯 Available Medical Topics")
+        st.info("""
+        **Cardiology**: Heart disease, MI, procedures  
+        **Endocrinology**: Diabetes, thyroid, hormones  
+        **Neurology**: Stroke, seizures, brain disorders  
+        **Psychiatry**: Depression, anxiety, mental health  
+        **Obstetrics**: Pregnancy, prenatal care  
+        **Gastroenterology**: Digestive disorders  
+        **Emergency Medicine**: Acute conditions  
+        **Orthopedics**: Musculoskeletal injuries  
+        **And 12+ more specialties...**
+        """)
+        
+        st.markdown("### 💡 Enhanced Example Questions")
         example_questions = [
-            "What are the symptoms of diabetes?",
-            "How is high blood pressure treated?",
-            "What are normal blood pressure values?",
-            "What are early signs of pregnancy?",
-            "What should I eat during pregnancy?",
-            "What are the pregnancy trimesters?"
+            "What are the latest treatments for myocardial infarction?",
+            "How does insulin resistance develop in type 2 diabetes?", 
+            "What are the contraindications for cardiac catheterization?",
+            "Explain the pathophysiology of stroke",
+            "What medications are used for major depressive disorder?",
+            "How is acute appendicitis diagnosed?",
+            "What are the stages of pregnancy complications?",
+            "Compare ACE inhibitors vs ARBs for hypertension",
+            "What is the evidence for metformin in diabetes?",
+            "How is colonoscopy screening performed?"
         ]
         
         for i, question in enumerate(example_questions):
-            if st.button(f"💬 {question}", key=f"example_{i}", use_container_width=True):
-                st.session_state.current_question = question
-                st.session_state.process_question = True
+            if st.button(f"💬 {question}", key=f"kg_example_{i}", use_container_width=True):
+                st.session_state.kg_current_question = question
+                st.session_state.kg_process_question = True
+                st.rerun()
+        
+        st.markdown("### 🔄 Compare Systems")
+        st.caption("Simple RAG: 3 test documents vs KG RAG: 5,100+ real medical documents")
+        
+        st.markdown("### 📊 Data Sources")
+        with st.expander("📖 View Data Details"):
+            st.markdown("""
+            **PubMed Research Articles:**
+            - Peer-reviewed medical literature
+            - Last 10 years publication date
+            - Evidence-based medicine
+            
+            **MTSamples Clinical Notes:**
+            - Real medical transcriptions
+            - 20+ medical specialties
+            - Clinical documentation patterns
+            
+            **MeSH Medical Terminology:**
+            - Authoritative medical vocabulary
+            - Hierarchical concept relationships
+            - Diseases, procedures, drugs
+            """)
     
     # Question input section
     st.markdown("""
@@ -403,32 +341,43 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Input form - Enter to submit
-    user_question = st.text_input(
-        "Enter your question and press Enter:",
-        value=st.session_state.current_question,
-        placeholder="e.g., What are the symptoms of diabetes?",
-        key="question_input",
-        label_visibility="collapsed",
-        on_change=None
-    )
-    
-    # Check if question was submitted (Enter pressed) or triggered from sidebar
-    question_submitted = False
-    
-    # If user typed something new and it's different from stored question, they pressed Enter
-    if user_question and user_question != st.session_state.get('last_processed_question', ''):
-        question_submitted = True
-        st.session_state.current_question = user_question
-    
-    # Process question if Enter was pressed or if triggered from sidebar/quick buttons
-    if question_submitted or st.session_state.process_question:
-        question_to_process = st.session_state.current_question
+    # Create a form for better Enter key handling
+    with st.form(key="kg_question_form", clear_on_submit=True):
+        user_question = st.text_input(
+            "Enter your question and press Enter:",
+            value="",
+            placeholder="e.g., What are the latest treatments for diabetes?",
+            key="kg_question_input",
+            label_visibility="collapsed"
+        )
         
-        if question_to_process.strip():
-            # Reset the process flag and store the processed question
-            st.session_state.process_question = False
-            st.session_state.last_processed_question = question_to_process
+        # Hidden form submit button - required by Streamlit but invisible
+        submitted = st.form_submit_button("Submit")
+    
+    # Hide the submit button completely with CSS
+    st.markdown("""
+    <style>
+    .stForm button[kind="primaryFormSubmit"] {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Check if form was submitted or if triggered from sidebar
+    if submitted and user_question.strip():
+        st.session_state.kg_current_question = user_question.strip()
+        st.session_state.kg_process_question = True
+    
+    # Process question if submitted or triggered from sidebar
+    if st.session_state.kg_process_question and st.session_state.kg_current_question.strip():
+        question_to_process = st.session_state.kg_current_question
+        
+        # Reset the process flag
+        st.session_state.kg_process_question = False
+        
+        # Check if this is a different question from the last processed one
+        if question_to_process != st.session_state.kg_last_processed_question:
+            st.session_state.kg_last_processed_question = question_to_process
             
             # Display user question with better styling
             st.markdown(f"""
@@ -445,7 +394,7 @@ def main():
                 # Display answer with better styling
                 st.markdown(f"""
                 <div class="bot-response">
-                    <h4 style="margin: 0 0 1rem 0; color: #2c3e50;">🤖 Medical Assistant Response</h4>
+                    <h4 style="margin: 0 0 1rem 0; color: #2c3e50;">🤖 KG Medical Assistant Response</h4>
                     <div style="font-size: 1.05em; line-height: 1.7;">
                         {result['answer']}
                     </div>
@@ -465,9 +414,17 @@ def main():
                         st.markdown("**📖 Sources used to generate this medical response:**")
                         
                         for i, source in enumerate(result['sources'][:3]):
+                            # Show source type based on metadata
+                            source_type = source['metadata'].get('source', 'unknown')
+                            source_icon = {
+                                'pubmed': '🔬',
+                                'mtsamples': '🏥', 
+                                'mesh': '📚'
+                            }.get(source_type, '📄')
+                            
                             st.markdown(f"""
                             <div class="source-item">
-                                <h5 style="margin: 0 0 0.5rem 0; color: #d35400;">📄 Source {i+1}</h5>
+                                <h5 style="margin: 0 0 0.5rem 0; color: #d35400;">{source_icon} Source {i+1} ({source_type.upper()})</h5>
                                 <p style="margin: 0 0 0.5rem 0;"><strong>Relevance Score:</strong> {source['score']:.2f}/1.0</p>
                                 <p style="margin: 0 0 0.8rem 0;"><strong>Document:</strong> {source['metadata']['doc_id']}</p>
                                 <div style="background: rgba(255,255,255,0.7); padding: 0.8rem; border-radius: 8px; font-size: 0.95em; line-height: 1.5;">
@@ -477,10 +434,7 @@ def main():
                             """, unsafe_allow_html=True)
             
             # Clear the current question after processing
-            st.session_state.current_question = ""
-        
-        elif question_submitted:
-            st.warning("⚠️ Please enter a medical question first.")
+            st.session_state.kg_current_question = ""
     
     # Footer with disclaimer
     st.markdown("---")

@@ -147,7 +147,7 @@ class PubMedFetcher:
                             "abstract": abstract_text,
                             "publication_year": pub_year,
                             "journal": journal,
-                            "authors": authors,
+                            "authors": ", ".join(authors) if authors else "",
                             "type": "research_article",
                             "evidence_level": "peer_reviewed"
                         }
