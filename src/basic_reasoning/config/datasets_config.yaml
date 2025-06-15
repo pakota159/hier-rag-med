@@ -1,0 +1,61 @@
+datasets:
+  medreason:
+    source: "github"
+    url: "https://github.com/UCSC-VLAA/MedReason"
+    api_url: "https://api.github.com/repos/UCSC-VLAA/MedReason/contents"
+    format: "json"
+    expected_size: 32682
+    description: "Knowledge graph-guided medical reasoning chains"
+    
+  msdiagnosis:
+    source: "research_dataset"
+    url: "https://arxiv.org/abs/2408.10039"
+    format: "json"
+    expected_size: 5000
+    description: "EMR-based multi-step diagnostic scenarios"
+    
+  pmc_patients:
+    source: "pubmed_central"
+    url: "https://www.ncbi.nlm.nih.gov/pmc/"
+    api_url: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+    format: "xml"
+    expected_size: 50000
+    rate_limit: 3
+    description: "Patient case studies from medical literature"
+    
+  drugbank:
+    source: "api"
+    url: "https://go.drugbank.com/releases/latest"
+    api_url: "https://go.drugbank.com/public_api/v1"
+    format: "json"
+    expected_size: 5000
+    description: "Comprehensive drug information database"
+    requires_api_key: true
+    
+  current_data:
+    source: "local"
+    path: "data/kg_raw/combined/all_medical_data.json"
+    format: "json"
+    expected_size: 5100
+    description: "Existing PubMed + MTSamples + MeSH data"
+
+processing:
+  output_dir: "data/foundation_dataset"
+  unified_format:
+    required_fields:
+      - "text"
+      - "metadata"
+      - "source_dataset"
+      - "doc_id"
+      - "reasoning_type"
+    metadata_fields:
+      - "title"
+      - "authors"
+      - "publication_date"
+      - "medical_specialty"
+      - "evidence_level"
+      - "reasoning_chain"
+  
+  batch_size: 100
+  max_retries: 3
+  timeout: 30 
