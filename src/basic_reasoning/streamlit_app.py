@@ -13,17 +13,21 @@ import json
 # Fix torch/streamlit compatibility issue
 os.environ["STREAMLIT_DISABLE_AUTOINDEX"] = "true"
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add project root and src to path
+project_root = Path(__file__).parent.parent.parent  # Go up to project root
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
 
 try:
-    from config import Config
-    from processing import HierarchicalDocumentProcessor
-    from retrieval import HierarchicalRetriever
-    from generation import HierarchicalGenerator
+    # Use absolute imports instead of relative imports
+    from basic_reasoning.config import Config
+    from basic_reasoning.processing import HierarchicalDocumentProcessor
+    from basic_reasoning.retrieval import HierarchicalRetriever
+    from basic_reasoning.generation import HierarchicalGenerator
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.error("Make sure you're running from the project root directory.")
+    st.error("Try: streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503")
     st.stop()
 
 # Page config
