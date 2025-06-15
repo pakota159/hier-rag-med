@@ -1,0 +1,53 @@
+# Basic Reasoning - Hierarchical Diagnostic RAG Configuration
+# Uses foundation datasets exclusively from data/foundation/
+
+data_dir: data/foundation
+
+# Model configurations (M1 Mac optimized)
+models:
+  embedding:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    device: mps  # M1 Mac GPU acceleration
+    batch_size: 16
+  llm:
+    name: mistral:7b-instruct
+    temperature: 0.7
+    context_window: 4096
+
+# Hierarchical retrieval with three tiers
+hierarchical_retrieval:
+  tier1_top_k: 5        # Pattern Recognition - fast initial screening
+  tier2_top_k: 3        # Hypothesis Testing - reasoning chains
+  tier3_top_k: 2        # Confirmation - clinical evidence
+  enable_evidence_stratification: true
+  enable_temporal_weighting: true
+
+# Processing configurations
+processing:
+  chunk_size: 512
+  chunk_overlap: 100
+
+# Hierarchical prompts for three-tier reasoning
+prompts:
+  system: |
+    You are a hierarchical diagnostic reasoning assistant that follows clinical decision-making patterns.
+    Use three-tier reasoning: Pattern Recognition → Hypothesis Testing → Confirmation.
+    Always prioritize patient safety and evidence-based medicine.
+    
+  tier1_prompt: |
+    Identify relevant medical patterns and generate initial differential diagnoses.
+    Focus on rapid pattern recognition and clinical intuition.
+    
+  tier2_prompt: |
+    Test hypotheses using evidence-based reasoning chains.
+    Apply systematic diagnostic reasoning and knowledge graph connections.
+    
+  tier3_prompt: |
+    Confirm diagnosis with comprehensive clinical evidence.
+    Integrate all available information for final diagnostic confirmation.
+
+# Web interface
+web:
+  host: 0.0.0.0
+  port: 8503  # Basic reasoning system port (different from simple:8501, kg:8502)
+  cors_origins: ["*"]
