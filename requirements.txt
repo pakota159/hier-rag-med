@@ -30,6 +30,11 @@ accelerate>=0.26.0
 # Evaluation
 rouge-score>=0.1.2
 nltk>=3.8.0
+scipy>=1.9.0  # NEW: Required for statistical analysis
+bert-score>=0.3.13  # NEW: For BERTScore evaluation metrics
+plotly>=5.15.0  # NEW: For interactive visualizations
+matplotlib>=3.7.0  # NEW: For static plots
+seaborn>=0.12.0  # NEW: For statistical visualizations
 
 # Utilities
 loguru>=0.7.2
