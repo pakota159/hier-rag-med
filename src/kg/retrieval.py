@@ -11,8 +11,7 @@ from loguru import logger
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-from config import Config
-
+from .config import Config
 
 class Retriever:
     """Document retriever using ChromaDB and sentence transformers."""

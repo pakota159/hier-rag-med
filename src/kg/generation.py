@@ -7,8 +7,7 @@ import requests
 import json
 from loguru import logger
 
-from config import Config
-
+from .config import Config
 
 class Generator:
     """Text generator using Ollama LLM."""

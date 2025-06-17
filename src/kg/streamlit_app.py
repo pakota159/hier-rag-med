@@ -17,10 +17,10 @@ os.environ["STREAMLIT_DISABLE_AUTOINDEX"] = "true"
 sys.path.insert(0, str(Path(__file__).parent))
 
 try:
-    from config import Config
-    from processing import DocumentProcessor
-    from retrieval import Retriever
-    from generation import Generator
+    from .config import Config
+    from .processing import DocumentProcessor
+    from .retrieval import Retriever
+    from .generation import Generator
 except ImportError as e:
     st.error(f"Import error: {e}")
     st.error("Make sure you're running from the project root directory and all dependencies are installed.")
