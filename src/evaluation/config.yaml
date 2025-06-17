@@ -1,0 +1,148 @@
+# Evaluation Configuration for HierRAGMed
+# Comprehensive evaluation settings for medical RAG systems
+
+# Data directories
+data_dir: "data/evaluation"
+results_dir: "src/evaluation/results"
+cache_dir: "data/evaluation/cache"
+
+# Benchmark configurations
+benchmarks:
+  mirage:
+    enabled: true
+    name: "MIRAGE Medical QA"
+    dataset_url: "https://github.com/Teddy-XiongGZ/MIRAGE"
+    tasks:
+      clinical: true      # Clinical diagnosis, treatment, prognosis
+      research: true      # Literature synthesis, evidence evaluation
+    sample_size: 1000     # Number of questions to evaluate
+    random_seed: 42
+    
+  medreason:
+    enabled: true
+    name: "MedReason Clinical Reasoning"
+    dataset_url: "https://huggingface.co/datasets/UCSC-VLAA/MedReason"
+    sample_size: 1000
+    random_seed: 42
+    
+  pubmedqa:
+    enabled: true
+    name: "PubMedQA Research Literature"
+    dataset_url: "https://github.com/pubmedqa/pubmedqa"
+    split: "test"
+    sample_size: 500
+    random_seed: 42
+    
+  msmarco:
+    enabled: true
+    name: "MS MARCO Medical Retrieval"
+    dataset_url: "https://microsoft.github.io/msmarco/"
+    collection: "medical_passages"
+    sample_size: 1000
+    random_seed: 42
+
+# Model configurations for evaluation
+models:
+  kg_system:
+    name: "KG Enhanced RAG"
+    enabled: true
+    system_path: "src.kg"
+    config_path: "src/kg/config.yaml"
+    collection_name: "kg_medical_docs"
+    expected_performance:
+      mirage: 70.0
+      medreason: 68.0
+      pubmedqa: 74.0
+      msmarco_ndcg10: 0.33
+    
+  hierarchical_system:
+    name: "Hierarchical Diagnostic RAG"
+    enabled: true
+    system_path: "src.basic_reasoning"
+    config_path: "src/basic_reasoning/config.yaml"
+    collection_names:
+      tier1: "tier1_pattern_recognition"
+      tier2: "tier2_hypothesis_testing" 
+      tier3: "tier3_confirmation"
+    expected_performance:
+      mirage: 73.0
+      medreason: 72.0
+      pubmedqa: 76.0
+      msmarco_ndcg10: 0.35
+
+# Evaluation metrics configuration
+metrics:
+  # Question Answering Metrics
+  qa:
+    rouge_variants: ["rouge1", "rouge2", "rougeL"]
+    bleu: true
+    bertscore: 
+      model: "microsoft/deberta-xlarge-mnli"
+    semantic_similarity:
+      model: "sentence-transformers/all-MiniLM-L6-v2"
+    
+  # Retrieval Metrics  
+  retrieval:
+    precision_at_k: [1, 3, 5, 10]
+    recall_at_k: [1, 3, 5, 10]
+    ndcg_at_k: [1, 3, 5, 10]
+    map: true
+    mrr: true
+    
+  # Clinical-Specific Metrics
+  clinical:
+    medical_accuracy: true
+    clinical_relevance: true
+    safety_assessment: true
+    evidence_quality: true
+    diagnostic_accuracy: true
+    
+  # Combined Scoring
+  combined:
+    mirage_score: true
+    clinical_task_score: true
+    research_task_score: true
+    overall_performance: true
+    weights:
+      mirage: 0.4
+      medreason: 0.3
+      pubmedqa: 0.2
+      msmarco: 0.1
+
+# Evaluation execution settings
+execution:
+  batch_size: 8
+  max_workers: 4
+  timeout_per_question: 120  # seconds
+  retry_attempts: 3
+  parallel_benchmarks: false
+  save_intermediate_results: true
+  
+# Output settings
+output:
+  save_detailed_results: true
+  save_error_analysis: true
+  generate_visualizations: true
+  export_formats: ["json", "csv", "html"]
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  log_file: "src/evaluation/results/evaluation.log"
+  console_output: true
+  
+# SOTA comparison targets
+sota_targets:
+  mirage:
+    gpt4_rag: 74.8
+    medrag: 69.2
+    medpalm2: 67.5
+  medreason:
+    medrag: 71.3
+    gpt4: 68.9
+  pubmedqa:
+    biobert_rag: 78.2
+    pubmedbert: 74.5
+  msmarco_ndcg10:
+    bge_large: 0.42
+    bm25_dpr: 0.35

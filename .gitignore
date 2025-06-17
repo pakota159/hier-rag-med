@@ -42,7 +42,7 @@ venv.bak/
 .DS_Store
 
 # Project specific
-data/
+/data/
 logs/
 *.log
 evaluation_results.json
