@@ -1,0 +1,113 @@
+# Streamlit Configuration for RunPod GPU Evaluation
+# Optimized for RunPod infrastructure and RTX 4090 performance
+
+[server]
+# Network configuration for RunPod
+address = "0.0.0.0"                    # Listen on all interfaces for RunPod
+port = 8501                            # Standard Streamlit port
+enableXsrfProtection = false           # Disable for cloud environment
+enableCORS = true                      # Enable for cross-origin requests
+enableWebsocketCompression = true     # Reduce bandwidth usage
+enableStaticServing = true            # Serve static files
+headless = true                        # Optimize for cloud deployment
+
+# File upload limits (optimized for evaluation data)
+maxUploadSize = 1000                   # 1GB for large evaluation datasets
+maxMessageSize = 1000                  # 1GB for large messages
+fileWatcherType = "none"              # Disable file watcher in cloud
+
+# Performance optimizations
+runOnSave = false                      # Disable auto-rerun for stability
+allowRunOnSave = false                # Prevent accidental reruns
+
+[theme]
+# GPU evaluation dark theme (easier on eyes during long evaluations)
+base = "dark"
+primaryColor = "#00FF88"               # GPU green accent
+backgroundColor = "#0E1117"            # Dark background
+secondaryBackgroundColor = "#1E1E1E"   # Slightly lighter dark
+textColor = "#FAFAFA"                  # Light text
+font = "sans serif"                    # Clean font for readability
+
+[browser]
+# Browser optimizations
+gatherUsageStats = false               # Disable telemetry
+serverAddress = "0.0.0.0"             # Override for RunPod
+serverPort = 8501                      # Ensure consistent port
+
+[runner]
+# Runner optimizations for evaluation
+magicEnabled = false                   # Disable magic commands for performance
+installTracer = false                  # Disable install tracer
+fixMatplotlib = true                   # Fix matplotlib backend
+postScriptGC = true                    # Garbage collection after script
+enforceSerializableSessionState = false # Allow complex objects in session state
+
+[logger]
+# Logging configuration
+level = "info"                         # Appropriate log level
+enableRich = true                      # Rich text formatting
+messageFormat = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[client]
+# Client-side optimizations
+caching = true                         # Enable caching for performance
+displayEnabled = true                  # Show display elements
+toolbarMode = "minimal"                # Minimal toolbar for more space
+showErrorDetails = true                # Show error details for debugging
+
+[global]
+# Global settings
+developmentMode = false                # Production mode
+disableWatchdogWarning = true          # Disable watchdog warnings
+suppressDeprecationWarnings = true     # Hide deprecation warnings
+showWarningOnDirectExecution = false   # Disable direct execution warnings
+unitTest = false                       # Not in unit test mode
+
+# Metrics and telemetry
+[telemetry]
+enabled = false                        # Disable telemetry
+
+# Memory and performance
+[memory]
+# Memory management for GPU evaluation
+checkpointInterval = 1000              # Checkpoint every 1000 operations
+maxCacheBytes = 2000000000            # 2GB cache limit
+purgeUnusedData = true                # Purge unused data
+
+[gpu]
+# GPU-specific Streamlit settings
+enableGPUMetrics = true               # Enable GPU monitoring
+refreshInterval = 5                   # Refresh GPU metrics every 5 seconds
+memoryThreshold = 0.9                 # Alert at 90% GPU memory usage
+autoOptimizeBatchSize = true          # Auto-optimize based on GPU memory
+
+[evaluation]
+# Evaluation-specific settings
+enableProgressBars = true            # Show progress bars
+enableRealTimeMetrics = true         # Real-time metric updates
+saveIntermediateResults = true       # Save intermediate results
+maxConcurrentEvaluations = 1         # One evaluation at a time for stability
+
+[ui]
+# User interface optimizations
+hideStreamlitStyle = false           # Keep Streamlit branding
+hideSidebar = false                  # Keep sidebar for navigation
+expandSidebar = true                 # Expand sidebar by default
+wideMode = true                      # Use wide mode for better data display
+
+[experimental]
+# Experimental features for better performance
+fastReruns = true                    # Enable fast reruns
+allowRunOnSave = false               # Disable for stability
+dataFrameSerialization = "legacy"    # Use legacy serialization
+suppressDeprecationWarnings = true   # Hide warnings
+
+[watchdog]
+# Disable watchdog for cloud environment
+enabled = false
+polling = false
+
+[mapbox]
+# Disable mapbox (not needed for evaluation)
+token = ""
