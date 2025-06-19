@@ -1,73 +1,131 @@
-# Core RAG components
+# ==========================================
+# HierRAGMed Requirements - Final Version
+# ==========================================
+
+# Core Python (ensure compatibility)
+python>=3.10,<3.12
+
+# ==========================================
+# CORE RAG COMPONENTS
+# ==========================================
 langchain>=0.1.0
 langchain-community>=0.0.20
 chromadb>=0.4.22
 sentence-transformers>=2.2.2
 ollama>=0.1.6
 
-# Web interface
+# ==========================================
+# MACHINE LEARNING & AI
+# ==========================================
+torch>=2.0.0
+transformers>=4.30.0
+accelerate>=0.26.0
+scikit-learn>=1.4.0
+datasets>=2.16.0
+huggingface-hub>=0.12.0
+tokenizers>=0.13.0
+
+# ==========================================
+# WEB INTERFACES
+# ==========================================
+# FastAPI (main web interface)
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-pydantic>=2.6.0
 python-multipart>=0.0.6
+
+# Streamlit (evaluation interface)
+streamlit>=1.28.0
+
+# ==========================================
+# DATA PROCESSING
+# ==========================================
+pandas>=2.2.0
+numpy>=1.26.0
+scipy>=1.9.0
 
 # Document processing
 PyPDF2>=3.0.0
 python-docx>=1.1.0
 beautifulsoup4>=4.12.0
 
-# Data processing
-pandas>=2.2.0
-numpy>=1.26.0
-datasets>=2.16.0
-transformers>=4.30.0
-
-# Machine Learning
-torch>=2.0.0
-scikit-learn>=1.4.0
-accelerate>=0.26.0
-
-# Evaluation
+# ==========================================
+# EVALUATION & METRICS
+# ==========================================
+# NLP Evaluation
 rouge-score>=0.1.2
 nltk>=3.8.0
-scipy>=1.9.0  # NEW: Required for statistical analysis
-bert-score>=0.3.13  # NEW: For BERTScore evaluation metrics
-plotly>=5.15.0  # NEW: For interactive visualizations
-matplotlib>=3.7.0  # NEW: For static plots
-seaborn>=0.12.0  # NEW: For statistical visualizations
+bert-score>=0.3.13
 
-# Utilities
-loguru>=0.7.2
+# Statistical Analysis
+scipy>=1.9.0
+
+# ==========================================
+# VISUALIZATION
+# ==========================================
+plotly>=5.15.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# ==========================================
+# GPU MONITORING & OPTIMIZATION
+# ==========================================
+nvidia-ml-py3>=12.535.133
+py3nvml>=0.2.7
+pynvml>=11.5.0
+gpustat>=1.1.1
+
+# ==========================================
+# UTILITIES & CORE LIBS
+# ==========================================
+# Configuration & Data
+pydantic>=2.6.0
 pyyaml>=6.0.1
-tqdm>=4.66.0
-rich>=13.7.0
 python-dotenv>=1.0.0
+
+# HTTP & Networking
 requests>=2.31.0
 aiofiles>=23.2.0
+httpx>=0.23.0
+aiohttp>=3.8.0
 
-datasets>=2.16.0
-
-# GPU Monitoring and Management
-nvidia-ml-py3>=12.535.133    # NVIDIA Management Library
-py3nvml>=0.2.7               # Python NVIDIA ML bindings  
-pynvml>=11.5.0               # Python NVIDIA Management Library
-gpustat>=1.1.1               # GPU utilization monitoring
-
-# Performance Optimization
-accelerate>=0.16.0           # Hugging Face model acceleration
-datasets>=2.8.0              # Efficient dataset loading
-
-# Core ML/AI (verify these versions match your existing requirements.txt)
-torch>=2.0.0                 # PyTorch with CUDA support
-transformers>=4.25.0         # Hugging Face transformers
-sentence-transformers>=2.2.0 # Sentence embeddings
-
-# Evaluation and Visualization  
-plotly>=5.12.0               # Interactive plots
-seaborn>=0.12.0              # Statistical visualizations
-rich>=13.0.0                 # Rich terminal output
-typer>=0.7.0                 # CLI framework
+# CLI & Terminal
+loguru>=0.7.2
+tqdm>=4.66.0
+rich>=13.7.0
+typer>=0.7.0
 
 # System Monitoring
-psutil>=5.9.0                # System process monitoring
-memory-profiler>=0.60.0      # Memory usage profiling
+psutil>=5.9.0
+memory-profiler>=0.60.0
+
+# ==========================================
+# VECTOR DATABASES & SEARCH
+# ==========================================
+faiss-cpu>=1.7.0  # CPU version for compatibility
+# Note: Use faiss-gpu if you want GPU-accelerated FAISS
+
+# ==========================================
+# OPTIONAL: DEVELOPMENT & TESTING
+# ==========================================
+# Uncomment for development
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# black>=23.0.0
+# isort>=5.12.0
+# flake8>=6.0.0
+# mypy>=1.0.0
+
+# ==========================================
+# PLATFORM-SPECIFIC NOTES
+# ==========================================
+# For M1/M2 Macs, you might need:
+# - Use conda for PyTorch installation
+# - Some packages may need different versions
+
+# For Windows:
+# - Ensure Visual C++ Build Tools are installed
+# - PyTorch installation via conda recommended
+
+# For Linux/RunPod:
+# - All packages should install via pip
+# - CUDA drivers must be pre-installed
