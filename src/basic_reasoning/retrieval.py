@@ -125,13 +125,17 @@ class HierarchicalRetriever:
                 )
                 embeddings.extend(batch_embeddings)
 
-            # Add to collection
-            collection.add(
-                embeddings=embeddings,
-                documents=texts,
-                metadatas=metadatas,
-                ids=ids
-            )
+            # Add to collection in batches to avoid ChromaDB limits
+            chroma_batch_size = 5000  # ChromaDB safe batch size
+            for i in tqdm(range(0, len(texts), chroma_batch_size), desc=f"Adding {tier_name} to ChromaDB"):
+                batch_end = min(i + chroma_batch_size, len(texts))
+                collection.add(
+                    embeddings=embeddings[i:batch_end],
+                    documents=texts[i:batch_end],
+                    metadatas=metadatas[i:batch_end],
+                    ids=ids[i:batch_end]
+                )
+            
             logger.info(f"✅ Added {len(documents)} documents to {tier_name}")
 
     def hierarchical_search(self, query: str) -> Dict[str, List[Dict]]:

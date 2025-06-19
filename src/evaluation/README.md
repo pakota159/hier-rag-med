@@ -1,4 +1,9 @@
 ```
+cd /workspace
+git clone https://github.com/pakota159/hier-rag-med.git hierragmed
+```
+
+```
 bash src/evaluation/runpod_setup.sh
 ```
 
