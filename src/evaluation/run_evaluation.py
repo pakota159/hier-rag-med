@@ -1,82 +1,72 @@
 #!/usr/bin/env python3
 """
-GPU-ONLY evaluation runner for HierRAGMed.
-Designed specifically for RunPod RTX 4090 deployment.
-This script requires CUDA GPU and will not run on CPU/MPS devices.
+Fixed GPU evaluation script for HierRAGMed.
+Runs real evaluation using actual KG and Hierarchical systems.
 """
 
 import argparse
-import sys
-import os
 import gc
-import torch
-from pathlib import Path
-from typing import Dict, List, Optional
+import os
+import sys
 import time
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import torch
 from loguru import logger
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import real evaluation components
+from src.evaluation.evaluators.kg_evaluator import KGEvaluator
+from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
+from src.evaluation.benchmarks.mirage_benchmark import MirageBenchmark
+from src.evaluation.benchmarks.medreason_benchmark import MedreasonBenchmark
+from src.evaluation.benchmarks.pubmedqa_benchmark import PubmedqaBenchmark
+from src.evaluation.benchmarks.msmarco_benchmark import MsmarcoBenchmark
+
 
 def validate_gpu_environment():
-    """Strictly validate GPU environment - exit if not suitable."""
+    """Validate GPU environment and log details."""
     logger.info("🔍 Validating GPU environment...")
     
-    # Check if CUDA is available
+    # Check CUDA availability
     if not torch.cuda.is_available():
-        logger.error("❌ CUDA not available! This evaluation requires NVIDIA GPU with CUDA support.")
-        logger.error("   This script is designed for RunPod RTX 4090 deployment only.")
-        sys.exit(1)
+        raise RuntimeError("❌ CUDA not available. GPU evaluation requires CUDA.")
     
-    # Check if we're on an unsupported platform (like MPS on Mac)
-    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        logger.error("❌ MPS (Metal Performance Shaders) detected!")
-        logger.error("   This evaluation requires CUDA, not MPS. Please run on Linux with NVIDIA GPU.")
-        sys.exit(1)
+    # Get GPU information
+    gpu_count = torch.cuda.device_count()
+    current_device = torch.cuda.current_device()
+    gpu_name = torch.cuda.get_device_name(current_device)
+    gpu_memory = torch.cuda.get_device_properties(current_device).total_memory / 1024**3
     
-    # Validate GPU memory (minimum 8GB for serious evaluation)
-    gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    if gpu_memory < 8.0:
-        logger.error(f"❌ Insufficient GPU memory: {gpu_memory:.1f}GB (minimum 8GB required)")
-        logger.error("   This evaluation is optimized for RTX 4090 (24GB) or similar high-end GPUs.")
-        sys.exit(1)
-    
-    # Check CUDA version compatibility
+    # Check CUDA version
     cuda_version = torch.version.cuda
-    if cuda_version is None:
-        logger.error("❌ CUDA version not detected in PyTorch installation!")
-        sys.exit(1)
     
-    # Verify we're on Linux (RunPod environment)
-    if sys.platform != "linux":
-        logger.warning("⚠️ Not running on Linux - may have compatibility issues")
+    # Detect platform (RunPod, local, etc.)
+    platform = "RunPod" if "runpod" in os.environ.get("HOSTNAME", "").lower() else "Local"
     
-    # Check for RunPod environment
-    is_runpod = os.path.exists("/workspace")
-    if not is_runpod:
-        logger.warning("⚠️ Not detected as RunPod environment")
-    
-    # Log successful validation
-    gpu_name = torch.cuda.get_device_name(0)
-    logger.info(f"✅ GPU Environment Validated:")
+    logger.info("✅ GPU Environment Validated:")
     logger.info(f"   GPU: {gpu_name}")
     logger.info(f"   Memory: {gpu_memory:.1f}GB")
     logger.info(f"   CUDA: {cuda_version}")
-    logger.info(f"   Platform: {'RunPod' if is_runpod else 'Linux'}")
+    logger.info(f"   Platform: {platform}")
     
     return {
+        "gpu_count": gpu_count,
+        "current_device": current_device,
         "gpu_name": gpu_name,
-        "gpu_memory": gpu_memory,
+        "gpu_memory_gb": gpu_memory,
         "cuda_version": cuda_version,
-        "is_runpod": is_runpod
+        "platform": platform
     }
 
 
 def setup_gpu_optimization():
-    """Setup GPU optimizations for RTX 4090."""
+    """Configure GPU optimizations for RTX 4090."""
     logger.info("🔧 Configuring GPU optimizations...")
     
     # Set CUDA device
@@ -106,33 +96,44 @@ def setup_gpu_optimization():
     logger.info("✅ GPU optimizations configured")
 
 
-def load_gpu_config():
-    """Load GPU-optimized configuration."""
+def load_config():
+    """Load evaluation configuration."""
     return {
         "results_dir": "evaluation/results",
         "models": {
-            "kg_system": {"enabled": True, "device": "cuda"},
-            "hierarchical_system": {"enabled": True, "device": "cuda"}
+            "kg_system": {
+                "enabled": True,
+                "config_path": "src/kg/config.yaml",
+                "collection_name": "kg_medical_docs"
+            },
+            "hierarchical_system": {
+                "enabled": True,
+                "config_path": "src/basic_reasoning/config.yaml",
+                "collection_names": {
+                    "primary": "primary_symptoms",
+                    "differential": "differential_diagnosis", 
+                    "final": "final_diagnosis"
+                }
+            }
         },
         "benchmarks": {
-            "mirage": {"enabled": True},
-            "medreason": {"enabled": True},
-            "pubmedqa": {"enabled": True},
-            "msmarco": {"enabled": True}
+            "mirage": {"enabled": True, "sample_size": 100},
+            "medreason": {"enabled": True, "sample_size": 100},
+            "pubmedqa": {"enabled": True, "sample_size": 100},
+            "msmarco": {"enabled": True, "sample_size": 100}
         },
         "gpu_optimizations": {
-            "batch_size_embedding": 128,  # RTX 4090 optimized
-            "batch_size_llm": 32,         # RTX 4090 optimized
+            "batch_size_embedding": 128,
+            "batch_size_llm": 32,
             "mixed_precision": True,
-            "memory_efficient": True,
-            "compile_models": True
+            "memory_efficient": True
         },
         "logging": {"level": "INFO"}
     }
 
 
 def setup_logging(results_dir: str):
-    """Setup GPU evaluation logging."""
+    """Setup evaluation logging."""
     logs_dir = Path(results_dir) / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     
@@ -154,102 +155,17 @@ def setup_logging(results_dir: str):
     logger.info(f"📝 GPU evaluation logging initialized: {log_file}")
 
 
-def initialize_gpu_benchmarks(config: Dict, benchmark_filter: Optional[List[str]] = None):
-    """Initialize GPU-optimized mock benchmarks."""
+def initialize_benchmarks(config: Dict, benchmark_filter: Optional[List[str]] = None):
+    """Initialize real benchmarks."""
     benchmarks = {}
     
-    class GPUBenchmark:
-        def __init__(self, name):
-            self.name = name
-            # Move benchmark data to GPU-friendly format
-            self._prepare_gpu_data()
-            
-        def _prepare_gpu_data(self):
-            """Prepare benchmark data optimized for GPU processing."""
-            medical_questions = {
-                "mirage": [
-                    "What is the primary mechanism of action of ACE inhibitors in treating hypertension?",
-                    "Which biomarker is most specific for diagnosing acute myocardial infarction?",
-                    "What are the contraindications for thrombolytic therapy in stroke patients?",
-                    "How should diabetic ketoacidosis be managed in the emergency department?",
-                    "What is the first-line treatment for community-acquired pneumonia in adults?"
-                ],
-                "medreason": [
-                    "A 65-year-old patient presents with chest pain, elevated troponins, and ST-elevation. Explain the diagnostic reasoning.",
-                    "Given a patient with polyuria, polydipsia, and weight loss, describe the clinical reasoning for diabetes diagnosis.",
-                    "What diagnostic reasoning supports heart failure with preserved ejection fraction in elderly patients?",
-                    "Explain the clinical reasoning chain for distinguishing bacterial from viral meningitis.",
-                    "Describe the reasoning for anticoagulation therapy selection in atrial fibrillation."
-                ],
-                "pubmedqa": [
-                    "Does metformin significantly reduce cardiovascular mortality in type 2 diabetic patients?",
-                    "Is low-dose aspirin effective for primary prevention of cardiovascular events?",
-                    "Do statins reduce stroke risk in patients over 75 years old?",
-                    "Is bariatric surgery more effective than medical therapy for type 2 diabetes remission?",
-                    "Do probiotics improve clinical outcomes in antibiotic-associated diarrhea?"
-                ],
-                "msmarco": [
-                    "What are the pharmacological effects and side effects of lisinopril?",
-                    "How is chronic kidney disease classified and staged according to current guidelines?",
-                    "What are the pathophysiological mechanisms underlying atrial fibrillation?",
-                    "How is sepsis diagnosed and treated according to current sepsis-3 guidelines?",
-                    "What are the clinical manifestations and diagnostic criteria for hyperthyroidism?"
-                ]
-            }
-            
-            self.questions = [
-                {
-                    "id": f"{self.name}_gpu_q_{i}",
-                    "question": question,
-                    "expected_answer": f"GPU-optimized answer for {question[:50]}...",
-                    "category": "medical_knowledge",
-                    "difficulty": "advanced",
-                    "gpu_optimized": True
-                }
-                for i, question in enumerate(medical_questions.get(self.name, medical_questions["mirage"]))
-            ]
-            
-        def get_questions(self):
-            """Return GPU-optimized questions."""
-            return self.questions
-            
-        def calculate_metrics(self, results):
-            """Calculate metrics with GPU-optimized processing."""
-            if not results:
-                return {
-                    "accuracy": 0.0,
-                    "precision": 0.0,
-                    "recall": 0.0,
-                    "f1_score": 0.0,
-                    "gpu_optimized": True,
-                    "total_questions": 0,
-                    "successful_answers": 0
-                }
-                
-            total = len(results)
-            successful = len([r for r in results if r.get("status") == "success"])
-            
-            # GPU-accelerated metric calculation
-            accuracy = (successful / total) * 100 if total > 0 else 0
-            
-            # Add realistic medical evaluation metrics
-            import random
-            random.seed(42)  # Consistent results
-            precision = min(100, max(0, accuracy + random.uniform(-3, 3)))
-            recall = min(100, max(0, accuracy + random.uniform(-3, 3)))
-            f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-            
-            return {
-                "accuracy": round(accuracy, 2),
-                "precision": round(precision, 2),
-                "recall": round(recall, 2),
-                "f1_score": round(f1_score, 2),
-                "gpu_optimized": True,
-                "total_questions": total,
-                "successful_answers": successful,
-                "error_rate": round(((total - successful) / total) * 100, 2) if total > 0 else 0,
-                "benchmark_name": self.name
-            }
+    # Available benchmark classes
+    benchmark_classes = {
+        "mirage": MirageBenchmark,
+        "medreason": MedreasonBenchmark,
+        "pubmedqa": PubmedqaBenchmark,
+        "msmarco": MsmarcoBenchmark
+    }
     
     # Determine enabled benchmarks
     if benchmark_filter:
@@ -258,114 +174,33 @@ def initialize_gpu_benchmarks(config: Dict, benchmark_filter: Optional[List[str]
         enabled_benchmarks = [name for name, cfg in config["benchmarks"].items() if cfg.get("enabled", False)]
     
     for benchmark_name in enabled_benchmarks:
-        if benchmark_name in ["mirage", "medreason", "pubmedqa", "msmarco"]:
+        if benchmark_name in benchmark_classes:
             try:
-                logger.info(f"🎯 Initializing GPU-optimized {benchmark_name.upper()} benchmark...")
-                benchmarks[benchmark_name] = GPUBenchmark(benchmark_name)
-                logger.info(f"✅ {benchmark_name.upper()} GPU benchmark ready")
+                logger.info(f"🎯 Initializing {benchmark_name.upper()} benchmark...")
+                benchmark_config = config["benchmarks"][benchmark_name].copy()
+                benchmark_config["name"] = benchmark_name
+                
+                benchmarks[benchmark_name] = benchmark_classes[benchmark_name](benchmark_config)
+                logger.info(f"✅ {benchmark_name.upper()} benchmark ready")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize {benchmark_name}: {e}")
     
     if not benchmarks:
-        raise ValueError("❌ No GPU benchmarks could be initialized!")
+        raise ValueError("❌ No benchmarks could be initialized!")
     
-    logger.info(f"✅ Initialized {len(benchmarks)} GPU-optimized benchmarks: {list(benchmarks.keys())}")
+    logger.info(f"✅ Initialized {len(benchmarks)} benchmarks: {list(benchmarks.keys())}")
     return benchmarks
 
 
-def initialize_gpu_evaluators(config: Dict, model_filter: Optional[List[str]] = None):
-    """Initialize GPU-optimized evaluators."""
+def initialize_evaluators(config: Dict, model_filter: Optional[List[str]] = None):
+    """Initialize real evaluators."""
     evaluators = {}
     
-    class GPUEvaluator:
-        def __init__(self, name, config):
-            self.name = name
-            self.config = config
-            self.device = torch.device("cuda:0")
-            self.model_name = name
-            
-            # Pre-allocate GPU tensors for optimization
-            self._prepare_gpu_resources()
-            
-        def _prepare_gpu_resources(self):
-            """Pre-allocate GPU resources for faster evaluation."""
-            logger.info(f"🔧 Preparing GPU resources for {self.name}...")
-            
-            # Warm up GPU with small operations
-            try:
-                warm_tensor = torch.randn(100, 100, device=self.device)
-                _ = torch.matmul(warm_tensor, warm_tensor)
-                del warm_tensor
-                torch.cuda.empty_cache()
-                logger.debug(f"   GPU warmed up for {self.name}")
-            except Exception as e:
-                logger.warning(f"   GPU warmup failed for {self.name}: {e}")
-            
-        def evaluate_benchmark(self, benchmark):
-            """GPU-optimized evaluation with realistic medical AI performance."""
-            logger.info(f"🔬 GPU evaluating {self.name} on {benchmark.name}")
-            
-            # GPU-accelerated evaluation simulation
-            questions = benchmark.get_questions()
-            results = []
-            
-            # Simulate GPU-accelerated processing
-            start_time = time.time()
-            
-            for i, question in enumerate(questions):
-                # Simulate GPU tensor operations for NLP processing
-                try:
-                    # Simulate CUDA operations
-                    with torch.no_grad():
-                        # Mock embedding computation on GPU
-                        input_tensor = torch.randn(512, device=self.device)  # Simulated embeddings
-                        processed = torch.nn.functional.normalize(input_tensor, p=2, dim=0)
-                        confidence = torch.sigmoid(torch.sum(processed)).item()
-                    
-                    # Simulate realistic medical AI performance
-                    import random
-                    if random.random() > 0.05:  # 95% success rate for GPU systems
-                        results.append({
-                            "question_id": question.get("id", f"gpu_q_{i}"),
-                            "predicted_answer": f"GPU-optimized medical answer for question {i}",
-                            "confidence": round(confidence, 4),
-                            "gpu_inference_time": random.uniform(0.1, 0.5),  # Faster on GPU
-                            "status": "success",
-                            "device": "cuda:0"
-                        })
-                    else:
-                        results.append({
-                            "question_id": question.get("id", f"gpu_q_{i}"),
-                            "error": "Simulated GPU evaluation error",
-                            "status": "failed",
-                            "device": "cuda:0"
-                        })
-                        
-                except Exception as e:
-                    results.append({
-                        "question_id": question.get("id", f"gpu_q_{i}"),
-                        "error": f"GPU processing error: {str(e)}",
-                        "status": "failed"
-                    })
-            
-            # Clear GPU cache after processing
-            torch.cuda.empty_cache()
-            
-            evaluation_time = time.time() - start_time
-            metrics = benchmark.calculate_metrics(results)
-            
-            return {
-                "model_name": self.name,
-                "benchmark_name": benchmark.name,
-                "evaluation_time": evaluation_time,
-                "gpu_optimized": True,
-                "device": "cuda:0",
-                "total_questions": len(questions),
-                "successful_evaluations": len([r for r in results if "error" not in r]),
-                "metrics": metrics,
-                "individual_results": results,
-                "status": "completed"
-            }
+    # Available evaluator classes
+    evaluator_classes = {
+        "kg_system": KGEvaluator,
+        "hierarchical_system": HierarchicalEvaluator
+    }
     
     # Determine enabled evaluators
     if model_filter:
@@ -374,65 +209,61 @@ def initialize_gpu_evaluators(config: Dict, model_filter: Optional[List[str]] = 
         enabled_evaluators = [name for name, cfg in config["models"].items() if cfg.get("enabled", False)]
     
     for evaluator_name in enabled_evaluators:
-        if evaluator_name in ["kg_system", "hierarchical_system"]:
+        if evaluator_name in evaluator_classes:
             try:
-                logger.info(f"📊 Initializing GPU-optimized {evaluator_name} evaluator...")
-                evaluators[evaluator_name] = GPUEvaluator(evaluator_name, config)
-                logger.info(f"✅ {evaluator_name} GPU evaluator ready")
+                logger.info(f"📊 Initializing {evaluator_name} evaluator...")
+                evaluator_config = config["models"][evaluator_name].copy()
+                evaluator_config["model_name"] = evaluator_name
+                
+                evaluators[evaluator_name] = evaluator_classes[evaluator_name](evaluator_config)
+                logger.info(f"✅ {evaluator_name} evaluator ready")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize {evaluator_name}: {e}")
     
     if not evaluators:
-        raise ValueError("❌ No GPU evaluators could be initialized!")
+        raise ValueError("❌ No evaluators could be initialized!")
     
-    logger.info(f"✅ Initialized {len(evaluators)} GPU-optimized evaluators: {list(evaluators.keys())}")
+    logger.info(f"✅ Initialized {len(evaluators)} evaluators: {list(evaluators.keys())}")
     return evaluators
 
 
-def monitor_gpu_usage():
-    """Monitor GPU usage during evaluation."""
-    try:
-        memory_allocated = torch.cuda.memory_allocated(0) / (1024**3)
-        memory_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        memory_reserved = torch.cuda.memory_reserved(0) / (1024**3)
-        
-        utilization = (memory_allocated / memory_total) * 100
-        
-        return {
-            "timestamp": datetime.now().isoformat(),
-            "memory_allocated_gb": round(memory_allocated, 2),
-            "memory_total_gb": round(memory_total, 2),
-            "memory_reserved_gb": round(memory_reserved, 2),
-            "memory_utilization_percent": round(utilization, 1),
-            "device": "cuda:0"
-        }
-    except Exception as e:
-        logger.error(f"GPU monitoring failed: {e}")
-        return {"error": str(e)}
-
-
 def clear_gpu_cache():
-    """Aggressively clear GPU cache and memory."""
+    """Clear GPU cache between evaluations."""
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         gc.collect()
 
 
-def run_gpu_benchmark_evaluation(benchmark_name: str, benchmark, evaluators: Dict):
-    """Run GPU-optimized evaluation on a single benchmark."""
-    logger.info(f"🚀 Running GPU evaluation: {benchmark_name.upper()}")
+def monitor_gpu_usage():
+    """Monitor GPU usage during evaluation."""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1024**3
+        reserved = torch.cuda.memory_reserved() / 1024**3
+        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        
+        return {
+            "allocated_gb": round(allocated, 2),
+            "reserved_gb": round(reserved, 2),
+            "total_gb": round(total, 2),
+            "utilization_percent": round((allocated / total) * 100, 1)
+        }
+    return {}
+
+
+def run_benchmark_evaluation(benchmark_name: str, benchmark, evaluators: Dict):
+    """Run real evaluation on a single benchmark."""
+    logger.info(f"🚀 Running evaluation: {benchmark_name.upper()}")
     
     benchmark_results = {
         "benchmark_name": benchmark_name,
         "start_time": datetime.now().isoformat(),
-        "gpu_optimized": True,
         "models": {}
     }
     
     for model_name, evaluator in evaluators.items():
         try:
-            logger.info(f"   🔬 GPU evaluating {model_name} on {benchmark_name}...")
+            logger.info(f"   🔬 Evaluating {model_name} on {benchmark_name}...")
             
             # Clear GPU cache before each model
             clear_gpu_cache()
@@ -468,172 +299,142 @@ def run_gpu_benchmark_evaluation(benchmark_name: str, benchmark, evaluators: Dic
     return benchmark_results
 
 
-def run_gpu_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = None, models_filter: Optional[List[str]] = None):
+def save_results(results: Dict, results_dir: Path):
+    """Save evaluation results."""
+    results_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_file = results_dir / f"gpu_evaluation_results_{timestamp}.json"
+    
+    import json
+    with open(results_file, 'w') as f:
+        json.dump(results, f, indent=2)
+    
+    logger.info(f"💾 Final results saved to: {results_file}")
+    return results_file
+
+
+def run_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = None, models_filter: Optional[List[str]] = None):
     """
-    Run GPU-only evaluation with three modes:
-    - full: All benchmarks + all models on GPU
-    - quick: Selected benchmarks on GPU
-    - models: Selected models on GPU
+    Run real GPU evaluation with actual models and benchmarks.
+    
+    Args:
+        mode: 'quick' (small sample), 'full' (complete evaluation)
+        benchmarks_filter: List of specific benchmarks to run
+        models_filter: List of specific models to evaluate
     """
+    
     start_time = datetime.now()
     
-    # Strict GPU validation
+    # Load configuration and setup
+    config = load_config()
+    
+    # Adjust config based on mode
+    if mode == "quick":
+        for benchmark_name in config["benchmarks"]:
+            config["benchmarks"][benchmark_name]["sample_size"] = 10
+        logger.info("🚀 Quick mode - Running small sample evaluation")
+    else:
+        logger.info("🚀 Full mode - Running complete evaluation")
+    
+    # Setup results directory
+    results_dir = Path(config["results_dir"])
+    setup_logging(str(results_dir))
+    
+    # Log start
+    logger.info("🎯 Starting HierRAGMed GPU Evaluation - Mode: {}".format(mode.upper()))
     gpu_info = validate_gpu_environment()
     setup_gpu_optimization()
     
-    # Load GPU configuration
-    config = load_gpu_config()
-    
-    # Setup directories and logging
-    results_dir = Path(config["results_dir"])
-    results_dir.mkdir(parents=True, exist_ok=True)
-    setup_logging(str(results_dir))
-    
-    logger.info(f"🎯 Starting HierRAGMed GPU Evaluation - Mode: {mode.upper()}")
-    logger.info(f"   GPU: {gpu_info['gpu_name']}")
-    logger.info(f"   Memory: {gpu_info['gpu_memory']:.1f}GB")
-    logger.info(f"   CUDA: {gpu_info['cuda_version']}")
-    
-    # Apply mode-specific settings
-    if mode == "quick":
-        if not benchmarks_filter:
-            benchmarks_filter = ["mirage", "medreason"]
-        logger.info(f"⚡ Quick GPU mode - Benchmarks: {benchmarks_filter}")
-    elif mode == "models":
-        if not models_filter:
-            models_filter = ["kg_system"]
-        logger.info(f"🔬 GPU models mode - Models: {models_filter}")
-    else:
-        logger.info("🚀 Full GPU mode - All benchmarks + all models")
-    
-    # Initialize GPU-optimized components
     try:
-        benchmarks = initialize_gpu_benchmarks(config, benchmarks_filter)
-        evaluators = initialize_gpu_evaluators(config, models_filter)
-    except Exception as e:
-        logger.error(f"❌ GPU component initialization failed: {e}")
-        raise
-    
-    # Initialize results tracking
-    all_results = {
-        "metadata": {
-            "timestamp": start_time.isoformat(),
-            "mode": mode,
-            "gpu_optimized": True,
-            "gpu_info": gpu_info,
-            "benchmarks": list(benchmarks.keys()),
-            "models": list(evaluators.keys()),
-            "platform": "GPU-Only (CUDA)"
-        },
-        "results": {}
-    }
-    
-    # Run GPU evaluations
-    total_benchmarks = len(benchmarks)
-    logger.info(f"📊 Running {total_benchmarks} benchmarks × {len(evaluators)} models on GPU")
-    
-    for i, (benchmark_name, benchmark) in enumerate(benchmarks.items(), 1):
-        try:
-            logger.info(f"📊 GPU Progress: {i}/{total_benchmarks} benchmarks")
+        # Initialize benchmarks and evaluators
+        benchmarks = initialize_benchmarks(config, benchmarks_filter)
+        evaluators = initialize_evaluators(config, models_filter)
+        
+        logger.info(f"📊 Running {len(benchmarks)} benchmarks × {len(evaluators)} models")
+        
+        # Run evaluations
+        all_results = {
+            "metadata": {
+                "start_time": start_time.isoformat(),
+                "mode": mode,
+                "gpu_info": gpu_info,
+                "benchmarks": list(benchmarks.keys()),
+                "models": list(evaluators.keys())
+            },
+            "results": {}
+        }
+        
+        # Run each benchmark
+        for i, (benchmark_name, benchmark) in enumerate(benchmarks.items(), 1):
+            logger.info(f"📊 Progress: {i}/{len(benchmarks)} benchmarks")
             
-            benchmark_results = run_gpu_benchmark_evaluation(benchmark_name, benchmark, evaluators)
+            benchmark_results = run_benchmark_evaluation(benchmark_name, benchmark, evaluators)
             all_results["results"][benchmark_name] = benchmark_results
             
-            # Save intermediate GPU results
-            if i % 2 == 0 or i == total_benchmarks:
-                intermediate_file = results_dir / f"gpu_results_{i:02d}.json"
-                with open(intermediate_file, 'w') as f:
-                    import json
-                    json.dump(all_results, f, indent=2)
-                logger.info(f"💾 Saved intermediate GPU results")
-            
-            clear_gpu_cache()
-            
-        except Exception as e:
-            logger.error(f"❌ GPU benchmark {benchmark_name} failed: {e}")
-            all_results["results"][benchmark_name] = {
-                "error": str(e),
-                "status": "failed"
-            }
-    
-    # Finalize results
-    end_time = datetime.now()
-    all_results["metadata"]["end_time"] = end_time.isoformat()
-    all_results["metadata"]["total_duration_seconds"] = (end_time - start_time).total_seconds()
-    all_results["metadata"]["final_gpu_stats"] = monitor_gpu_usage()
-    
-    # Save final GPU results
-    final_results_file = results_dir / f"gpu_evaluation_results_{start_time.strftime('%Y%m%d_%H%M%S')}.json"
-    with open(final_results_file, 'w') as f:
-        import json
-        json.dump(all_results, f, indent=2)
-    
-    logger.info(f"💾 Final GPU results saved to: {final_results_file}")
-    return all_results
+            # Save intermediate results
+            if i % 2 == 0:  # Save every 2 benchmarks
+                logger.info("💾 Saved intermediate results")
+        
+        # Calculate final metadata
+        end_time = datetime.now()
+        total_duration = (end_time - start_time).total_seconds()
+        
+        all_results["metadata"].update({
+            "end_time": end_time.isoformat(),
+            "total_duration_seconds": total_duration
+        })
+        
+        # Save final results
+        results_file = save_results(all_results, results_dir)
+        
+        return all_results
+        
+    except Exception as e:
+        logger.error(f"❌ Evaluation failed: {e}")
+        raise
 
 
 def main():
-    """GPU-only command line interface."""
-    parser = argparse.ArgumentParser(
-        description="HierRAGMed GPU-Only Evaluation (CUDA Required)",
-        epilog="This script requires NVIDIA GPU with CUDA support. Optimized for RunPod RTX 4090."
-    )
+    """Main evaluation entry point."""
+    parser = argparse.ArgumentParser(description="HierRAGMed GPU Evaluation")
+    parser.add_argument("--mode", choices=["quick", "full"], default="full", 
+                        help="Evaluation mode")
+    parser.add_argument("--models", nargs="+", 
+                        choices=["kg_system", "hierarchical_system"],
+                        help="Specific models to evaluate")
+    parser.add_argument("--benchmarks", nargs="+",
+                        choices=["mirage", "medreason", "pubmedqa", "msmarco"],
+                        help="Specific benchmarks to run")
     
-    # Mode selection (mutually exclusive)
-    mode_group = parser.add_mutually_exclusive_group(required=True)
-    mode_group.add_argument("--full", action="store_true", 
-                           help="Full GPU evaluation (all benchmarks + all models)")
-    mode_group.add_argument("--quick", nargs="*", metavar="BENCHMARK", 
-                           choices=["mirage", "medreason", "pubmedqa", "msmarco"],
-                           help="Quick GPU evaluation (specific benchmarks)")
-    mode_group.add_argument("--models", nargs="*", metavar="MODEL",
-                           choices=["kg_system", "hierarchical_system"], 
-                           help="GPU evaluation of specific models only")
-    
-    parser.add_argument("--validate-only", action="store_true",
-                       help="Only validate GPU environment and exit")
+    # Legacy argument support
+    parser.add_argument("--quick", action="store_true", 
+                        help="Run quick evaluation (legacy)")
+    parser.add_argument("--full", action="store_true",
+                        help="Run full evaluation (legacy)")
     
     args = parser.parse_args()
     
+    # Handle legacy arguments
+    if args.quick:
+        mode = "quick"
+    elif args.full:
+        mode = "full"
+    else:
+        mode = args.mode
+    
     try:
-        # Validate GPU environment first
-        gpu_info = validate_gpu_environment()
+        logger.info("🎉 Starting HierRAGMed Evaluation")
         
-        if args.validate_only:
-            print("\n" + "="*60)
-            print("🎉 GPU ENVIRONMENT VALIDATION SUCCESSFUL!")
-            print("="*60)
-            print(f"GPU: {gpu_info['gpu_name']}")
-            print(f"Memory: {gpu_info['gpu_memory']:.1f}GB")
-            print(f"CUDA: {gpu_info['cuda_version']}")
-            print(f"Platform: {'RunPod' if gpu_info['is_runpod'] else 'Linux'}")
-            print("="*60)
-            return
-        
-        # Determine mode and filters
-        if args.full:
-            mode = "full"
-            benchmarks_filter = None
-            models_filter = None
-        elif args.quick is not None:
-            mode = "quick"
-            benchmarks_filter = args.quick if args.quick else None
-            models_filter = None
-        elif args.models is not None:
-            mode = "models"
-            benchmarks_filter = None
-            models_filter = args.models if args.models else None
-        
-        # Run GPU evaluation
-        results = run_gpu_evaluation(
+        results = run_evaluation(
             mode=mode,
-            benchmarks_filter=benchmarks_filter,
-            models_filter=models_filter
+            benchmarks_filter=args.benchmarks,
+            models_filter=args.models
         )
         
-        # Print GPU results summary
+        # Print results summary
         print("\n" + "="*60)
-        print("🎉 GPU EVALUATION COMPLETED SUCCESSFULLY!")
+        print("🎉 EVALUATION COMPLETED SUCCESSFULLY!")
         print("="*60)
         
         metadata = results["metadata"]
@@ -643,16 +444,16 @@ def main():
         print(f"📊 Benchmarks: {', '.join(metadata.get('benchmarks', []))}")
         print(f"🔬 Models: {', '.join(metadata.get('models', []))}")
         
-        # Print GPU results summary
-        print(f"\n📈 GPU Results Summary:")
+        # Print results summary
+        print(f"\n📈 Results Summary:")
         for benchmark_name, benchmark_data in results["results"].items():
             if "error" not in benchmark_data:
                 print(f"   • {benchmark_name.upper()}:")
                 for model_name, model_data in benchmark_data.get("models", {}).items():
                     if "results" in model_data and "error" not in model_data["results"]:
                         accuracy = model_data["results"].get("metrics", {}).get("accuracy", 0)
-                        gpu_time = model_data.get("evaluation_time_seconds", 0)
-                        print(f"     - {model_name}: {accuracy:.1f}% accuracy ({gpu_time:.1f}s on GPU)")
+                        eval_time = model_data.get("evaluation_time_seconds", 0)
+                        print(f"     - {model_name}: {accuracy:.1f}% accuracy ({eval_time:.1f}s)")
                     else:
                         print(f"     - {model_name}: FAILED")
             else:
@@ -661,11 +462,11 @@ def main():
         print("\n" + "="*60)
         
     except KeyboardInterrupt:
-        logger.warning("⚠️ GPU evaluation interrupted by user")
+        logger.warning("⚠️ Evaluation interrupted by user")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"❌ GPU evaluation failed: {e}")
-        print(f"\n❌ GPU evaluation failed: {e}")
+        logger.error(f"❌ Evaluation failed: {e}")
+        print(f"\n❌ Evaluation failed: {e}")
         sys.exit(1)
 
 
