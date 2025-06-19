@@ -1,0 +1,91 @@
+# KG System GPU Configuration (RunPod/CUDA)
+# For evaluation and high-performance inference
+
+# Environment
+environment: "gpu"
+platform: "runpod"
+
+# Data directory
+data_dir: data/kg_raw
+
+# GPU-optimized model configurations
+models:
+  embedding:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    device: cuda
+    batch_size: 64  # Higher for GPU
+    max_length: 512
+    normalize_embeddings: true
+    trust_remote_code: false
+    # GPU optimizations
+    mixed_precision: true
+    compile_model: true
+  
+  llm:
+    name: mistral:7b-instruct
+    device: cuda
+    temperature: 0.7
+    context_window: 4096
+    max_new_tokens: 512
+    # GPU optimizations
+    batch_size: 32
+    mixed_precision: true
+    use_flash_attention: true
+
+# Enhanced retrieval for larger knowledge base
+retrieval:
+  top_k: 15  # More results for GPU processing
+  hybrid_search: true
+  alpha: 0.5
+  # GPU-specific settings
+  batch_size: 64
+  enable_gpu_acceleration: true
+
+# Processing optimized for GPU
+processing:
+  chunk_size: 512
+  chunk_overlap: 100
+  # GPU batch processing
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+
+# GPU-optimized prompts
+prompts:
+  system: |
+    You are an advanced medical assistant with access to comprehensive medical literature, 
+    clinical documentation, and medical terminology. Use this knowledge to provide accurate, 
+    evidence-based responses. Always prioritize patient safety and cite relevant medical sources.
+    Leverage the extensive knowledge base for detailed, comprehensive answers.
+    
+  system_with_citations: |
+    You are an advanced medical assistant with access to PubMed research, clinical documentation,
+    and MeSH medical terminology. Provide evidence-based answers with proper citations using 
+    document numbers. Distinguish between research evidence [1], clinical documentation [2], 
+    and medical terminology [3] when citing sources. Use the full knowledge base for comprehensive responses.
+
+# Performance settings
+performance:
+  use_gpu_acceleration: true
+  mixed_precision: true
+  compile_models: true
+  memory_efficient: true
+  
+  # CUDA optimizations
+  cuda_deterministic: false
+  cuda_benchmark: true
+  
+  # Memory management for 24GB GPU
+  gpu_memory_fraction: 0.8
+  memory_growth: true
+  max_memory_per_process: "20GB"
+
+# Web interface (if needed on GPU)
+web:
+  host: 0.0.0.0
+  port: 8001
+  cors_origins: ["*"]
+  # GPU-specific settings
+  worker_class: "uvicorn.workers.UvicornWorker"
+  workers: 2
+  max_requests: 1000

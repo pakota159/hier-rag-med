@@ -1,0 +1,123 @@
+# Basic Reasoning System GPU Configuration (RunPod/CUDA)
+# Hierarchical Diagnostic RAG for GPU evaluation
+
+# Environment
+environment: "gpu"
+platform: "runpod"
+
+# Data directory
+data_dir: data/foundation
+
+# GPU-optimized model configurations
+models:
+  embedding:
+    name: sentence-transformers/all-MiniLM-L6-v2
+    device: cuda
+    batch_size: 64  # Higher for GPU
+    max_length: 512
+    normalize_embeddings: true
+    trust_remote_code: false
+    # GPU optimizations
+    mixed_precision: true
+    compile_model: true
+  
+  llm:
+    name: mistral:7b-instruct
+    device: cuda
+    temperature: 0.7
+    context_window: 4096
+    max_new_tokens: 512
+    # GPU optimizations
+    batch_size: 32
+    mixed_precision: true
+    use_flash_attention: true
+
+# GPU-optimized hierarchical retrieval with three tiers
+hierarchical_retrieval:
+  tier1_top_k: 8        # Pattern Recognition - more results on GPU
+  tier2_top_k: 5        # Hypothesis Testing - reasoning chains
+  tier3_top_k: 3        # Confirmation - clinical evidence
+  enable_evidence_stratification: true
+  enable_temporal_weighting: true
+  # GPU-specific settings
+  batch_size: 64
+  parallel_processing: true
+  num_workers: 4
+  pin_memory: true
+
+# GPU-optimized processing
+processing:
+  chunk_size: 512
+  chunk_overlap: 100
+  # GPU batch processing
+  batch_size: 128
+  num_workers: 4
+  pin_memory: true
+
+# Enhanced hierarchical prompts for GPU inference
+prompts:
+  system: |
+    You are a hierarchical diagnostic reasoning assistant that follows clinical decision-making patterns.
+    Use three-tier reasoning: Pattern Recognition → Hypothesis Testing → Confirmation.
+    Always prioritize patient safety and evidence-based medicine.
+    Leverage comprehensive medical knowledge for detailed diagnostic reasoning.
+    
+  tier1_prompt: |
+    Identify relevant medical patterns and generate initial differential diagnoses.
+    Focus on rapid pattern recognition and clinical intuition.
+    Use the comprehensive knowledge base for pattern matching.
+    
+  tier2_prompt: |
+    Test hypotheses using evidence-based reasoning chains.
+    Apply systematic diagnostic reasoning and knowledge graph connections.
+    Cross-reference multiple medical sources for hypothesis validation.
+    
+  tier3_prompt: |
+    Confirm diagnosis with comprehensive clinical evidence.
+    Integrate all available information for final diagnostic confirmation.
+    Provide detailed evidence synthesis and confidence assessment.
+
+# Performance settings
+performance:
+  use_gpu_acceleration: true
+  mixed_precision: true
+  compile_models: true
+  memory_efficient: true
+  
+  # CUDA optimizations
+  cuda_deterministic: false
+  cuda_benchmark: true
+  
+  # Memory management for 24GB GPU
+  gpu_memory_fraction: 0.8
+  memory_growth: true
+  max_memory_per_process: "20GB"
+  
+  # Hierarchical processing optimization
+  enable_tier_parallelization: true
+  max_concurrent_tiers: 2
+
+# Collection management
+collections:
+  primary_symptoms:
+    name: "primary_symptoms"
+    chunk_size: 512
+    overlap: 100
+  differential_diagnosis:
+    name: "differential_diagnosis" 
+    chunk_size: 512
+    overlap: 100
+  final_diagnosis:
+    name: "final_diagnosis"
+    chunk_size: 512
+    overlap: 100
+
+# Web interface (if needed on GPU)
+web:
+  host: 0.0.0.0
+  port: 8503
+  cors_origins: ["*"]
+  # GPU-specific settings
+  worker_class: "uvicorn.workers.UvicornWorker"
+  workers: 2
+  max_requests: 1000
