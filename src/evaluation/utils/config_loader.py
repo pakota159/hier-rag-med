@@ -1,22 +1,24 @@
-#!/usr/bin/env python3
 """
-GPU-focused configuration loader for HierRAGMed evaluation on RunPod.
-Simplified for GPU-only operation with intelligent config selection.
+Configuration loader for HierRAGMed evaluation system.
+Handles GPU optimization, environment detection, and path management.
 """
 
 import os
 import yaml
-import logging
-from typing import Dict, Any, Optional, List
 from pathlib import Path
+from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+try:
+    import torch
+except ImportError:
+    torch = None
 
 
 @dataclass
 class GPUConfig:
-    """GPU-specific configuration container."""
+    """GPU-specific configuration settings."""
     device: str = "cuda"
     embedding_batch_size: int = 128
     llm_batch_size: int = 32
@@ -30,47 +32,86 @@ class GPUConfig:
 @dataclass
 class EvaluationConfig:
     """Complete evaluation configuration."""
-    platform: str
-    results_dir: str
-    data_dir: str
-    gpu_config: GPUConfig
-    models: Dict[str, Any]
-    benchmarks: Dict[str, Any]
-    performance: Dict[str, Any]
-    logging: Dict[str, Any]
+    platform: str = "Generic"
+    results_dir: str = "evaluation/results"
+    data_dir: str = "data"
+    gpu_config: GPUConfig = None
+    models: Dict = None
+    benchmarks: Dict = None
+    performance: Dict = None
+    logging: Dict = None
+    
+    def __post_init__(self):
+        if self.gpu_config is None:
+            self.gpu_config = GPUConfig()
+        if self.models is None:
+            self.models = {}
+        if self.benchmarks is None:
+            self.benchmarks = {}
+        if self.performance is None:
+            self.performance = {}
+        if self.logging is None:
+            self.logging = {}
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return asdict(self)
+        """Convert to dictionary for serialization."""
+        config_dict = asdict(self)
+        # Flatten GPU config
+        config_dict["gpu"] = config_dict.pop("gpu_config")
+        return config_dict
 
 
 class ConfigLoader:
-    """
-    GPU-focused configuration loader for RunPod evaluation.
-    Prioritizes GPU configurations and applies intelligent optimizations.
-    """
+    """Load and optimize configuration for different environments."""
     
     def __init__(self, config_dir: Optional[Path] = None):
-        """
-        Initialize configuration loader.
-        
-        Args:
-            config_dir: Directory containing configuration files
-        """
+        """Initialize configuration loader."""
         self.config_dir = config_dir or Path(__file__).parent.parent / "configs"
-        self.loaded_config = None
+        self.loaded_config: Optional[EvaluationConfig] = None
         
-        # Configuration file priority (highest to lowest)
-        self.config_files = [
-            "gpu_runpod_config.yaml",      # Primary RunPod config
-            "config.yaml",                 # Fallback config
-            "evaluation_config.yaml",      # Alternative name
-            "default_config.yaml"          # Last resort
-        ]
+        # GPU optimization mappings
+        self.gpu_optimizations = {
+            "RTX 4090": {
+                "embedding_batch_size": 128,
+                "llm_batch_size": 32,
+                "memory_fraction": 0.85,
+                "max_workers": 8,
+                "benchmark_batches": {
+                    "mirage": 32,
+                    "medreason": 16, 
+                    "pubmedqa": 64,
+                    "msmarco": 128
+                }
+            },
+            "RTX 3090": {
+                "embedding_batch_size": 64,
+                "llm_batch_size": 16,
+                "memory_fraction": 0.80,
+                "max_workers": 6,
+                "benchmark_batches": {
+                    "mirage": 16,
+                    "medreason": 8,
+                    "pubmedqa": 32,
+                    "msmarco": 64
+                }
+            },
+            "A100": {
+                "embedding_batch_size": 256,
+                "llm_batch_size": 64,
+                "memory_fraction": 0.90,
+                "max_workers": 12,
+                "benchmark_batches": {
+                    "mirage": 64,
+                    "medreason": 32,
+                    "pubmedqa": 128,
+                    "msmarco": 256
+                }
+            }
+        }
     
     def load_config(self, config_path: Optional[Path] = None) -> EvaluationConfig:
         """
-        Load and optimize configuration for GPU evaluation.
+        Load evaluation configuration with environment optimization.
         
         Args:
             config_path: Specific config file path (optional)
@@ -78,166 +119,272 @@ class ConfigLoader:
         Returns:
             Optimized EvaluationConfig
         """
-        if config_path:
-            # Load specific config file
-            raw_config = self._load_yaml_config(config_path)
-            logger.info(f"📄 Loaded config from: {config_path}")
-        else:
-            # Try config files in priority order
-            raw_config = self._load_priority_config()
+        # Try to load configuration from multiple sources
+        config_dict = self._load_config_dict(config_path)
         
-        # Apply GPU optimizations
-        optimized_config = self._optimize_for_gpu(raw_config)
+        # Update for current environment
+        config_dict = self.update_config_for_environment(config_dict)
         
-        # Validate configuration
-        self._validate_config(optimized_config)
+        # Create structured configuration
+        self.loaded_config = self._create_evaluation_config(config_dict)
         
-        # Convert to structured config
-        self.loaded_config = self._create_evaluation_config(optimized_config)
-        
-        logger.info(f"✅ Configuration loaded and optimized for GPU evaluation")
+        logger.info(f"✅ Configuration loaded for {self.loaded_config.platform}")
         return self.loaded_config
     
-    def _load_priority_config(self) -> Dict[str, Any]:
-        """Load configuration using priority order."""
-        for config_file in self.config_files:
-            config_path = self.config_dir / config_file
-            
-            if config_path.exists():
-                try:
-                    config = self._load_yaml_config(config_path)
-                    logger.info(f"📄 Loaded config from: {config_path}")
+    def _load_config_dict(self, config_path: Optional[Path] = None) -> Dict[str, Any]:
+        """Load configuration dictionary from file."""
+        config_paths = []
+        
+        if config_path:
+            config_paths.append(config_path)
+        
+        # Priority order for config files
+        config_paths.extend([
+            self.config_dir / "gpu_runpod_config.yaml",
+            self.config_dir.parent / "config.yaml",
+            Path(__file__).parent.parent / "config.yaml"
+        ])
+        
+        for path in config_paths:
+            try:
+                if path.exists():
+                    with open(path, 'r', encoding='utf-8') as f:
+                        config = yaml.safe_load(f)
+                    logger.info(f"📄 Loaded config from: {path}")
                     return config
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to load {config_path}: {e}")
-                    continue
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load config from {path}: {e}")
+                continue
         
-        # If no config file found, use defaults
-        logger.warning("⚠️ No config file found, using GPU defaults")
-        return self._get_default_gpu_config()
+        # Fallback to default configuration
+        logger.warning("⚠️ Using default configuration")
+        return self._get_default_config()
     
-    def _load_yaml_config(self, config_path: Path) -> Dict[str, Any]:
-        """Load YAML configuration file."""
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+    def update_config_for_environment(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update configuration based on detected environment - FIXED VERSION.
+        
+        Args:
+            config: Base configuration
             
-            if not isinstance(config, dict):
-                raise ValueError("Configuration must be a dictionary")
+        Returns:
+            Environment-optimized configuration
+        """
+        # Detect environment
+        is_runpod = os.path.exists("/workspace")
+        is_docker = os.path.exists("/.dockerenv")
+        has_gpu = torch.cuda.is_available() if torch is not None else False
+        
+        logger.info(f"🔍 Environment Detection:")
+        logger.info(f"   RunPod: {is_runpod}")
+        logger.info(f"   Docker: {is_docker}")
+        logger.info(f"   GPU Available: {has_gpu}")
+        
+        # Apply environment-specific settings
+        if is_runpod:
+            logger.info("🚀 Applying RunPod optimizations...")
+            # Use RunPod environment settings
+            env_config = config.get("environments", {}).get("cloud", {})
+            config.update(env_config)
             
-            return config
+            # Set RunPod-specific paths - FIXED
+            self._set_runpod_paths(config)
             
-        except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML format: {e}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load config: {e}")
-    
-    def _optimize_for_gpu(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply GPU-specific optimizations to configuration."""
-        # Ensure GPU device is set
-        self._ensure_gpu_device(config)
+            # Enable GPU optimizations if available
+            if has_gpu:
+                self._apply_gpu_optimizations(config)
+                self._configure_gpu_monitoring(config)
+                
+        elif is_docker:
+            logger.info("🐳 Applying Docker optimizations...")
+            # Use Docker environment settings
+            env_config = config.get("environments", {}).get("docker", {})
+            config.update(env_config)
+            
+            # Docker paths
+            config.update({
+                "data_dir": "/app/data",
+                "results_dir": "/app/evaluation/results",
+                "cache_dir": "/app/evaluation/cache",
+                "logs_dir": "/app/evaluation/logs"
+            })
+            
+            if has_gpu:
+                self._apply_gpu_optimizations(config)
+                
+        else:
+            logger.info("💻 Applying local development settings...")
+            # Use local environment settings  
+            env_config = config.get("environments", {}).get("local", {})
+            config.update(env_config)
+            
+            # Local paths (relative)
+            self._set_local_paths(config)
+            
+            # Moderate GPU optimizations for local development
+            if has_gpu:
+                self._apply_conservative_gpu_optimizations(config)
         
-        # Apply GPU batch size optimizations
-        self._optimize_batch_sizes(config)
+        # Update platform identifier
+        config["platform"] = "RunPod GPU" if is_runpod and has_gpu else "Local GPU" if has_gpu else "Local CPU"
+        config["environment"] = "production" if is_runpod else "development"
+        config["gpu_optimized"] = has_gpu
         
-        # Enable GPU performance features
-        self._enable_gpu_features(config)
-        
-        # Set GPU-specific paths
-        self._set_gpu_paths(config)
-        
-        # Configure GPU monitoring
-        self._configure_gpu_monitoring(config)
-        
-        logger.info("🔧 Applied GPU optimizations to configuration")
+        logger.info(f"✅ Configuration updated for {config['platform']} environment")
         return config
     
-    def _ensure_gpu_device(self, config: Dict[str, Any]) -> None:
-        """Ensure all models use GPU device."""
-        models = config.setdefault("models", {})
+    def _set_runpod_paths(self, config: Dict[str, Any]) -> None:
+        """Set appropriate paths for RunPod environment - FIXED VERSION."""
+        # RunPod/container paths - CORRECTED to use project directory
+        project_base = "/workspace/hierragmed"  # Fixed: was missing hierragmed
         
-        for model_name, model_config in models.items():
-            if isinstance(model_config, dict):
-                model_config["device"] = "cuda"
-                
-                # Remove non-GPU device settings
-                if "device_settings" in model_config:
-                    del model_config["device_settings"]
-                if "auto_detect_device" in model_config:
-                    del model_config["auto_detect_device"]
+        # Verify project directory exists
+        if os.path.exists(project_base):
+            config["data_dir"] = f"{project_base}/data"
+            config["results_dir"] = f"{project_base}/evaluation/results"
+            config["cache_dir"] = f"{project_base}/evaluation/cache"
+            config["logs_dir"] = f"{project_base}/evaluation/logs"
+            logger.info(f"📁 Using project directory: {project_base}")
+        else:
+            # Fallback if project not in expected location
+            logger.warning(f"⚠️ Project directory {project_base} not found, using /workspace")
+            config["data_dir"] = "/workspace/data"
+            config["results_dir"] = "/workspace/evaluation/results"
+            config["cache_dir"] = "/workspace/evaluation/cache"
+            config["logs_dir"] = "/workspace/evaluation/logs"
+        
+        # Create directories if they don't exist
+        self._ensure_directories_exist(config)
     
-    def _optimize_batch_sizes(self, config: Dict[str, Any]) -> None:
-        """Optimize batch sizes for GPU performance."""
-        models = config.setdefault("models", {})
+    def _set_local_paths(self, config: Dict[str, Any]) -> None:
+        """Set paths for local development."""
+        config.setdefault("data_dir", "data")
+        config.setdefault("results_dir", "evaluation/results")
+        config.setdefault("cache_dir", "evaluation/cache")
+        config.setdefault("logs_dir", "evaluation/logs")
         
-        # GPU-optimized batch sizes for RTX 4090
-        gpu_batch_sizes = {
-            "embedding": 128,
-            "llm": 32
-        }
-        
-        for model_name, optimal_batch in gpu_batch_sizes.items():
-            if model_name in models and isinstance(models[model_name], dict):
-                models[model_name]["batch_size"] = optimal_batch
-        
-        # Optimize benchmark batch sizes
-        benchmarks = config.setdefault("benchmarks", {})
-        benchmark_batch_sizes = {
-            "mirage": 32,
-            "medreason": 16,
-            "pubmedqa": 64,
-            "msmarco": 128
-        }
-        
-        for benchmark_name, optimal_batch in benchmark_batch_sizes.items():
-            if benchmark_name in benchmarks and isinstance(benchmarks[benchmark_name], dict):
-                benchmarks[benchmark_name]["batch_size"] = optimal_batch
-                benchmarks[benchmark_name]["num_workers"] = 8
-                benchmarks[benchmark_name]["pin_memory"] = True
+        # Create directories if they don't exist
+        self._ensure_directories_exist(config)
     
-    def _enable_gpu_features(self, config: Dict[str, Any]) -> None:
-        """Enable GPU performance features."""
-        # Performance section
+    def _ensure_directories_exist(self, config: Dict[str, Any]) -> None:
+        """Create directories if they don't exist."""
+        for dir_key in ["data_dir", "results_dir", "cache_dir", "logs_dir"]:
+            if dir_key in config:
+                dir_path = Path(config[dir_key])
+                try:
+                    dir_path.mkdir(parents=True, exist_ok=True)
+                    logger.debug(f"📁 Ensured directory exists: {dir_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not create directory {dir_path}: {e}")
+    
+    def _apply_gpu_optimizations(self, config: Dict[str, Any]) -> None:
+        """Apply GPU optimizations based on detected hardware."""
+        if not torch or not torch.cuda.is_available():
+            return
+        
+        try:
+            gpu_name = torch.cuda.get_device_name(0)
+            logger.info(f"🔥 Optimizing for GPU: {gpu_name}")
+            
+            # Get GPU-specific optimizations
+            optimizations = None
+            for gpu_type, opts in self.gpu_optimizations.items():
+                if gpu_type in gpu_name:
+                    optimizations = opts
+                    break
+            
+            if not optimizations:
+                # Generic optimizations for unknown GPU
+                memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                optimizations = self._get_generic_gpu_optimizations(memory_gb)
+            
+            # Apply optimizations to config
+            self._apply_optimizations_to_config(config, optimizations)
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to apply GPU optimizations: {e}")
+    
+    def _apply_conservative_gpu_optimizations(self, config: Dict[str, Any]) -> None:
+        """Apply conservative GPU optimizations for local development."""
+        # Smaller batch sizes for local development
+        models = config.setdefault("models", {})
+        if "embedding" in models:
+            models["embedding"]["batch_size"] = min(64, models["embedding"].get("batch_size", 32))
+        if "llm" in models:
+            models["llm"]["batch_size"] = min(16, models["llm"].get("batch_size", 8))
+        
+        # Conservative performance settings
+        performance = config.setdefault("performance", {})
+        performance.update({
+            "use_gpu_acceleration": True,
+            "mixed_precision": False,  # More conservative
+            "compile_models": False,   # More conservative
+            "memory_efficient": True,
+            "gpu_memory_fraction": 0.7,  # Leave more headroom
+            "parallel_processing": True,
+            "max_workers": 4,  # Fewer workers
+            "prefetch_factor": 1
+        })
+    
+    def _get_generic_gpu_optimizations(self, memory_gb: float) -> Dict[str, Any]:
+        """Get generic GPU optimizations based on memory."""
+        if memory_gb >= 20:  # High-end GPU
+            embedding_batch = 96
+            llm_batch = 24
+            workers = 8
+        elif memory_gb >= 12:  # Mid-range GPU
+            embedding_batch = 48
+            llm_batch = 12
+            workers = 6
+        elif memory_gb >= 8:   # Entry-level GPU
+            embedding_batch = 24
+            llm_batch = 6
+            workers = 4
+        else:                  # Low-memory GPU
+            embedding_batch = 12
+            llm_batch = 3
+            workers = 2
+        
+        return {
+            "embedding_batch_size": embedding_batch,
+            "llm_batch_size": llm_batch,
+            "memory_fraction": 0.8,
+            "max_workers": workers,
+            "benchmark_batches": {
+                "mirage": embedding_batch // 4,
+                "medreason": embedding_batch // 8,
+                "pubmedqa": embedding_batch // 2,
+                "msmarco": embedding_batch
+            }
+        }
+    
+    def _apply_optimizations_to_config(self, config: Dict[str, Any], optimizations: Dict[str, Any]) -> None:
+        """Apply optimizations to configuration."""
+        # Update model batch sizes
+        models = config.setdefault("models", {})
+        if "embedding" in models:
+            models["embedding"]["batch_size"] = optimizations["embedding_batch_size"]
+        if "llm" in models:
+            models["llm"]["batch_size"] = optimizations["llm_batch_size"]
+        
+        # Update performance settings
         performance = config.setdefault("performance", {})
         performance.update({
             "use_gpu_acceleration": True,
             "mixed_precision": True,
             "compile_models": True,
             "memory_efficient": True,
-            "cuda_deterministic": False,
-            "cuda_benchmark": True,
-            "gpu_memory_fraction": 0.85,
+            "gpu_memory_fraction": optimizations["memory_fraction"],
             "parallel_processing": True,
-            "max_workers": 8,
+            "max_workers": optimizations["max_workers"],
             "prefetch_factor": 2
         })
         
-        # Model-specific GPU features
-        models = config.setdefault("models", {})
-        for model_name, model_config in models.items():
-            if isinstance(model_config, dict) and model_name in ["kg_system", "hierarchical_system"]:
-                model_config.update({
-                    "mixed_precision": True,
-                    "compile_model": True,
-                    "memory_efficient": True,
-                    "gradient_checkpointing": False  # Disabled for inference
-                })
-    
-    def _set_gpu_paths(self, config: Dict[str, Any]) -> None:
-        """Set appropriate paths for GPU environment."""
-        # Check if running in container/RunPod
-        if os.path.exists("/workspace"):
-            # RunPod/container paths
-            config["data_dir"] = "/workspace/data"
-            config["results_dir"] = "/workspace/evaluation/results"
-            config["cache_dir"] = "/workspace/evaluation/cache"
-            config["logs_dir"] = "/workspace/evaluation/logs"
-        else:
-            # Local development paths
-            config.setdefault("data_dir", "data")
-            config.setdefault("results_dir", "evaluation/results")
-            config.setdefault("cache_dir", "evaluation/cache")
-            config.setdefault("logs_dir", "evaluation/logs")
+        # Update benchmark batch sizes
+        benchmarks = config.setdefault("benchmarks", {})
+        for benchmark_name, batch_size in optimizations["benchmark_batches"].items():
+            if benchmark_name in benchmarks:
+                benchmarks[benchmark_name]["batch_size"] = batch_size
     
     def _configure_gpu_monitoring(self, config: Dict[str, Any]) -> None:
         """Configure GPU monitoring settings."""
@@ -262,36 +409,11 @@ class ConfigLoader:
             "log_batch_sizes": True
         })
     
-    def _validate_config(self, config: Dict[str, Any]) -> None:
-        """Validate GPU configuration."""
-        required_sections = ["models", "benchmarks", "performance"]
-        
-        for section in required_sections:
-            if section not in config:
-                raise ValueError(f"Missing required configuration section: {section}")
-        
-        # Validate GPU settings
-        models = config.get("models", {})
-        for model_name, model_config in models.items():
-            if isinstance(model_config, dict):
-                device = model_config.get("device", "")
-                if device != "cuda":
-                    logger.warning(f"⚠️ Model {model_name} not using CUDA device: {device}")
-        
-        # Validate paths exist or can be created
-        for path_key in ["results_dir", "cache_dir", "logs_dir"]:
-            if path_key in config:
-                path = Path(config[path_key])
-                try:
-                    path.mkdir(parents=True, exist_ok=True)
-                except Exception as e:
-                    logger.warning(f"⚠️ Cannot create directory {path}: {e}")
-    
     def _create_evaluation_config(self, config: Dict[str, Any]) -> EvaluationConfig:
         """Create structured evaluation configuration."""
         # Extract GPU configuration
         gpu_config = GPUConfig(
-            device="cuda",
+            device="cuda" if torch and torch.cuda.is_available() else "cpu",
             embedding_batch_size=config.get("models", {}).get("embedding", {}).get("batch_size", 128),
             llm_batch_size=config.get("models", {}).get("llm", {}).get("batch_size", 32),
             mixed_precision=config.get("performance", {}).get("mixed_precision", True),
@@ -302,7 +424,7 @@ class ConfigLoader:
         )
         
         return EvaluationConfig(
-            platform=config.get("platform", "RunPod GPU"),
+            platform=config.get("platform", "Generic"),
             results_dir=config.get("results_dir", "evaluation/results"),
             data_dir=config.get("data_dir", "data"),
             gpu_config=gpu_config,
@@ -312,318 +434,54 @@ class ConfigLoader:
             logging=config.get("logging", {})
         )
     
-    def _get_default_gpu_config(self) -> Dict[str, Any]:
-        """Get default GPU configuration as fallback."""
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Get default configuration as fallback."""
         return {
-            "platform": "RunPod GPU",
-            "environment": "production",
-            "gpu_optimized": True,
-            
+            "platform": "Generic",
             "results_dir": "evaluation/results",
             "data_dir": "data",
             "cache_dir": "evaluation/cache",
             "logs_dir": "evaluation/logs",
-            
             "models": {
-                "embedding": {
-                    "name": "sentence-transformers/all-MiniLM-L6-v2",
-                    "device": "cuda",
-                    "batch_size": 128,
-                    "mixed_precision": True
-                },
-                "llm": {
-                    "name": "mistral:7b-instruct",
-                    "device": "cuda",
-                    "batch_size": 32,
-                    "mixed_precision": True
-                },
-                "kg_system": {
-                    "enabled": True,
-                    "device": "cuda",
-                    "mixed_precision": True,
-                    "compile_model": True
-                },
-                "hierarchical_system": {
-                    "enabled": True,
-                    "device": "cuda",
-                    "mixed_precision": True,
-                    "compile_model": True
-                }
+                "embedding": {"device": "auto", "batch_size": 32},
+                "llm": {"device": "auto", "batch_size": 16},
+                "kg_system": {"enabled": True},
+                "hierarchical_system": {"enabled": True}
             },
-            
             "benchmarks": {
-                "mirage": {
-                    "enabled": True,
-                    "batch_size": 32,
-                    "num_workers": 8,
-                    "pin_memory": True
-                },
-                "medreason": {
-                    "enabled": True,
-                    "batch_size": 16,
-                    "num_workers": 8,
-                    "pin_memory": True
-                },
-                "pubmedqa": {
-                    "enabled": True,
-                    "batch_size": 64,
-                    "num_workers": 8,
-                    "pin_memory": True
-                },
-                "msmarco": {
-                    "enabled": True,
-                    "batch_size": 128,
-                    "num_workers": 8,
-                    "pin_memory": True
-                }
+                "mirage": {"enabled": True},
+                "medreason": {"enabled": True},
+                "pubmedqa": {"enabled": True},
+                "msmarco": {"enabled": True}
             },
-            
             "performance": {
-                "use_gpu_acceleration": True,
-                "mixed_precision": True,
-                "compile_models": True,
+                "use_gpu_acceleration": False,
+                "mixed_precision": False,
+                "compile_models": False,
                 "memory_efficient": True,
-                "gpu_memory_fraction": 0.85,
                 "parallel_processing": True,
-                "max_workers": 8
+                "max_workers": 4
             },
-            
-            "logging": {
-                "level": "INFO",
-                "log_gpu_stats": True,
-                "gpu_stats_interval": 30
-            },
-            
-            "monitoring": {
-                "enable_gpu_monitoring": True,
-                "gpu_poll_interval": 10,
-                "log_gpu_memory": True,
-                "log_gpu_utilization": True
-            }
+            "logging": {"level": "INFO"}
         }
     
     def get_gpu_optimized_config(self, gpu_name: str = "RTX 4090") -> Dict[str, Any]:
-        """
-        Get GPU-specific optimized configuration.
+        """Get GPU-optimized configuration for specific hardware."""
+        config = self._get_default_config()
         
-        Args:
-            gpu_name: Name of the GPU for optimization
-            
-        Returns:
-            GPU-optimized configuration
-        """
-        base_config = self.loaded_config.to_dict() if self.loaded_config else self._get_default_gpu_config()
+        if gpu_name in self.gpu_optimizations:
+            optimizations = self.gpu_optimizations[gpu_name]
+            self._apply_optimizations_to_config(config, optimizations)
         
-        # GPU-specific optimizations
-        if "RTX 4090" in gpu_name or "4090" in gpu_name:
-            # RTX 4090 optimizations (24GB VRAM)
-            optimizations = {
-                "embedding_batch_size": 128,
-                "llm_batch_size": 32,
-                "memory_fraction": 0.85,
-                "benchmark_batches": {"mirage": 32, "medreason": 16, "pubmedqa": 64, "msmarco": 128},
-                "max_workers": 8
-            }
-        elif "RTX 3080" in gpu_name or "3080" in gpu_name:
-            # RTX 3080 optimizations (10GB VRAM)
-            optimizations = {
-                "embedding_batch_size": 64,
-                "llm_batch_size": 16,
-                "memory_fraction": 0.8,
-                "benchmark_batches": {"mirage": 16, "medreason": 8, "pubmedqa": 32, "msmarco": 64},
-                "max_workers": 6
-            }
-        elif "RTX 3090" in gpu_name or "3090" in gpu_name:
-            # RTX 3090 optimizations (24GB VRAM)
-            optimizations = {
-                "embedding_batch_size": 96,
-                "llm_batch_size": 24,
-                "memory_fraction": 0.85,
-                "benchmark_batches": {"mirage": 24, "medreason": 12, "pubmedqa": 48, "msmarco": 96},
-                "max_workers": 8
-            }
-        elif "A100" in gpu_name:
-            # A100 optimizations (40GB/80GB VRAM)
-            optimizations = {
-                "embedding_batch_size": 256,
-                "llm_batch_size": 64,
-                "memory_fraction": 0.9,
-                "benchmark_batches": {"mirage": 64, "medreason": 32, "pubmedqa": 128, "msmarco": 256},
-                "max_workers": 12
-            }
-        else:
-            # Generic GPU optimizations
-            optimizations = {
-                "embedding_batch_size": 32,
-                "llm_batch_size": 8,
-                "memory_fraction": 0.7,
-                "benchmark_batches": {"mirage": 8, "medreason": 4, "pubmedqa": 16, "msmarco": 32},
-                "max_workers": 4
-            }
-        
-        # Apply optimizations
-        self._apply_gpu_optimizations(base_config, optimizations)
-        
-        logger.info(f"🎯 Applied {gpu_name} specific optimizations")
-        return base_config
-    
-    def _apply_gpu_optimizations(self, config: Dict[str, Any], optimizations: Dict[str, Any]) -> None:
-        """Apply GPU-specific optimizations to configuration."""
-        # Update model batch sizes
-        models = config.setdefault("models", {})
-        if "embedding" in models:
-            models["embedding"]["batch_size"] = optimizations["embedding_batch_size"]
-        if "llm" in models:
-            models["llm"]["batch_size"] = optimizations["llm_batch_size"]
-        
-        # Update performance settings
-        performance = config.setdefault("performance", {})
-        performance["gpu_memory_fraction"] = optimizations["memory_fraction"]
-        performance["max_workers"] = optimizations["max_workers"]
-        
-        # Update benchmark batch sizes
-        benchmarks = config.setdefault("benchmarks", {})
-        for benchmark_name, batch_size in optimizations["benchmark_batches"].items():
-            if benchmark_name in benchmarks:
-                benchmarks[benchmark_name]["batch_size"] = batch_size
-    
-    def save_config(self, config: EvaluationConfig, output_path: Path) -> None:
-        """
-        Save configuration to file.
-        
-        Args:
-            config: Configuration to save
-            output_path: Output file path
-        """
-        try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(output_path, 'w', encoding='utf-8') as f:
-                yaml.dump(config.to_dict(), f, default_flow_style=False, sort_keys=False)
-            
-            logger.info(f"💾 Configuration saved to: {output_path}")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to save configuration: {e}")
-            raise
-    
-    def update_config_for_environment(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Update configuration based on detected environment.
-        
-        Args:
-            config: Base configuration
-            
-        Returns:
-            Environment-specific configuration
-        """
-        # Detect environment
-        environment = self._detect_environment()
-        
-        if environment == "runpod":
-            # RunPod-specific settings
-            config.update({
-                "platform": "RunPod GPU",
-                "data_dir": "/workspace/data",
-                "results_dir": "/workspace/evaluation/results",
-                "cache_dir": "/workspace/evaluation/cache",
-                "logs_dir": "/workspace/evaluation/logs"
-            })
-            
-            # RunPod Streamlit settings
-            streamlit_config = config.setdefault("streamlit", {})
-            streamlit_config.update({
-                "server": {
-                    "address": "0.0.0.0",
-                    "port": 8501,
-                    "enableXsrfProtection": False,
-                    "enableCORS": True
-                }
-            })
-            
-        elif environment == "docker":
-            # Docker container settings
-            config.update({
-                "platform": "Docker GPU",
-                "data_dir": "/app/data",
-                "results_dir": "/app/evaluation/results",
-                "cache_dir": "/app/evaluation/cache",
-                "logs_dir": "/app/evaluation/logs"
-            })
-            
-        elif environment == "local":
-            # Local development settings
-            config.update({
-                "platform": "Local GPU",
-                "data_dir": "data",
-                "results_dir": "evaluation/results",
-                "cache_dir": "evaluation/cache",
-                "logs_dir": "evaluation/logs"
-            })
-        
-        logger.info(f"🌍 Updated configuration for {environment} environment")
         return config
     
-    def _detect_environment(self) -> str:
-        """Detect the current execution environment."""
-        if os.path.exists("/workspace") and os.path.exists("/.runpod"):
-            return "runpod"
-        elif os.path.exists("/.dockerenv"):
-            return "docker"
-        else:
-            return "local"
-    
-    def get_benchmark_config(self, benchmark_name: str) -> Dict[str, Any]:
-        """
-        Get configuration for a specific benchmark.
-        
-        Args:
-            benchmark_name: Name of the benchmark
-            
-        Returns:
-            Benchmark-specific configuration
-        """
-        if not self.loaded_config:
-            self.load_config()
-        
-        benchmarks = self.loaded_config.benchmarks
-        
-        if benchmark_name not in benchmarks:
-            raise ValueError(f"Benchmark '{benchmark_name}' not found in configuration")
-        
-        return benchmarks[benchmark_name]
-    
-    def get_model_config(self, model_name: str) -> Dict[str, Any]:
-        """
-        Get configuration for a specific model.
-        
-        Args:
-            model_name: Name of the model
-            
-        Returns:
-            Model-specific configuration
-        """
-        if not self.loaded_config:
-            self.load_config()
-        
-        models = self.loaded_config.models
-        
-        if model_name not in models:
-            raise ValueError(f"Model '{model_name}' not found in configuration")
-        
-        return models[model_name]
-    
     def validate_gpu_requirements(self) -> bool:
-        """
-        Validate that GPU requirements are met.
-        
-        Returns:
-            True if GPU requirements are satisfied
-        """
+        """Validate that GPU requirements are met."""
         try:
-            import torch
+            if not torch:
+                logger.error("❌ PyTorch not available")
+                return False
             
-            # Check CUDA availability
             if not torch.cuda.is_available():
                 logger.error("❌ CUDA not available")
                 return False
@@ -636,20 +494,9 @@ class ConfigLoader:
                 logger.error(f"❌ Insufficient GPU memory: {gpu_memory:.1f}GB < {required_memory}GB")
                 return False
             
-            # Check compute capability
-            props = torch.cuda.get_device_properties(0)
-            compute_capability = props.major + props.minor * 0.1
-            min_compute_capability = 6.0  # Minimum for modern features
-            
-            if compute_capability < min_compute_capability:
-                logger.warning(f"⚠️ Low compute capability: {compute_capability:.1f} < {min_compute_capability}")
-            
             logger.info("✅ GPU requirements validated")
             return True
             
-        except ImportError:
-            logger.error("❌ PyTorch not available")
-            return False
         except Exception as e:
             logger.error(f"❌ GPU validation failed: {e}")
             return False
@@ -681,11 +528,6 @@ class ConfigLoader:
             "enable_real_time_monitoring": True
         }
         
-        # Update with config file settings if available
-        config_dict = self.loaded_config.to_dict()
-        if "streamlit" in config_dict:
-            streamlit_config.update(config_dict["streamlit"])
-        
         return streamlit_config
 
 
@@ -694,15 +536,7 @@ _config_loader: Optional[ConfigLoader] = None
 
 
 def get_config_loader(config_dir: Optional[Path] = None) -> ConfigLoader:
-    """
-    Get or create the global configuration loader instance.
-    
-    Args:
-        config_dir: Directory containing configuration files
-        
-    Returns:
-        ConfigLoader instance
-    """
+    """Get or create the global configuration loader instance."""
     global _config_loader
     
     if _config_loader is None:
@@ -712,45 +546,17 @@ def get_config_loader(config_dir: Optional[Path] = None) -> ConfigLoader:
 
 
 def load_evaluation_config(config_path: Optional[Path] = None) -> EvaluationConfig:
-    """
-    Load evaluation configuration with GPU optimizations.
-    
-    Args:
-        config_path: Specific config file path (optional)
-        
-    Returns:
-        Loaded and optimized EvaluationConfig
-    """
+    """Load evaluation configuration with GPU optimizations."""
     loader = get_config_loader()
     return loader.load_config(config_path)
 
 
-def get_gpu_config(gpu_name: str = "RTX 4090") -> Dict[str, Any]:
-    """
-    Get GPU-optimized configuration.
-    
-    Args:
-        gpu_name: Name of the GPU for optimization
-        
-    Returns:
-        GPU-optimized configuration
-    """
-    loader = get_config_loader()
-    return loader.get_gpu_optimized_config(gpu_name)
-
-
 def validate_gpu_environment() -> bool:
-    """
-    Validate GPU environment for evaluation.
-    
-    Returns:
-        True if environment is valid
-    """
+    """Validate GPU environment for evaluation."""
     loader = get_config_loader()
     return loader.validate_gpu_requirements()
 
 
-# Convenience functions
 def create_streamlit_config_file(output_path: Path = None) -> None:
     """Create Streamlit configuration file for RunPod."""
     if output_path is None:

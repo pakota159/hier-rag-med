@@ -70,6 +70,140 @@ ollama pull mistral:7b-instruct
 streamlit run src/simple/streamlit_app.py --server.port 8501
 ```
 
+## 📁 Complete Project Structure
+
+```
+hierragmed/
+├── src/
+│   ├── simple/              # Basic RAG implementation
+│   ├── kg/                  # Knowledge Graph enhanced version
+│   ├── basic_reasoning/     # Foundation reasoning datasets
+│   ├── evaluation/          # Comprehensive evaluation system
+│   │   ├── benchmarks/      # MIRAGE, MedReason, PubMedQA, MS MARCO
+│   │   ├── evaluators/      # KG and Hierarchical system evaluators
+│   │   ├── metrics/         # QA, retrieval, clinical metrics
+│   │   ├── utils/           # Visualization, reporting, analysis
+│   │   ├── configs/         # GPU and local configurations
+│   │   └── streamlit_evaluation.py  # Web evaluation interface
+│   ├── config.py
+│   ├── processing.py
+│   ├── retrieval.py
+│   ├── generation.py
+│   └── main.py
+├── data/
+│   ├── raw/                 # Original HierRAGMed documents (5K)
+│   ├── kg_raw/              # KG enhanced data (Phase 1: 95K target)
+│   ├── foundation_dataset/  # Foundation reasoning datasets
+│   ├── benchmarks/          # 📊 Evaluation benchmark datasets (auto-downloaded)
+│   │   ├── mirage/          # MIRAGE clinical reasoning questions
+│   │   ├── medreason/       # MedReason knowledge graph reasoning chains
+│   │   ├── pubmedqa/        # PubMedQA research literature QA
+│   │   └── msmarco/         # MS MARCO passage retrieval queries
+│   ├── processed/           # Processed documents cache
+│   ├── vector_db/           # ChromaDB vector storage
+│   └── logs/                # Application logs
+├── evaluation/              # 📈 Evaluation outputs (auto-generated)
+│   ├── results/             # Evaluation results and reports  
+│   ├── cache/               # Model outputs and processed benchmark cache
+│   └── logs/                # Evaluation run logs and GPU monitoring
+├── fetch_data.py            # Data fetching utilities
+├── config.yaml              # Main configuration file
+├── requirements.txt         # Python dependencies
+├── environment.yml          # Conda environment (optional)
+└── README.md
+```
+
+## 📊 Dataset Storage & Management
+
+### **🎯 Evaluation Benchmarks (Auto-Downloaded)**
+
+The evaluation system automatically downloads and manages benchmark datasets:
+
+```bash
+# Benchmarks are automatically downloaded on first evaluation run
+# No manual setup required!
+
+data/benchmarks/
+├── mirage/          # ~10K clinical reasoning questions
+├── medreason/       # ~32K knowledge graph reasoning chains  
+├── pubmedqa/        # ~1K expert-annotated QA pairs
+└── msmarco/         # ~100K passage retrieval queries
+```
+
+**Sources & Auto-Download:**
+- **MIRAGE:** Hugging Face `mirage_benchmark` - Clinical reasoning scenarios
+- **MedReason:** Hugging Face `UCSC-VLAA/MedReason` - KG-guided reasoning chains
+- **PubMedQA:** Hugging Face `pubmed_qa` - Research literature Q&A
+- **MS MARCO:** Microsoft research - Passage retrieval benchmark
+
+### **🏗️ Training Data (Manual Collection)**
+
+```bash
+# Training data for HierRAGMed system
+data/
+├── raw/                    # Original documents (~5K)
+├── kg_raw/                # Knowledge graph data (~95K target)
+└── foundation_dataset/    # Foundation reasoning datasets
+```
+
+**Manual Collection Commands:**
+```bash
+# Fetch Phase 1 datasets (Target: 95K documents)
+python fetch_data.py --source all --max-results 1000
+
+# Fetch specific sources
+python fetch_data.py --source pubmed --max-results 500
+python fetch_data.py --source mtsamples
+python fetch_data.py --source mesh
+```
+
+### **📈 Evaluation Outputs (Auto-Generated)**
+
+```bash
+# Created automatically during evaluation - DO NOT commit to git
+evaluation/
+├── results/        # JSON results, HTML reports, visualizations
+├── cache/          # Model outputs cache, processed benchmarks
+└── logs/           # Evaluation logs, GPU monitoring, debug info
+```
+
+## 🔬 Evaluation System
+
+### **Quick Evaluation**
+```bash
+# Web interface
+streamlit run src/evaluation/streamlit_evaluation.py --server.port 8501
+
+# Command line
+python src/evaluation/run_evaluation.py
+
+# Model comparison  
+python src/evaluation/compare_models.py
+```
+
+### **GPU Evaluation (RunPod)**
+```bash
+# Setup RunPod environment
+bash src/evaluation/runpod_setup.sh
+
+# Start GPU evaluation
+./start_evaluation.sh
+
+# Monitor GPU usage
+./monitor_gpu.sh
+```
+
+### **Supported Benchmarks**
+- **MIRAGE:** Clinical reasoning and decision-making
+- **MedReason:** Knowledge graph-guided medical reasoning  
+- **PubMedQA:** Research literature comprehension
+- **MS MARCO:** Medical passage retrieval quality
+
+### **Model Systems**
+- **KG System:** Knowledge graph enhanced RAG
+- **Hierarchical System:** Three-tier diagnostic reasoning
+- **Comparative Analysis:** Statistical significance testing
+
 ## 📊 Dataset Expansion for Hierarchical Diagnostic Reasoning
 
 HierRAGMed includes two expansion phases to scale from basic RAG to production-ready hierarchical diagnostic reasoning:
@@ -99,7 +233,7 @@ HierRAGMed includes two expansion phases to scale from basic RAG to production-r
 **🏥 MSDiagnosis Dataset (2024)**
 - **Innovation**: EMR-based multi-step diagnostic scenarios
 - **Quality**: Professional medical team annotation with three-round validation
-- **Format**: Primary diagnosis → Differential diagnosis → Final diagnosis chains
+- **Format**: Primary diagnosis → Differential diagnosis → Final diagnosis
 - **Clinical Value**: Directly matches real clinical diagnostic workflows
 - **Access**: Research dataset (requires academic access)
 
@@ -172,34 +306,6 @@ ollama pull mistral:7b-instruct
 python -m src.main
 ```
 
-## 📁 Project Structure
-
-```
-hierragmed/
-├── src/
-│   ├── simple/           # Basic RAG implementation
-│   ├── kg/              # Knowledge Graph enhanced version
-│   ├── __init__.py
-│   ├── config.py
-│   ├── processing.py
-│   ├── retrieval.py
-│   ├── generation.py
-│   ├── evaluation.py
-│   ├── web.py
-│   └── main.py
-├── data/
-│   ├── raw/             # Original documents (Phase 1: 5K)
-│   ├── kg_raw/          # KG enhanced data (Phase 1: 95K)
-│   ├── processed/       # Processed documents
-│   ├── vector_db/       # ChromaDB storage
-│   └── logs/            # Application logs
-├── fetch_data.py        # Data fetching utilities
-├── config.yaml          # Configuration file
-├── requirements.txt     # Python dependencies
-├── environment.yml      # Conda environment (optional)
-└── README.md
-```
-
 ## ⚙️ Configuration
 
 The system is configured through `config.yaml`. Key configurations include:
@@ -224,10 +330,16 @@ streamlit run src/simple/streamlit_app.py --server.port 8501
 python fetch_data.py --source all --max-results 1000
 
 # Run KG-enhanced version
-streamlit run src/kg/streamlit_app.py --server.port 8501
+streamlit run src/kg/streamlit_app.py --server.port 8502
 ```
 
-### 3. Process Documents
+### 3. Run Foundation Reasoning
+```bash
+# Run basic reasoning system
+streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503
+```
+
+### 4. Process Documents
 ```python
 from src import Config, DocumentProcessor
 
@@ -244,7 +356,7 @@ documents = processor.process_directory("path/to/documents/")
 processor.save_documents(documents, "data/processed/documents.json")
 ```
 
-### 4. Create Vector Store
+### 5. Create Vector Store
 ```python
 from src import Retriever
 
@@ -253,7 +365,7 @@ retriever.create_collection("medical_docs")
 retriever.add_documents(documents)
 ```
 
-### 5. Query the System
+### 6. Query the System
 ```python
 from src import Generator
 
@@ -268,7 +380,7 @@ results = retriever.hybrid_search("What are the symptoms of diabetes?")
 response = generator.generate_with_citations("What are the symptoms of diabetes?", results)
 ```
 
-### 6. Web Interface
+### 7. Web Interface
 ```bash
 # Start the web interface
 python -m src.main
@@ -358,84 +470,33 @@ pip install -r requirements.txt --force-reinstall
 chmod -R 755 data/vector_db/
 ```
 
-**4. Port Already in Use**
+**4. Evaluation Dataset Download Issues**
 ```bash
-# Find process using port 8000
-lsof -i :8000  # macOS/Linux
-netstat -ano | findstr :8000  # Windows
-
-# Kill process or use different port
-python -m src.main --port 8001
+# Clear cache and retry
+rm -rf evaluation/cache/
+python src/evaluation/run_evaluation.py
 ```
 
-## ✅ Verification
-
-Test your setup:
-
+**5. GPU Memory Issues (RunPod)**
 ```bash
-# Activate environment
-conda activate rag-med
+# Monitor GPU usage
+./monitor_gpu.sh
 
-# Test imports
-python -c "import langchain, chromadb, sentence_transformers, ollama; print('✅ All imports successful')"
-
-# Test Ollama connection
-python -c "import ollama; print(ollama.list())"
-
-# Run health check
-curl http://localhost:8000/health
+# Reduce batch sizes in config
+nano src/evaluation/configs/gpu_runpod_config.yaml
 ```
 
-## 🚀 Roadmap
+## 🎯 Key Features
 
-### **Current Status**
-- ✅ Basic RAG implementation (5K documents)
-- ✅ Knowledge Graph enhanced version infrastructure
-- ✅ Multi-source data fetching capabilities
-
-### **Phase 1 Goals (Next 2-3 weeks)**
-- 📋 Integrate MedReason reasoning chains (32K)
-- 📋 Add MSDiagnosis multi-step diagnostics
-- 📋 Include PMC-Patients case studies (50K)
-- 📋 Implement basic hierarchical retrieval architecture
-
-### **Phase 2 Goals (3-4 months)**
-- 📋 Full MIMIC-IV integration (100K+ clinical notes)
-- 📋 Medical textbook knowledge base
-- 📋 Complete three-tier diagnostic reasoning implementation
-- 📋 Production-ready deployment optimization
-
-### **Innovation Target**
-Transform from traditional RAG to **Hierarchical Diagnostic Reasoning RAG** that mirrors clinical decision-making patterns:
-- **Pattern Recognition** → **Hypothesis Testing** → **Confirmation**
-- Evidence-stratified retrieval with temporal awareness
-- Clinical workflow alignment with established medical frameworks
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Create a Pull Request
+- **🔍 Multi-tier Retrieval**: Pattern recognition → Evidence collection → Confirmation
+- **🧠 Medical Reasoning**: Knowledge graph enhanced diagnostic thinking
+- **📊 Comprehensive Evaluation**: 4 medical benchmarks with GPU optimization
+- **🚀 Scalable Architecture**: From 5K to 250K+ document capability
+- **🌐 Cross-platform**: Windows, macOS, Linux support
+- **⚡ GPU Acceleration**: RunPod optimized for RTX 4090
+- **📈 Performance Tracking**: Real-time evaluation monitoring
+- **🔧 Flexible Configuration**: Local development to production deployment
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🎯 Citation
-
-If you use HierRAGMed in your research, please cite:
-
-```bibtex
-@software{hierragmed2024,
-  title={HierRAGMed: Hierarchical Diagnostic Reasoning for Medical Question Answering},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/pakota159/hier-rag-med}
-}
-```
-
----
-
-**Need help?** Create an issue or check the troubleshooting section above.

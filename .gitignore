@@ -41,15 +41,96 @@ venv.bak/
 *.swo
 .DS_Store
 
-# Project specific
+# Project specific data directories
 /data/
 logs/
 *.log
+
+# ALL evaluation runtime directories (should not be committed)
+evaluation_results/           # Alternative results location  
+evaluation_cache/            # Alternative cache location
+evaluation_logs/             # Alternative logs location
+evaluation/results/          # Primary results location
+evaluation/cache/            # Primary cache location  
+evaluation/logs/             # Primary logs location
+eval_results/                # Any other results variants
+eval_cache/                  # Any other cache variants
+eval_logs/                   # Any other logs variants
+
+# Benchmark data (downloaded automatically, can be large)
+data/benchmarks/             # MIRAGE, MedReason, PubMedQA, MS MARCO
+data/foundation_dataset/     # Foundation reasoning datasets
+data/kg_raw/                 # Knowledge graph datasets (can be 95K+ files)
+data/vector_db/              # ChromaDB files (large binary files)
+data/processed/              # Processed documents cache
+
+# Legacy evaluation results
 evaluation_results.json
+
+# Coverage reports
 .coverage
 htmlcov/
 .pytest_cache/
 
 # Docker
 .docker/
-docker-compose.override.yml 
+docker-compose.override.yml
+
+# RunPod specific
+# (Generated during deployment - should not be committed)
+start_evaluation.sh
+monitor_gpu.sh
+run_evaluation_direct.sh
+requirements_runpod.txt
+requirements_runpod_fallback.txt
+
+# Streamlit config (generated for deployment)
+.streamlit/config.toml
+
+# GPU/CUDA cache
+.nv/
+.triton/
+
+# Model caches
+.cache/
+.models/
+*.safetensors
+*.bin
+model_cache/
+
+# Large model files
+*.pt
+*.pth
+*.ckpt
+
+# Vector database files
+vector_db/
+chroma_db/
+*.index
+*.vec
+
+# Ollama models (can be large)
+*.gguf
+*.ggml
+
+# Temporary evaluation files
+temp_evaluation/
+benchmark_cache/
+model_outputs/
+
+# OS specific
+Thumbs.db
+.DS_Store
+*.tmp
+*.temp
+
+# Large datasets
+*.jsonl
+*.parquet
+foundation_dataset/
+kg_raw/
+
+# Backup files
+*.bak
+*.backup
+*~

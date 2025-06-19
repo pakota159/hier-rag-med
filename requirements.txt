@@ -46,3 +46,28 @@ requests>=2.31.0
 aiofiles>=23.2.0
 
 datasets>=2.16.0
+
+# GPU Monitoring and Management
+nvidia-ml-py3>=12.535.133    # NVIDIA Management Library
+py3nvml>=0.2.7               # Python NVIDIA ML bindings  
+pynvml>=11.5.0               # Python NVIDIA Management Library
+gpustat>=1.1.1               # GPU utilization monitoring
+
+# Performance Optimization
+accelerate>=0.16.0           # Hugging Face model acceleration
+datasets>=2.8.0              # Efficient dataset loading
+
+# Core ML/AI (verify these versions match your existing requirements.txt)
+torch>=2.0.0                 # PyTorch with CUDA support
+transformers>=4.25.0         # Hugging Face transformers
+sentence-transformers>=2.2.0 # Sentence embeddings
+
+# Evaluation and Visualization  
+plotly>=5.12.0               # Interactive plots
+seaborn>=0.12.0              # Statistical visualizations
+rich>=13.0.0                 # Rich terminal output
+typer>=0.7.0                 # CLI framework
+
+# System Monitoring
+psutil>=5.9.0                # System process monitoring
+memory-profiler>=0.60.0      # Memory usage profiling

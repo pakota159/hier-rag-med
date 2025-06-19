@@ -1,6 +1,6 @@
 #!/bin/bash
 # RunPod Environment Setup Script for HierRAGMed GPU Evaluation
-# Optimized for RTX 4090 and RunPod infrastructure
+# Optimized for RTX 4090 and RunPod infrastructure - CORRECTED VERSION
 
 set -e  # Exit on any error
 
@@ -78,23 +78,80 @@ display_system_info() {
     echo "===================="
 }
 
-# Setup directories
+# Setup directories - FINAL CORRECTED VERSION
 setup_directories() {
     log_info "Setting up directory structure..."
     
-    # Create main directories
-    mkdir -p "${PROJECT_DIR}"
-    mkdir -p "${PROJECT_DIR}/data"
-    mkdir -p "${PROJECT_DIR}/evaluation/results"
+    # The main project directory should already exist from git clone
+    # Verify project structure exists
+    if [ ! -d "${PROJECT_DIR}/src" ]; then
+        log_error "Source code not found! Make sure you uploaded HierRAGMed to ${PROJECT_DIR}"
+        echo "Expected structure:"
+        echo "  ${PROJECT_DIR}/src/"
+        echo "  ${PROJECT_DIR}/config.yaml"
+        echo "  ${PROJECT_DIR}/requirements.txt"
+        echo ""
+        echo "Available directories in /workspace:"
+        ls -la /workspace/ || true
+        exit 1
+    fi
+    
+    # Create data directories that match README.md structure
+    log_info "Creating data directories..."
+    mkdir -p "${PROJECT_DIR}/data/raw"
+    mkdir -p "${PROJECT_DIR}/data/kg_raw" 
+    mkdir -p "${PROJECT_DIR}/data/foundation_dataset"
+    mkdir -p "${PROJECT_DIR}/data/processed"
+    mkdir -p "${PROJECT_DIR}/data/vector_db"
+    mkdir -p "${PROJECT_DIR}/data/logs"
+    mkdir -p "${PROJECT_DIR}/data/benchmarks"
+    
+    # Create evaluation directories that match existing config structure
+    log_info "Creating evaluation directories..."
+    mkdir -p "${PROJECT_DIR}/evaluation"
+    mkdir -p "${PROJECT_DIR}/evaluation/results" 
     mkdir -p "${PROJECT_DIR}/evaluation/cache"
     mkdir -p "${PROJECT_DIR}/evaluation/logs"
-    mkdir -p "${PROJECT_DIR}/evaluation/configs"
+    
+    # Create Streamlit config directory
     mkdir -p "${PROJECT_DIR}/.streamlit"
     
-    # Set permissions
-    chmod -R 755 "${PROJECT_DIR}"
+    # Create logs directory at root level (matches .gitignore)
+    mkdir -p "${PROJECT_DIR}/logs"
     
-    log_success "Directory structure created"
+    # Set permissions only for created directories
+    chmod -R 755 "${PROJECT_DIR}/data" 2>/dev/null || true
+    chmod -R 755 "${PROJECT_DIR}/evaluation" 2>/dev/null || true
+    chmod -R 755 "${PROJECT_DIR}/.streamlit" 2>/dev/null || true
+    chmod -R 755 "${PROJECT_DIR}/logs" 2>/dev/null || true
+    
+    # Verify critical project files exist
+    log_info "Verifying project structure..."
+    
+    critical_files=(
+        "src/evaluation"
+        "src/basic_reasoning" 
+        "config.yaml"
+        "requirements.txt"
+    )
+    
+    for file in "${critical_files[@]}"; do
+        if [ -e "${PROJECT_DIR}/${file}" ]; then
+            log_success "✅ Found: ${file}"
+        else
+            log_warning "⚠️  Missing: ${file}"
+        fi
+    done
+    
+    # Show final directory structure
+    log_info "Final directory structure:"
+    if command -v tree &> /dev/null; then
+        tree "${PROJECT_DIR}" -L 3 -d 2>/dev/null || true
+    else
+        find "${PROJECT_DIR}" -type d -maxdepth 3 | head -20
+    fi
+    
+    log_success "Directory structure setup complete"
 }
 
 # Install system dependencies
@@ -118,7 +175,8 @@ install_system_dependencies() {
         nvtop \
         tmux \
         vim \
-        tree
+        tree \
+        unzip
     
     # Clean up
     apt-get clean
@@ -173,7 +231,7 @@ install_pytorch() {
     log_success "PyTorch with CUDA support installed"
 }
 
-# Install Python dependencies
+# Install Python dependencies - CORRECTED VERSION  
 install_python_dependencies() {
     log_info "Installing Python dependencies..."
     
@@ -181,54 +239,47 @@ install_python_dependencies() {
     source /opt/miniconda/etc/profile.d/conda.sh
     conda activate "${CONDA_ENV_NAME}"
     
-    # Create requirements file if not exists
-    cat > "${PROJECT_DIR}/requirements_runpod.txt" << 'EOF'
-# GPU-optimized requirements for RunPod evaluation
+    # Use the existing requirements.txt from the project
+    if [ -f "${PROJECT_DIR}/requirements.txt" ]; then
+        log_info "Using existing requirements.txt"
+        pip install --no-cache-dir -r "${PROJECT_DIR}/requirements.txt"
+    else
+        log_warning "requirements.txt not found, creating minimal GPU requirements"
+        # Fallback requirements if file doesn't exist
+        cat > "${PROJECT_DIR}/requirements_runpod_fallback.txt" << 'EOF'
+# Minimal GPU requirements for HierRAGMed evaluation
 torch>=2.0.0
-torchvision>=0.15.0
-torchaudio>=2.0.0
 transformers>=4.25.0
-accelerate>=0.16.0
-datasets>=2.8.0
 sentence-transformers>=2.2.0
 streamlit>=1.28.0
-plotly>=5.12.0
+chromadb>=0.4.0
 pandas>=1.5.0
 numpy>=1.24.0
-scikit-learn>=1.2.0
 loguru>=0.6.0
 pyyaml>=6.0
+requests>=2.28.0
+ollama>=0.1.0
+accelerate>=0.16.0
+datasets>=2.8.0
+plotly>=5.12.0
+scikit-learn>=1.2.0
 tqdm>=4.64.0
 httpx>=0.23.0
 aiohttp>=3.8.0
-requests>=2.28.0
-chromadb>=0.4.0
 faiss-cpu>=1.7.0
 nltk>=3.8.0
-spacy>=3.4.0
-gensim>=4.2.0
-openai>=0.26.0
-anthropic>=0.7.0
-ollama>=0.1.0
 huggingface-hub>=0.12.0
 tokenizers>=0.13.0
 scipy>=1.10.0
 matplotlib>=3.6.0
 seaborn>=0.12.0
-jupyter>=1.0.0
-ipykernel>=6.20.0
 rich>=13.0.0
 typer>=0.7.0
 pydantic>=1.10.0
-sqlalchemy>=1.4.0
-alembic>=1.9.0
 psutil>=5.9.0
-memory-profiler>=0.60.0
-line-profiler>=4.0.0
 EOF
-    
-    # Install dependencies
-    pip install --no-cache-dir -r "${PROJECT_DIR}/requirements_runpod.txt"
+        pip install --no-cache-dir -r "${PROJECT_DIR}/requirements_runpod_fallback.txt"
+    fi
     
     # Install additional GPU-specific packages
     pip install --no-cache-dir \
@@ -251,18 +302,19 @@ setup_ollama() {
     ollama serve &
     OLLAMA_PID=$!
     
-    # Wait for service to start
-    sleep 5
+    # Wait for Ollama to start
+    sleep 10
     
-    # Pull required models
-    log_info "Pulling Mistral 7B model..."
+    # Pull the required model
+    log_info "Downloading Mistral 7B model (this may take a few minutes)..."
     ollama pull mistral:7b-instruct
     
-    # Optional: Pull additional models
-    # ollama pull llama2:7b-chat
-    # ollama pull codellama:7b-instruct
-    
-    log_success "Ollama setup completed"
+    # Verify Ollama installation
+    if ollama list | grep -q "mistral:7b-instruct"; then
+        log_success "Ollama and Mistral model ready"
+    else
+        log_warning "Ollama model download may have failed"
+    fi
 }
 
 # Configure CUDA environment
@@ -270,43 +322,41 @@ configure_cuda_environment() {
     log_info "Configuring CUDA environment..."
     
     # Set CUDA environment variables
+    export CUDA_VISIBLE_DEVICES=0
+    export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    export TOKENIZERS_PARALLELISM=false
+    export OMP_NUM_THREADS=8
+    
+    # Add to bashrc for persistence
     cat >> ~/.bashrc << 'EOF'
 
-# CUDA Environment Variables for RTX 4090 Optimization
+# CUDA Configuration for HierRAGMed
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-export CUDA_LAUNCH_BLOCKING=0
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=8
-export MKL_NUM_THREADS=8
-export NUMBA_CACHE_DIR=/tmp/numba_cache
 EOF
-    
-    # Create CUDA cache directory
-    mkdir -p /tmp/numba_cache
-    
-    # Source the environment
-    source ~/.bashrc
     
     log_success "CUDA environment configured"
 }
 
-# Create Streamlit configuration
+# Create Streamlit config - CORRECTED VERSION
 create_streamlit_config() {
     log_info "Creating Streamlit configuration..."
     
-    # Create .streamlit directory
-    mkdir -p "${PROJECT_DIR}/.streamlit"
+    # Check if project has existing streamlit config
+    if [ -f "${PROJECT_DIR}/.streamlit/config.toml" ]; then
+        log_info "Using existing Streamlit configuration"
+        return
+    fi
     
-    # Create config.toml
+    # Create streamlit config for RunPod
     cat > "${PROJECT_DIR}/.streamlit/config.toml" << 'EOF'
 [server]
 address = "0.0.0.0"
 port = 8501
 enableXsrfProtection = false
 enableCORS = true
-maxUploadSize = 200
-maxMessageSize = 200
 
 [theme]
 base = "dark"
@@ -320,48 +370,43 @@ gatherUsageStats = false
 
 [runner]
 magicEnabled = false
-installTracer = false
-
-[logger]
-level = "info"
 
 [client]
 caching = true
-displayEnabled = true
 
 [global]
-developmentMode = false
+maxUploadSize = 200
+maxMessageSize = 200
 EOF
     
     log_success "Streamlit configuration created"
 }
 
-# Download sample data (optional)
+# Download sample data (placeholder)
 download_sample_data() {
-    log_info "Downloading sample evaluation data..."
+    log_info "Preparing sample data..."
     
     # Create data directory structure
     mkdir -p "${PROJECT_DIR}/data/benchmarks"
     
-    # Download sample datasets (replace with actual URLs)
-    # wget -q -O "${PROJECT_DIR}/data/benchmarks/mirage_sample.json" "https://example.com/mirage_sample.json"
-    # wget -q -O "${PROJECT_DIR}/data/benchmarks/medreason_sample.json" "https://example.com/medreason_sample.json"
+    # Create placeholder files (actual datasets will be auto-downloaded during evaluation)
+    echo '{"samples": [], "metadata": {"name": "MIRAGE", "version": "1.0", "note": "Will be auto-downloaded during evaluation"}}' > "${PROJECT_DIR}/data/benchmarks/mirage_placeholder.json"
+    echo '{"samples": [], "metadata": {"name": "MedReason", "version": "1.0", "note": "Will be auto-downloaded during evaluation"}}' > "${PROJECT_DIR}/data/benchmarks/medreason_placeholder.json"
     
-    # Create placeholder files for now
-    echo '{"samples": [], "metadata": {"name": "MIRAGE", "version": "1.0"}}' > "${PROJECT_DIR}/data/benchmarks/mirage_sample.json"
-    echo '{"samples": [], "metadata": {"name": "MedReason", "version": "1.0"}}' > "${PROJECT_DIR}/data/benchmarks/medreason_sample.json"
-    
-    log_success "Sample data prepared"
+    log_success "Sample data prepared (actual datasets will be auto-downloaded)"
 }
 
-# Create startup scripts
+# Create startup scripts - CORRECTED VERSION
 create_startup_scripts() {
     log_info "Creating startup scripts..."
     
-    # Main startup script
+    # Main startup script - Updated to use existing evaluation structure
     cat > "${PROJECT_DIR}/start_evaluation.sh" << 'EOF'
 #!/bin/bash
 # HierRAGMed Evaluation Startup Script
+
+echo "🚀 Starting HierRAGMed GPU Evaluation"
+echo "====================================="
 
 # Activate conda environment
 source /opt/miniconda/etc/profile.d/conda.sh
@@ -370,16 +415,46 @@ conda activate hierragmed-gpu
 # Set CUDA environment
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+export TOKENIZERS_PARALLELISM=false
 
-# Start Ollama service
-ollama serve &
+# Start Ollama service if not running
+if ! pgrep -f ollama > /dev/null; then
+    echo "Starting Ollama service..."
+    ollama serve &
+    sleep 5
+fi
 
-# Wait for Ollama to start
-sleep 5
+# Verify Ollama is working
+if ! ollama list > /dev/null 2>&1; then
+    echo "❌ Ollama service not responding"
+    exit 1
+fi
 
-# Start Streamlit app
+# Navigate to project directory
 cd /workspace/hierragmed
-streamlit run src/evaluation/streamlit_evaluation.py --server.port 8501 --server.address 0.0.0.0
+
+echo "📊 Available Streamlit applications:"
+find src/ -name "streamlit*.py" -o -name "*app.py" | sort
+
+# Start Streamlit evaluation app (priority order)
+if [ -f "src/evaluation/streamlit_evaluation.py" ]; then
+    echo "🎯 Starting GPU evaluation interface..."
+    streamlit run src/evaluation/streamlit_evaluation.py --server.port 8501 --server.address 0.0.0.0
+elif [ -f "src/basic_reasoning/streamlit_app.py" ]; then
+    echo "🧠 Starting basic reasoning interface..."
+    streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503 --server.address 0.0.0.0  
+elif [ -f "src/kg/streamlit_app.py" ]; then
+    echo "🔗 Starting KG interface..."
+    streamlit run src/kg/streamlit_app.py --server.port 8502 --server.address 0.0.0.0
+elif [ -f "src/simple/streamlit_app.py" ]; then
+    echo "✨ Starting simple interface..."
+    streamlit run src/simple/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+else
+    echo "❌ No Streamlit app found!"
+    echo "Available Python files in src/:"
+    find src/ -name "*.py" | head -10
+    exit 1
+fi
 EOF
     
     # Make executable
@@ -390,25 +465,64 @@ EOF
 #!/bin/bash
 # GPU Monitoring Script
 
-echo "GPU Monitoring - Press Ctrl+C to stop"
-echo "====================================="
+echo "🔥 GPU Monitoring - Press Ctrl+C to stop"
+echo "========================================="
 
 while true; do
     clear
     echo "$(date)"
-    echo "====================================="
+    echo "========================================="
     nvidia-smi
-    echo "====================================="
+    echo ""
+    echo "GPU Memory Usage:"
+    nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits | awk '{printf "Used: %s MB / %s MB (%.1f%%)\n", $1, $2, ($1/$2)*100}'
+    echo "========================================="
     sleep 2
 done
 EOF
     
     chmod +x "${PROJECT_DIR}/monitor_gpu.sh"
     
+    # Alternative evaluation runner script
+    cat > "${PROJECT_DIR}/run_evaluation_direct.sh" << 'EOF'
+#!/bin/bash
+# Direct evaluation runner (command line)
+
+echo "🧪 Starting Direct Evaluation"
+echo "=============================="
+
+# Activate conda environment  
+source /opt/miniconda/etc/profile.d/conda.sh
+conda activate hierragmed-gpu
+
+# Set CUDA environment
+export CUDA_VISIBLE_DEVICES=0
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+export TOKENIZERS_PARALLELISM=false
+
+cd /workspace/hierragmed
+
+# Check if evaluation runner exists
+if [ -f "src/evaluation/run_evaluation.py" ]; then
+    echo "🎯 Running GPU evaluation directly..."
+    python src/evaluation/run_evaluation.py
+elif [ -f "src/evaluation/compare_models.py" ]; then
+    echo "📊 Running model comparison..."
+    python src/evaluation/compare_models.py
+else
+    echo "❌ No evaluation runner found!"
+    echo "Available evaluation scripts:"
+    find src/evaluation/ -name "*.py" -type f | head -10
+    exit 1
+fi
+EOF
+
+    chmod +x "${PROJECT_DIR}/run_evaluation_direct.sh"
+    
     log_success "Startup scripts created"
 }
 
-# Verify installation
+# Verify installation - CORRECTED VERSION
 verify_installation() {
     log_info "Verifying installation..."
     
@@ -420,13 +534,26 @@ verify_installation() {
     python -c "
 import torch
 import sys
+import os
 
-print('=' * 50)
+print('=' * 60)
 print('HIERRAGMED GPU EVALUATION VERIFICATION')
-print('=' * 50)
+print('=' * 60)
 
-# PyTorch
-print(f'PyTorch version: {torch.__version__}')
+# Check project structure
+project_dir = '/workspace/hierragmed'
+print(f'Project directory: {project_dir}')
+print(f'Project exists: {os.path.exists(project_dir)}')
+
+if os.path.exists(project_dir):
+    print('\\nProject structure:')
+    for item in ['src/', 'data/', 'config.yaml', 'requirements.txt']:
+        path = os.path.join(project_dir, item)
+        exists = os.path.exists(path)
+        print(f'  {item}: {\"✅\" if exists else \"❌\"}')
+
+# PyTorch verification
+print(f'\\nPyTorch version: {torch.__version__}')
 print(f'CUDA available: {torch.cuda.is_available()}')
 
 if torch.cuda.is_available():
@@ -444,6 +571,8 @@ if torch.cuda.is_available():
         x = torch.randn(1000, 1000, device='cuda')
         y = torch.matmul(x, x)
         print('✅ GPU tensor operations working')
+        del x, y  # Clean up
+        torch.cuda.empty_cache()
     except Exception as e:
         print(f'❌ GPU tensor operations failed: {e}')
         sys.exit(1)
@@ -451,28 +580,29 @@ else:
     print('❌ CUDA not available')
     sys.exit(1)
 
-# Test other packages
-try:
-    import transformers
-    print(f'✅ Transformers: {transformers.__version__}')
-except ImportError as e:
-    print(f'❌ Transformers import failed: {e}')
+# Test key packages
+packages_to_test = [
+    ('transformers', 'Transformers'),
+    ('streamlit', 'Streamlit'), 
+    ('sentence_transformers', 'Sentence Transformers'),
+    ('chromadb', 'ChromaDB'),
+    ('pandas', 'Pandas'),
+    ('numpy', 'NumPy'),
+    ('ollama', 'Ollama'),
+    ('nvidia_ml_py3', 'NVIDIA ML')
+]
 
-try:
-    import streamlit
-    print(f'✅ Streamlit: {streamlit.__version__}')
-except ImportError as e:
-    print(f'❌ Streamlit import failed: {e}')
+for package_name, display_name in packages_to_test:
+    try:
+        package = __import__(package_name)
+        version = getattr(package, '__version__', 'unknown')
+        print(f'✅ {display_name}: {version}')
+    except ImportError as e:
+        print(f'⚠️ {display_name} import failed: {e}')
 
-try:
-    import sentence_transformers
-    print(f'✅ Sentence Transformers: {sentence_transformers.__version__}')
-except ImportError as e:
-    print(f'❌ Sentence Transformers import failed: {e}')
-
-print('=' * 50)
+print('=' * 60)
 print('🚀 INSTALLATION VERIFICATION COMPLETE')
-print('=' * 50)
+print('=' * 60)
 "
     
     if [ $? -eq 0 ]; then
@@ -487,6 +617,8 @@ print('=' * 50)
 main() {
     echo "🚀 HierRAGMed RunPod Setup Script"
     echo "=================================="
+    echo "Optimized for RTX 4090 GPU evaluation"
+    echo ""
     
     # Run setup steps
     check_runpod_environment
@@ -507,15 +639,19 @@ main() {
     echo "🎉 Setup completed successfully!"
     echo "=================================="
     echo ""
-    echo "Next steps:"
-    echo "1. Upload your HierRAGMed source code to ${PROJECT_DIR}"
-    echo "2. Run the evaluation with: ${PROJECT_DIR}/start_evaluation.sh"
+    echo "📋 Next steps:"
+    echo "1. Your HierRAGMed source code is at: ${PROJECT_DIR}"
+    echo "2. Start evaluation with: ${PROJECT_DIR}/start_evaluation.sh"
     echo "3. Monitor GPU usage with: ${PROJECT_DIR}/monitor_gpu.sh"
-    echo "4. Access Streamlit UI at: http://<runpod-ip>:8501"
+    echo "4. Direct evaluation: ${PROJECT_DIR}/run_evaluation_direct.sh"
+    echo "5. Access Streamlit UI at: http://<runpod-ip>:8501"
     echo ""
-    echo "Environment activated: ${CONDA_ENV_NAME}"
-    echo "Project directory: ${PROJECT_DIR}"
+    echo "🔥 Environment details:"
+    echo "   Conda environment: ${CONDA_ENV_NAME}"
+    echo "   Project directory: ${PROJECT_DIR}"
+    echo "   GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader,nounits)"
     echo ""
+    echo "✅ Ready for GPU evaluation!"
 }
 
 # Run main function
