@@ -20,13 +20,13 @@ from loguru import logger
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import real evaluation components
+# Import real evaluation components directly to avoid circular imports
 from src.evaluation.evaluators.kg_evaluator import KGEvaluator
 from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
-from src.evaluation.benchmarks.mirage_benchmark import MirageBenchmark
-from src.evaluation.benchmarks.medreason_benchmark import MedreasonBenchmark
-from src.evaluation.benchmarks.pubmedqa_benchmark import PubmedqaBenchmark
-from src.evaluation.benchmarks.msmarco_benchmark import MsmarcoBenchmark
+from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
+from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark  
+from src.evaluation.benchmarks.pubmedqa_benchmark import PubMedQABenchmark
+from src.evaluation.benchmarks.msmarco_benchmark import MSMARCOBenchmark
 
 
 def validate_gpu_environment():
@@ -161,10 +161,10 @@ def initialize_benchmarks(config: Dict, benchmark_filter: Optional[List[str]] = 
     
     # Available benchmark classes
     benchmark_classes = {
-        "mirage": MirageBenchmark,
-        "medreason": MedreasonBenchmark,
-        "pubmedqa": PubmedqaBenchmark,
-        "msmarco": MsmarcoBenchmark
+        "mirage": MIRAGEBenchmark,
+        "medreason": MedReasonBenchmark,
+        "pubmedqa": PubMedQABenchmark,
+        "msmarco": MSMARCOBenchmark
     }
     
     # Determine enabled benchmarks

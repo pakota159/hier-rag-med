@@ -34,8 +34,8 @@ from .utils.visualization import EvaluationVisualizer
 from .utils.report_generator import ReportGenerator
 from .utils.statistical_analysis import StatisticalAnalysis
 
-# Main Evaluation Functions
-from .run_evaluation import run_evaluation, run_single_benchmark
+# REMOVED: Circular import that was causing issues
+# from .run_evaluation import run_evaluation, run_single_benchmark
 from .compare_models import compare_models, generate_comparison_report
 
 __version__ = "0.1.0"
@@ -71,9 +71,9 @@ __all__ = [
     "ReportGenerator",
     "StatisticalAnalysis",
     
-    # Main Functions
-    "run_evaluation",
-    "run_single_benchmark",
+    # Main Functions (REMOVED problematic imports)
+    # "run_evaluation",
+    # "run_single_benchmark", 
     "compare_models",
     "generate_comparison_report"
 ]
