@@ -2,9 +2,6 @@
 # HierRAGMed Requirements - Final Version
 # ==========================================
 
-# Core Python (ensure compatibility)
-python>=3.10,<3.12
-
 # ==========================================
 # CORE RAG COMPONENTS
 # ==========================================
