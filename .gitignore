@@ -117,6 +117,7 @@ chroma_db/
 temp_evaluation/
 benchmark_cache/
 model_outputs/
+src/evaluation/data/cache/
 
 # OS specific
 Thumbs.db

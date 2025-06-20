@@ -68,7 +68,7 @@ class BenchmarkDataLoader:
             }
         }
     
-    def load_benchmark_data(self, benchmark_name: str, split: str = "test", 
+    def load_benchmark_data(self, benchmark_name: str, split: str = "train", 
                           max_samples: Optional[int] = None) -> List[Dict[str, Any]]:
         """Load data for a specific benchmark - Updated with real MIRAGE support."""
         logger.info(f"📚 Loading {benchmark_name} benchmark data...")
@@ -158,6 +158,10 @@ class BenchmarkDataLoader:
     def _format_mirage_question(self, question_data: Dict, dataset_name: str, index: int) -> Dict:
         """Format a MIRAGE question to our standard format."""
         try:
+            if not isinstance(question_data, dict):
+                logger.warning(f"   ⚠️ Skipping question {index} from {dataset_name}: not a dictionary")
+                return None
+
             # Handle different MIRAGE question formats
             question_id = question_data.get("id", f"{dataset_name}_{index}")
             question_text = question_data.get("question", "")
@@ -296,7 +300,7 @@ class BenchmarkDataLoader:
         
         return type_mapping.get(dataset_name, "general_medical")
 
-    def _load_medreason_data_fixed(self, split: str = "test") -> List[Dict[str, Any]]:
+    def _load_medreason_data_fixed(self, split: str = "train") -> List[Dict[str, Any]]:
         """Load MedReason benchmark data with fallbacks."""
         try:
             sources = [
@@ -344,7 +348,7 @@ class BenchmarkDataLoader:
             logger.error(f"MedReason loading failed: {e}")
             return []
 
-    def _load_pubmedqa_data_fixed(self, split: str = "test") -> List[Dict[str, Any]]:
+    def _load_pubmedqa_data_fixed(self, split: str = "train") -> List[Dict[str, Any]]:
         """Load PubMedQA benchmark data with fallbacks."""
         try:
             sources = [

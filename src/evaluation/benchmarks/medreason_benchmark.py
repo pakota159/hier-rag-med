@@ -57,7 +57,7 @@ class MedReasonBenchmark(BaseBenchmark):
             # Use the centralized data loader
             data = self.data_loader.load_benchmark_data(
                 benchmark_name="medreason",
-                split="test",
+                split="train",
                 max_samples=max_samples_param  # FIXED: Use proper parameter
             )
             
@@ -90,6 +90,8 @@ class MedReasonBenchmark(BaseBenchmark):
         reasoning_type = question.get("reasoning_type", "clinical_reasoning")
         
         # Basic exact match
+        if isinstance(response, list):
+            response = " ".join(response)
         exact_match = response.lower().strip() == expected_answer.lower().strip()
         
         # Reasoning quality scoring
