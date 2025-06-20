@@ -13,6 +13,8 @@ from typing import Dict, List, Any
 from .base_benchmark import BaseBenchmark
 from loguru import logger
 
+from src.evaluation.data.data_loader import BenchmarkDataLoader
+
 # Add project root to path for data loader import
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,137 +25,62 @@ class MSMARCOBenchmark(BaseBenchmark):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "MSMARCO"
-        
-        # Medical keywords for filtering
-        self.medical_keywords = [
-            "disease", "symptom", "treatment", "diagnosis", "medicine", "drug",
-            "patient", "health", "medical", "clinical", "therapy", "cancer",
-            "diabetes", "heart", "blood", "doctor", "hospital", "pain",
-            "surgery", "medication", "prescription", "chronic", "acute",
-            "infection", "virus", "bacteria", "immune", "vaccine"
-        ]
-        
+        self.data_loader = BenchmarkDataLoader(config)
+    
     def load_dataset(self) -> List[Dict]:
-        """Load MSMARCO dataset from multiple sources, filtered for medical content."""
-        logger.info(f"🔄 Loading MSMARCO dataset...")
+        """Load MSMARCO dataset using centralized data loader."""
+        logger.info(f"🔄 Loading MSMARCO dataset using data loader...")
         
-        # Try to load from HuggingFace
         try:
-            from datasets import load_dataset
-            logger.info("🔄 Attempting to load MSMARCO from Hugging Face...")
+            # Use the centralized data loader
+            data = self.data_loader.load_benchmark_data(
+                benchmark_name="msmarco",
+                split="validation",  # MSMARCO typically uses validation split
+                max_samples=self.sample_size if self.sample_size < 1000 else None
+            )
             
-            # Try different MSMARCO configurations
-            configurations = [
-                ("ms_marco", "v1.1"),
-                ("ms_marco", "v2.1"),
-                ("microsoft/ms_marco", "v1.1")
-            ]
-            
-            for dataset_name, config_name in configurations:
-                try:
-                    logger.info(f"   Trying {dataset_name} {config_name}...")
-                    
-                    # Load a manageable subset for processing
-                    dataset = load_dataset(dataset_name, config_name, split="validation[:10000]")  # First 10k samples
-                    
-                    full_data = []
-                    medical_count = 0
-                    
-                    for i, item in enumerate(dataset):
-                        query = item.get("query", "")
-                        
-                        # Filter for medical content
-                        if self._is_medical_query(query):
-                            # Handle different MS MARCO formats
-                            passages = item.get("passages", {})
-                            if isinstance(passages, dict):
-                                passage_texts = passages.get("passage_text", [])
-                                is_selected = passages.get("is_selected", [])
-                                # Get selected passages
-                                context_parts = [text for text, selected in zip(passage_texts, is_selected) if selected]
-                                context = " ".join(context_parts) if context_parts else " ".join(passage_texts[:3])
-                            else:
-                                context = str(passages)
-                            
-                            # Get answers
-                            answers = item.get("answers", [])
-                            if isinstance(answers, list) and answers:
-                                answer = answers[0]
-                            else:
-                                answer = item.get("wellFormedAnswers", [""])[0] if item.get("wellFormedAnswers") else ""
-                            
-                            formatted_item = {
-                                "id": f"msmarco_hf_{medical_count:04d}",
-                                "question": query,
-                                "answer": answer,
-                                "context": context,
-                                "query_type": item.get("query_type", "factoid"),
-                                "reasoning_type": "information_retrieval"
-                            }
-                            full_data.append(formatted_item)
-                            medical_count += 1
-                            
-                            # Stop at reasonable number for evaluation
-                            if medical_count >= 1000:
-                                break
-                    
-                    if len(full_data) > 0:
-                        logger.info(f"✅ Loaded {len(full_data)} medical questions from {dataset_name}")
-                        return full_data
-                        
-                except Exception as e:
-                    logger.debug(f"   Could not load from {dataset_name} {config_name}: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.warning(f"⚠️ HuggingFace loading failed: {e}")
-        
-        # Try loading from local files
-        try:
-            local_path = Path("data/benchmarks/msmarco")
-            if local_path.exists():
-                json_files = list(local_path.glob("*.json"))
-                tsv_files = list(local_path.glob("*.tsv"))
+            if data and len(data) > 0:
+                # Convert to MSMARCO format if needed
+                formatted_data = []
+                for item in data:
+                    formatted_item = {
+                        "id": item.get("question_id", item.get("id", f"msmarco_{len(formatted_data)}")),
+                        "question": item.get("question", ""),
+                        "answer": item.get("answer", ""),
+                        "context": item.get("context", ""),
+                        "query_type": item.get("query_type", "factoid"),
+                        "reasoning_type": "information_retrieval"
+                    }
+                    formatted_data.append(formatted_item)
                 
-                if json_files or tsv_files:
-                    logger.info(f"🔄 Loading MSMARCO from local files")
-                    
-                    all_data = []
-                    
-                    # Process JSON files
-                    for json_file in json_files:
-                        with open(json_file, 'r') as f:
-                            file_data = json.load(f)
-                            if isinstance(file_data, list):
-                                medical_data = [item for item in file_data if self._is_medical_query(item.get("question", ""))]
-                                all_data.extend(medical_data)
-                    
-                    # Process TSV files (common MSMARCO format)
-                    for tsv_file in tsv_files:
-                        import pandas as pd
-                        df = pd.read_csv(tsv_file, sep='\t', nrows=10000)  # Limit for processing
-                        for _, row in df.iterrows():
-                            query = str(row.get('query', ''))
-                            if self._is_medical_query(query):
-                                formatted_item = {
-                                    "id": f"msmarco_local_{len(all_data):04d}",
-                                    "question": query,
-                                    "answer": str(row.get('answer', '')),
-                                    "context": str(row.get('passage', '')),
-                                    "reasoning_type": "information_retrieval"
-                                }
-                                all_data.append(formatted_item)
-                    
-                    if len(all_data) > 0:
-                        logger.info(f"✅ Loaded {len(all_data)} medical questions from local MSMARCO files")
-                        return all_data
-                        
+                logger.info(f"✅ Loaded {len(formatted_data)} MSMARCO questions via data loader")
+                return formatted_data
+            
         except Exception as e:
-            logger.warning(f"⚠️ Local file loading failed: {e}")
+            logger.error(f"❌ Data loader failed for MSMARCO: {e}")
         
-        # Generate comprehensive synthetic dataset for testing (1000 questions)
-        logger.info("📋 Generating comprehensive synthetic MSMARCO dataset")
-        return self._generate_comprehensive_msmarco_dataset()
+        # Fallback to minimal synthetic data
+        logger.warning("⚠️ Using minimal fallback dataset for MSMARCO")
+        return self._generate_minimal_fallback()
+    
+    def _generate_minimal_fallback(self) -> List[Dict]:
+        """Generate minimal fallback dataset if all else fails."""
+        return [
+            {
+                "id": "msmarco_fallback_001",
+                "question": "What are the symptoms of diabetes?",
+                "answer": "increased thirst, frequent urination, fatigue, blurred vision",
+                "context": "Diabetes symptoms include polyuria, polydipsia, and fatigue.",
+                "query_type": "factoid"
+            },
+            {
+                "id": "msmarco_fallback_002", 
+                "question": "How is hypertension treated?",
+                "answer": "lifestyle changes, medication, monitoring",
+                "context": "Hypertension treatment includes diet, exercise, and antihypertensive drugs.",
+                "query_type": "factoid"
+            }
+        ]
     
     def _is_medical_query(self, query: str) -> bool:
         """Check if a query is medical-related."""

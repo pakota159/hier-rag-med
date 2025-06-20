@@ -13,6 +13,8 @@ from typing import Dict, List, Any
 from .base_benchmark import BaseBenchmark
 from loguru import logger
 
+from src.evaluation.data.data_loader import BenchmarkDataLoader
+
 # Add project root to path for data loader import
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,115 +25,60 @@ class PubMedQABenchmark(BaseBenchmark):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "PubMedQA"
-        
+        self.data_loader = BenchmarkDataLoader(config)
+    
     def load_dataset(self) -> List[Dict]:
-        """Load PubMedQA dataset from multiple sources."""
-        logger.info(f"🔄 Loading PubMedQA dataset...")
+        """Load PubMedQA dataset using centralized data loader."""
+        logger.info(f"🔄 Loading PubMedQA dataset using data loader...")
         
-        # Try to load from HuggingFace
         try:
-            from datasets import load_dataset
-            logger.info("🔄 Attempting to load PubMedQA from Hugging Face...")
+            # Use the centralized data loader
+            data = self.data_loader.load_benchmark_data(
+                benchmark_name="pubmedqa",
+                split="test",
+                max_samples=self.sample_size if self.sample_size < 1000 else None
+            )
             
-            # Try the main PubMedQA dataset
-            try:
-                logger.info("   Trying pubmed_qa pqa_labeled...")
-                dataset = load_dataset("pubmed_qa", "pqa_labeled", split="test")
-                
-                full_data = []
-                for i, item in enumerate(dataset):
-                    # Handle context properly
-                    context_data = item.get("context", {})
-                    if isinstance(context_data, dict):
-                        context = " ".join(context_data.get("contexts", []))
-                    else:
-                        context = str(context_data)
-                    
+            if data and len(data) > 0:
+                # Convert to PubMedQA format if needed
+                formatted_data = []
+                for item in data:
                     formatted_item = {
-                        "id": f"pubmedqa_hf_{i:04d}",
+                        "id": item.get("question_id", item.get("id", f"pubmedqa_{len(formatted_data)}")),
                         "question": item.get("question", ""),
-                        "answer": item.get("final_decision", ""),
-                        "context": context,
+                        "answer": item.get("answer", ""),
+                        "context": item.get("context", ""),
                         "long_answer": item.get("long_answer", ""),
                         "reasoning_type": "evidence_based"
                     }
-                    full_data.append(formatted_item)
+                    formatted_data.append(formatted_item)
                 
-                if len(full_data) > 0:
-                    logger.info(f"✅ Loaded {len(full_data)} questions from pubmed_qa")
-                    return full_data
-                    
-            except Exception as e:
-                logger.debug(f"   Could not load from pubmed_qa: {e}")
+                logger.info(f"✅ Loaded {len(formatted_data)} PubMedQA questions via data loader")
+                return formatted_data
             
-            # Try alternative configurations
-            alternative_configs = [
-                ("pubmed_qa", "pqa_artificial"),
-                ("pubmed_qa", "pqa_unlabeled"),
-                ("biomedical-qa/pubmedqa", "test")
-            ]
-            
-            for dataset_name, config_name in alternative_configs:
-                try:
-                    logger.info(f"   Trying {dataset_name} {config_name}...")
-                    dataset = load_dataset(dataset_name, config_name, split="test")
-                    
-                    full_data = []
-                    for i, item in enumerate(dataset):
-                        context_data = item.get("context", {})
-                        if isinstance(context_data, dict):
-                            context = " ".join(context_data.get("contexts", []))
-                        else:
-                            context = str(context_data)
-                        
-                        formatted_item = {
-                            "id": f"pubmedqa_alt_{i:04d}",
-                            "question": item.get("question", ""),
-                            "answer": item.get("final_decision", item.get("answer", "")),
-                            "context": context,
-                            "long_answer": item.get("long_answer", ""),
-                            "reasoning_type": "evidence_based"
-                        }
-                        full_data.append(formatted_item)
-                    
-                    if len(full_data) > 0:
-                        logger.info(f"✅ Loaded {len(full_data)} questions from {dataset_name} {config_name}")
-                        return full_data
-                        
-                except Exception as e:
-                    logger.debug(f"   Could not load from {dataset_name} {config_name}: {e}")
-                    continue
-                    
         except Exception as e:
-            logger.warning(f"⚠️ HuggingFace loading failed: {e}")
+            logger.error(f"❌ Data loader failed for PubMedQA: {e}")
         
-        # Try loading from local files
-        try:
-            local_path = Path("data/benchmarks/pubmedqa")
-            if local_path.exists():
-                json_files = list(local_path.glob("*.json"))
-                if json_files:
-                    logger.info(f"🔄 Loading PubMedQA from local files: {json_files}")
-                    
-                    all_data = []
-                    for json_file in json_files:
-                        with open(json_file, 'r') as f:
-                            file_data = json.load(f)
-                            if isinstance(file_data, list):
-                                all_data.extend(file_data)
-                            elif isinstance(file_data, dict):
-                                all_data.append(file_data)
-                    
-                    if len(all_data) > 0:
-                        logger.info(f"✅ Loaded {len(all_data)} questions from local PubMedQA files")
-                        return all_data
-                        
-        except Exception as e:
-            logger.warning(f"⚠️ Local file loading failed: {e}")
-        
-        # Generate comprehensive synthetic dataset for testing (500 questions)
-        logger.info("📋 Generating comprehensive synthetic PubMedQA dataset")
-        return self._generate_comprehensive_pubmedqa_dataset()
+        # Fallback to minimal synthetic data
+        logger.warning("⚠️ Using minimal fallback dataset for PubMedQA")
+        return self._generate_minimal_fallback()
+    
+    def _generate_minimal_fallback(self) -> List[Dict]:
+        """Generate minimal fallback dataset if all else fails."""
+        return [
+            {
+                "id": "pubmedqa_fallback_001",
+                "question": "Does metformin reduce cardiovascular risk in type 2 diabetes?",
+                "answer": "yes",
+                "context": "Multiple studies show metformin reduces cardiovascular events."
+            },
+            {
+                "id": "pubmedqa_fallback_002",
+                "question": "Are statins effective in primary prevention?",
+                "answer": "yes",
+                "context": "Clinical trials demonstrate statin benefits in primary prevention."
+            }
+        ]
     
     def _generate_comprehensive_pubmedqa_dataset(self) -> List[Dict]:
         """Generate comprehensive synthetic PubMedQA dataset."""

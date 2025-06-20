@@ -13,6 +13,8 @@ from typing import Dict, List, Any, Set
 from .base_benchmark import BaseBenchmark
 from loguru import logger
 
+from src.evaluation.data.data_loader import BenchmarkDataLoader
+
 # Add project root to path for data loader import
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,130 +25,75 @@ class MedReasonBenchmark(BaseBenchmark):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "MedReason"
+        self.data_loader = BenchmarkDataLoader(config)
         
-        # Medical concept patterns for assessment
+        # Keep the medical patterns for evaluation
         self.medical_patterns = {
-            'symptoms': [
-                'pain', 'fever', 'nausea', 'vomiting', 'diarrhea', 'fatigue', 'weakness',
-                'shortness', 'breath', 'chest pain', 'headache', 'dizziness', 'sweating'
-            ],
-            'conditions': [
-                'diabetes', 'hypertension', 'heart failure', 'myocardial', 'stroke', 'asthma',
-                'copd', 'pneumonia', 'infection', 'cancer', 'arthritis', 'depression'
-            ],
-            'treatments': [
-                'medication', 'therapy', 'surgery', 'treatment', 'management', 'intervention',
-                'antihypertensive', 'antibiotic', 'analgesic', 'insulin', 'metformin'
-            ],
-            'investigations': [
-                'blood test', 'x-ray', 'ct scan', 'mri', 'ecg', 'echo', 'biopsy',
-                'laboratory', 'imaging', 'examination', 'assessment'
-            ]
+            'symptoms': ['pain', 'fever', 'nausea', 'vomiting', 'diarrhea', 'fatigue'],
+            'conditions': ['diabetes', 'hypertension', 'heart failure', 'stroke', 'asthma'],
+            'treatments': ['medication', 'therapy', 'treatment', 'management', 'intervention'],
+            'investigations': ['blood test', 'x-ray', 'ct scan', 'mri', 'ecg', 'examination']
         }
         
-        # Clinical reasoning indicators
         self.reasoning_indicators = {
             'systematic': ['systematic', 'step-by-step', 'approach', 'method', 'process'],
             'differential': ['differential', 'consider', 'rule out', 'exclude', 'possible'],
             'evidence': ['evidence', 'studies', 'research', 'guidelines', 'literature'],
             'causality': ['because', 'due to', 'caused by', 'leads to', 'results in']
         }
-        
+    
     def load_dataset(self) -> List[Dict]:
-        """Load MedReason dataset from multiple sources."""
-        logger.info(f"🔄 Loading MedReason dataset...")
+        """Load MedReason dataset using centralized data loader."""
+        logger.info(f"🔄 Loading MedReason dataset using data loader...")
         
-        # Try to load from HuggingFace
         try:
-            from datasets import load_dataset
-            logger.info("🔄 Attempting to load MedReason from Hugging Face...")
+            # Use the centralized data loader
+            data = self.data_loader.load_benchmark_data(
+                benchmark_name="medreason",
+                split="test",
+                max_samples=self.sample_size if self.sample_size < 1000 else None
+            )
             
-            # Try the main MedReason dataset
-            try:
-                logger.info("   Trying UCSC-VLAA/MedReason...")
-                dataset = load_dataset("UCSC-VLAA/MedReason", split="test")
-                
-                full_data = []
-                for i, item in enumerate(dataset):
+            if data and len(data) > 0:
+                # Convert to MedReason format if needed
+                formatted_data = []
+                for item in data:
                     formatted_item = {
-                        "id": f"medreason_hf_{i:04d}",
+                        "id": item.get("question_id", item.get("id", f"medreason_{len(formatted_data)}")),
                         "question": item.get("question", ""),
                         "answer": item.get("answer", ""),
                         "reasoning_type": item.get("reasoning_type", "clinical_reasoning"),
                         "context": item.get("context", ""),
                         "reasoning_chain": item.get("reasoning_chain", [])
                     }
-                    full_data.append(formatted_item)
+                    formatted_data.append(formatted_item)
                 
-                if len(full_data) > 0:
-                    logger.info(f"✅ Loaded {len(full_data)} questions from UCSC-VLAA/MedReason")
-                    return full_data
-                    
-            except Exception as e:
-                logger.debug(f"   Could not load from UCSC-VLAA/MedReason: {e}")
+                logger.info(f"✅ Loaded {len(formatted_data)} MedReason questions via data loader")
+                return formatted_data
             
-            # Try alternative sources
-            alternative_sources = [
-                ("medical-reasoning/medreason", "test"),
-                ("clinical-kg/med-reason", "test"),
-                ("biomedical/med-reasoning", "test")
-            ]
-            
-            for source, split in alternative_sources:
-                try:
-                    logger.info(f"   Trying {source}...")
-                    dataset = load_dataset(source, split=split)
-                    
-                    full_data = []
-                    for i, item in enumerate(dataset):
-                        formatted_item = {
-                            "id": f"medreason_alt_{i:04d}",
-                            "question": item.get("question", ""),
-                            "answer": item.get("answer", ""),
-                            "reasoning_type": item.get("reasoning_type", "clinical_reasoning"),
-                            "context": item.get("context", ""),
-                            "reasoning_chain": item.get("reasoning_chain", [])
-                        }
-                        full_data.append(formatted_item)
-                    
-                    if len(full_data) > 0:
-                        logger.info(f"✅ Loaded {len(full_data)} questions from {source}")
-                        return full_data
-                        
-                except Exception as e:
-                    logger.debug(f"   Could not load from {source}: {e}")
-                    continue
-                    
         except Exception as e:
-            logger.warning(f"⚠️ HuggingFace loading failed: {e}")
+            logger.error(f"❌ Data loader failed for MedReason: {e}")
         
-        # Try loading from local files
-        try:
-            local_path = Path("data/benchmarks/medreason")
-            if local_path.exists():
-                json_files = list(local_path.glob("*.json"))
-                if json_files:
-                    logger.info(f"🔄 Loading MedReason from local files: {json_files}")
-                    
-                    all_data = []
-                    for json_file in json_files:
-                        with open(json_file, 'r') as f:
-                            file_data = json.load(f)
-                            if isinstance(file_data, list):
-                                all_data.extend(file_data)
-                            elif isinstance(file_data, dict):
-                                all_data.append(file_data)
-                    
-                    if len(all_data) > 0:
-                        logger.info(f"✅ Loaded {len(all_data)} questions from local MedReason files")
-                        return all_data
-                        
-        except Exception as e:
-            logger.warning(f"⚠️ Local file loading failed: {e}")
-        
-        # Generate comprehensive synthetic dataset for testing (300 questions)
-        logger.info("📋 Generating comprehensive synthetic MedReason dataset")
-        return self._generate_comprehensive_medreason_dataset()
+        # Fallback to minimal synthetic data
+        logger.warning("⚠️ Using minimal fallback dataset for MedReason")
+        return self._generate_minimal_fallback()
+    
+    def _generate_minimal_fallback(self) -> List[Dict]:
+        """Generate minimal fallback dataset if all else fails."""
+        return [
+            {
+                "id": "medreason_fallback_001",
+                "question": "A patient presents with chest pain. What is your diagnostic approach?",
+                "answer": "systematic evaluation including history, ECG, troponins",
+                "reasoning_type": "diagnostic_approach"
+            },
+            {
+                "id": "medreason_fallback_002",
+                "question": "How would you manage acute myocardial infarction?",
+                "answer": "immediate reperfusion therapy, antiplatelet agents, beta-blockers",
+                "reasoning_type": "treatment_planning"
+            }
+        ]
     
     def _generate_comprehensive_medreason_dataset(self) -> List[Dict]:
         """Generate comprehensive synthetic MedReason dataset."""

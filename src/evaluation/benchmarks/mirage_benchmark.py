@@ -13,6 +13,8 @@ from typing import Dict, List, Any
 from .base_benchmark import BaseBenchmark
 from loguru import logger
 
+from src.evaluation.data.data_loader import BenchmarkDataLoader
+
 # Add project root to path for data loader import
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -23,10 +25,67 @@ class MIRAGEBenchmark(BaseBenchmark):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "MIRAGE"
+        self.data_loader = BenchmarkDataLoader(config)
         
         # Initialize semantic similarity model
         self.similarity_model = None
         self._init_evaluation_models()
+    
+    def load_dataset(self) -> List[Dict]:
+        """Load MIRAGE dataset using centralized data loader."""
+        logger.info(f"🔄 Loading MIRAGE dataset using data loader...")
+        
+        try:
+            # Use the centralized data loader
+            data = self.data_loader.load_benchmark_data(
+                benchmark_name="mirage",
+                split="test",
+                max_samples=self.sample_size if self.sample_size < 1000 else None
+            )
+            
+            if data and len(data) > 0:
+                # Convert to MIRAGE format if needed
+                formatted_data = []
+                for item in data:
+                    formatted_item = {
+                        "id": item.get("question_id", item.get("id", f"mirage_{len(formatted_data)}")),
+                        "question": item.get("question", ""),
+                        "answer": item.get("answer", ""),
+                        "type": item.get("question_type", item.get("type", "clinical")),
+                        "category": item.get("medical_specialty", item.get("category", "general")),
+                        "context": item.get("context", ""),
+                        "options": item.get("options", [])
+                    }
+                    formatted_data.append(formatted_item)
+                
+                logger.info(f"✅ Loaded {len(formatted_data)} MIRAGE questions via data loader")
+                return formatted_data
+            
+        except Exception as e:
+            logger.error(f"❌ Data loader failed for MIRAGE: {e}")
+        
+        # Fallback to minimal synthetic data if data loader fails completely
+        logger.warning("⚠️ Using minimal fallback dataset for MIRAGE")
+        return self._generate_minimal_fallback()
+    
+    def _generate_minimal_fallback(self) -> List[Dict]:
+        """Generate minimal fallback dataset if all else fails."""
+        return [
+            {
+                "id": "mirage_fallback_001",
+                "question": "What is the first-line treatment for type 2 diabetes?",
+                "answer": "Metformin",
+                "type": "clinical",
+                "category": "endocrinology"
+            },
+            {
+                "id": "mirage_fallback_002",
+                "question": "What are the main symptoms of myocardial infarction?",
+                "answer": "chest pain, shortness of breath, nausea, sweating",
+                "type": "clinical", 
+                "category": "cardiology"
+            }
+        ]
         
     def _init_evaluation_models(self):
         """Initialize models for medical evaluation."""
@@ -37,80 +96,6 @@ class MIRAGEBenchmark(BaseBenchmark):
         except Exception as e:
             logger.warning(f"Could not load semantic model: {e}")
             self.similarity_model = None
-    
-    def load_dataset(self) -> List[Dict]:
-        """Load MIRAGE dataset from multiple sources."""
-        logger.info(f"🔄 Loading MIRAGE dataset...")
-        
-        # Try to load from HuggingFace
-        try:
-            from datasets import load_dataset
-            logger.info("🔄 Attempting to load MIRAGE from Hugging Face...")
-            
-            # Try different potential MIRAGE sources
-            sources = [
-                ("mirage-project/MIRAGE", "test"),
-                ("clinical-reasoning/mirage", "test"), 
-                ("medical-rag/mirage", "test"),
-                ("cmedcorp/MIRAGE", "test")
-            ]
-            
-            for source, split in sources:
-                try:
-                    logger.info(f"   Trying {source}...")
-                    dataset = load_dataset(source, split=split)
-                    
-                    full_data = []
-                    for i, item in enumerate(dataset):
-                        formatted_item = {
-                            "id": f"mirage_hf_{i:04d}",
-                            "question": item.get("question", ""),
-                            "answer": item.get("answer", ""),
-                            "type": item.get("type", "clinical"),
-                            "category": item.get("category", "general"),
-                            "context": item.get("context", ""),
-                            "options": item.get("options", [])
-                        }
-                        full_data.append(formatted_item)
-                    
-                    if len(full_data) > 0:
-                        logger.info(f"✅ Loaded {len(full_data)} questions from {source}")
-                        return full_data
-                        
-                except Exception as e:
-                    logger.debug(f"   Could not load from {source}: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.warning(f"⚠️ HuggingFace loading failed: {e}")
-        
-        # Try loading from local files
-        try:
-            local_path = Path("data/benchmarks/mirage")
-            if local_path.exists():
-                json_files = list(local_path.glob("*.json"))
-                if json_files:
-                    logger.info(f"🔄 Loading MIRAGE from local files: {json_files}")
-                    
-                    all_data = []
-                    for json_file in json_files:
-                        with open(json_file, 'r') as f:
-                            file_data = json.load(f)
-                            if isinstance(file_data, list):
-                                all_data.extend(file_data)
-                            elif isinstance(file_data, dict):
-                                all_data.append(file_data)
-                    
-                    if len(all_data) > 0:
-                        logger.info(f"✅ Loaded {len(all_data)} questions from local MIRAGE files")
-                        return all_data
-                        
-        except Exception as e:
-            logger.warning(f"⚠️ Local file loading failed: {e}")
-        
-        # Generate comprehensive synthetic dataset for testing (200 questions)
-        logger.info("📋 Generating comprehensive synthetic MIRAGE dataset")
-        return self._generate_comprehensive_mirage_dataset()
     
     def _generate_comprehensive_mirage_dataset(self) -> List[Dict]:
         """Generate comprehensive synthetic MIRAGE dataset."""
