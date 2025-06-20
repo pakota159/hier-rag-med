@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 Updated HierRAGMed Evaluation Runner with --models parameter support
-Supports selecting specific models like hierarchical_system or kg_system
+Includes fixes for JSON serialization and comprehensive error handling
 """
 
 import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 import json
 from datetime import datetime
 
@@ -305,6 +305,71 @@ def run_single_benchmark(benchmark_name: str, benchmark: object, evaluators: Dic
     return benchmark_results
 
 
+def convert_gpu_info_to_dict(gpu_info) -> Dict[str, Any]:
+    """Convert GPUInfo object to JSON-serializable dictionary."""
+    if hasattr(gpu_info, 'name'):  # Check if it's a GPUInfo object
+        return {
+            "name": gpu_info.name,
+            "memory_total": gpu_info.memory_total,
+            "memory_free": gpu_info.memory_free,
+            "memory_used": gpu_info.memory_used,
+            "cuda_version": gpu_info.cuda_version,
+            "device_id": gpu_info.device_id,
+            "compute_capability": gpu_info.compute_capability
+        }
+    return gpu_info  # Already a dict or other serializable type
+
+
+def save_evaluation_results(all_results: Dict, results_dir: Path, models_filter: Optional[Set[str]]) -> Path:
+    """Save evaluation results with proper JSON serialization."""
+    
+    # Convert GPUInfo to serializable dict
+    if "environment" in all_results and "gpu_info" in all_results["environment"]:
+        all_results["environment"]["gpu_info"] = convert_gpu_info_to_dict(
+            all_results["environment"]["gpu_info"]
+        )
+    
+    # Ensure all numpy types are converted to Python types
+    def convert_numpy_types(obj):
+        """Convert numpy types to Python native types for JSON serialization."""
+        if hasattr(obj, 'item'):  # numpy scalar
+            return obj.item()
+        elif hasattr(obj, 'tolist'):  # numpy array
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(v) for v in obj]
+        else:
+            return obj
+    
+    # Convert numpy types in results
+    all_results = convert_numpy_types(all_results)
+    
+    # Save results
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if models_filter:
+        model_suffix = "_".join(sorted(models_filter))
+        results_file = results_dir / f"evaluation_results_{model_suffix}_{timestamp}.json"
+    else:
+        results_file = results_dir / f"evaluation_results_{timestamp}.json"
+    
+    try:
+        with open(results_file, 'w') as f:
+            json.dump(all_results, f, indent=2, default=str)
+        logger.info(f"💾 Results saved to: {results_file}")
+    except Exception as e:
+        logger.error(f"❌ Failed to save results: {e}")
+        # Try to save with basic serialization
+        backup_file = results_dir / f"evaluation_results_backup_{timestamp}.json"
+        with open(backup_file, 'w') as f:
+            json.dump(all_results, f, indent=2, default=str)
+        logger.info(f"💾 Backup results saved to: {backup_file}")
+        return backup_file
+    
+    return results_file
+
+
 def run_evaluation(
     config_path: Optional[Path] = None,
     results_dir: Optional[Path] = None,
@@ -396,18 +461,9 @@ def run_evaluation(
         total_time = time.time() - evaluation_start
         all_results["total_time"] = total_time
         
-        # Save results
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        if models_filter:
-            model_suffix = "_".join(models_filter)
-            results_file = results_dir / f"evaluation_results_{model_suffix}_{timestamp}.json"
-        else:
-            results_file = results_dir / f"evaluation_results_{timestamp}.json"
+        # Save results with proper serialization
+        results_file = save_evaluation_results(all_results, results_dir, models_filter)
         
-        with open(results_file, 'w') as f:
-            json.dump(all_results, f, indent=2)
-        
-        logger.info(f"💾 Results saved to: {results_file}")
         logger.info(f"🎉 Evaluation completed in {total_time:.2f}s")
         
         # Print summary
@@ -419,6 +475,13 @@ def run_evaluation(
         logger.error(f"❌ Evaluation failed: {e}")
         all_results["status"] = "failed"
         all_results["error"] = str(e)
+        
+        # Try to save partial results
+        try:
+            results_file = save_evaluation_results(all_results, results_dir, models_filter)
+        except:
+            logger.error("❌ Failed to save partial results")
+        
         return all_results
 
 
@@ -428,18 +491,37 @@ def print_evaluation_summary(results: Dict) -> None:
     logger.info("📊 EVALUATION SUMMARY")
     logger.info("=" * 60)
     
+    total_questions = 0
+    total_time = 0
+    
     for benchmark_name, benchmark_data in results.get("benchmarks", {}).items():
         logger.info(f"\n🎯 {benchmark_name.upper()}")
         logger.info("-" * 30)
         
         if benchmark_data.get("status") == "completed":
+            benchmark_time = benchmark_data.get("timing", {}).get("total", 0)
+            total_time += benchmark_time
+            
             for system_name, system_data in benchmark_data.get("results", {}).items():
                 if "metrics" in system_data:
                     accuracy = system_data["metrics"].get("accuracy", 0)
-                    time_taken = system_data.get("processing_time", 0)
-                    logger.info(f"   {system_name}: {accuracy:.1f}% ({time_taken:.1f}s)")
+                    questions_processed = system_data.get("questions_processed", 0)
+                    processing_time = system_data.get("processing_time", 0)
+                    
+                    total_questions += questions_processed
+                    
+                    logger.info(f"   {system_name}: {accuracy:.1f}% ({questions_processed} questions, {processing_time:.1f}s)")
+                else:
+                    logger.error(f"   {system_name}: {system_data.get('status', 'failed')}")
         else:
             logger.error(f"   ❌ {benchmark_data.get('status', 'failed')}")
+    
+    # Overall summary
+    logger.info(f"\n📈 OVERALL RESULTS:")
+    logger.info(f"   Total Questions: {total_questions}")
+    logger.info(f"   Total Time: {total_time:.1f}s")
+    if total_questions > 0:
+        logger.info(f"   Average Time per Question: {total_time/total_questions:.2f}s")
 
 
 def main():
@@ -451,7 +533,7 @@ def main():
     parser.add_argument("--benchmark", type=str, choices=["mirage", "medreason", "msmarco", "pubmedqa"], 
                        help="Run specific benchmark only")
     
-    # NEW: --models parameter
+    # --models parameter
     parser.add_argument("--models", type=str, 
                        help="Comma-separated list of models to evaluate (e.g., 'hierarchical_system' or 'kg_system,hierarchical_system')")
     

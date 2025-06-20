@@ -148,7 +148,7 @@ class MSMARCOBenchmark(BaseBenchmark):
             logger.warning("⚠️ SentenceTransformers not available - some metrics will be limited")
             self.similarity_model = None
     
-    def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[str]) -> Dict[str, Any]:
+    def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[Dict]) -> Dict[str, Any]:
         """
         Evaluate retrieval performance using MS MARCO-specific metrics.
         
@@ -174,46 +174,66 @@ class MSMARCOBenchmark(BaseBenchmark):
         }
         
         # Add recall@k and precision@k for different k values
-        for k in self.k_values:
+        for k in [1, 3, 5, 10]:  # self.k_values
             metrics[f"recall_at_{k}"] = 0.0
             metrics[f"precision_at_{k}"] = 0.0
         
         try:
-            query = question.get("query", "")
+            # FIX: Ensure query is a string, handle dict case
+            query = question.get("query", question.get("question", ""))
+            if isinstance(query, dict):
+                # If query is a dict, try to extract text from common fields
+                query = query.get("text", query.get("query", str(query)))
+            elif query is None:
+                query = ""
+            
+            # Ensure query is string
+            query = str(query)
+            
             expected_passages = question.get("passages", [])
             
             if not retrieved_docs:
                 logger.warning("No retrieved documents to evaluate")
                 return metrics
             
+            # Convert retrieved_docs to list of strings if needed
+            doc_texts = []
+            for doc in retrieved_docs:
+                if isinstance(doc, dict):
+                    # Extract text from document dict
+                    doc_text = doc.get("content", doc.get("text", doc.get("passage", str(doc))))
+                else:
+                    doc_text = str(doc)
+                doc_texts.append(doc_text)
+            
             # 1. Calculate MRR (Mean Reciprocal Rank)
-            metrics["mrr"] = self._calculate_mrr(query, retrieved_docs, expected_passages)
+            metrics["mrr"] = self._calculate_mrr(query, doc_texts, expected_passages)
             
             # 2. Calculate NDCG (Normalized Discounted Cumulative Gain)
-            metrics["ndcg"] = self._calculate_ndcg(query, retrieved_docs, expected_passages)
+            metrics["ndcg"] = self._calculate_ndcg(query, doc_texts, expected_passages)
             
             # 3. Calculate MAP (Mean Average Precision)
-            metrics["map"] = self._calculate_map(query, retrieved_docs, expected_passages)
+            metrics["map"] = self._calculate_map(query, doc_texts, expected_passages)
             
             # 4. Calculate Recall@k and Precision@k
-            for k in self.k_values:
+            for k in [1, 3, 5, 10]:
                 recall_k, precision_k = self._calculate_recall_precision_at_k(
-                    query, retrieved_docs, expected_passages, k
+                    query, doc_texts, expected_passages, k
                 )
                 metrics[f"recall_at_{k}"] = recall_k
                 metrics[f"precision_at_{k}"] = precision_k
             
             # 5. Retrieval accuracy
             metrics["retrieval_accuracy"] = self._calculate_retrieval_accuracy(
-                query, retrieved_docs, expected_passages
+                query, doc_texts, expected_passages
             )
             
             # 6. Passage quality assessment
-            metrics["passage_quality"] = self._assess_passage_quality(retrieved_docs, query)
+            metrics["passage_quality"] = self._assess_passage_quality(doc_texts, query)
             
             # 7. Relevance score
             metrics["relevance_score"] = self._calculate_relevance_score(
-                query, retrieved_docs, expected_passages
+                query, doc_texts, expected_passages
             )
             
             # 8. Calculate overall score
@@ -223,8 +243,11 @@ class MSMARCOBenchmark(BaseBenchmark):
             
         except Exception as e:
             logger.error(f"❌ MS MARCO evaluation failed: {e}")
-            
+            # Return default metrics on error
+            return metrics
+        
         return metrics
+
     
     def _calculate_mrr(self, query: str, retrieved_docs: List[str], expected_passages: List[str]) -> float:
         """Calculate Mean Reciprocal Rank."""
@@ -306,39 +329,39 @@ class MSMARCOBenchmark(BaseBenchmark):
         
         return 1.0 if has_relevant else 0.0
     
-    def _assess_passage_quality(self, retrieved_docs: List[str], query: str) -> float:
-        """Assess quality of retrieved passages."""
-        if not retrieved_docs:
+    def _calculate_passage_query_similarity(self, passage: str, query: str) -> float:
+        """Calculate similarity between passage and query."""
+        # Ensure both are strings
+        passage = str(passage)
+        query = str(query)
+        
+        # Convert to lowercase and split into words
+        passage_words = set(passage.lower().split())
+        query_words = set(query.lower().split())
+        
+        if not query_words:
             return 0.0
         
+        overlap = len(passage_words.intersection(query_words)) / len(query_words)
+        return overlap
+
+    def _assess_passage_quality(self, passages: List[str], query: str) -> float:
+        """Assess overall quality of retrieved passages."""
+        if not passages:
+            return 0.0
+        
+        # Ensure query is string
+        query = str(query)
+        
         quality_scores = []
+        for passage in passages:
+            # Ensure passage is string
+            passage = str(passage)
+            score = self._calculate_passage_query_similarity(passage, query)
+            quality_scores.append(score)
         
-        for doc in retrieved_docs[:5]:  # Evaluate top 5
-            score = 0.0
-            doc_lower = doc.lower()
-            
-            # Check for quality indicators
-            for category, indicators in self.quality_indicators.items():
-                category_score = sum(0.1 for indicator in indicators if indicator in doc_lower)
-                score += min(0.25, category_score)  # Cap each category
-            
-            # Length consideration
-            word_count = len(doc.split())
-            if 50 <= word_count <= 500:  # Appropriate length
-                score += 0.2
-            elif word_count < 20:  # Too short
-                score -= 0.1
-            
-            # Query relevance
-            query_words = set(query.lower().split())
-            doc_words = set(doc_lower.split())
-            overlap = len(query_words.intersection(doc_words)) / len(query_words) if query_words else 0
-            score += overlap * 0.3
-            
-            quality_scores.append(min(1.0, score))
-        
-        return np.mean(quality_scores) if quality_scores else 0.0
-    
+        return sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
+
     def _calculate_relevance_score(self, query: str, retrieved_docs: List[str], 
                                  expected_passages: List[str]) -> float:
         """Calculate overall relevance score."""
