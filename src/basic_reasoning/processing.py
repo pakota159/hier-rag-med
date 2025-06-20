@@ -1,13 +1,11 @@
 """
 Document processing for Basic Reasoning system.
-Only processes foundation datasets from data/foundation/
-UPDATED VERSION - Handles new foundation sources and proper tier assignment
+COMPLETELY UPDATED VERSION - Handles explicit tier assignments from foundation fetchers
 """
 
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
-import re
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from loguru import logger
@@ -74,171 +72,109 @@ class HierarchicalDocumentProcessor:
         return all_documents
 
     def organize_by_reasoning_type(self, documents: List[Dict]) -> Dict[str, List[Dict]]:
-        """Organize documents by reasoning type for tiered retrieval - UPDATED VERSION."""
+        """Organize documents by reasoning type - USES EXPLICIT TIER ASSIGNMENTS."""
         
         organized = {
-            "pattern_recognition": [],  # Tier 1: Drug information, quick patterns
-            "hypothesis_testing": [],   # Tier 2: Clinical guidelines, therapeutic reasoning
-            "confirmation": []          # Tier 3: Clinical outcomes, case studies, evidence
+            "pattern_recognition": [],  # Tier 1
+            "hypothesis_testing": [],   # Tier 2
+            "confirmation": []          # Tier 3
         }
         
-        tier1_count = 0
-        tier2_count = 0
-        tier3_count = 0
+        tier_counts = {1: 0, 2: 0, 3: 0}
         
         for doc in documents:
-            reasoning_type = doc["metadata"].get("reasoning_type", "")
-            source = doc["metadata"].get("source", "")
-            doc_type = doc["metadata"].get("type", "")
-            text_lower = doc.get("text", "").lower()
+            # Use explicit tier assignment from foundation fetchers
+            tier = doc["metadata"].get("tier", None)
             
-            # Explicit tier assignment (if present)
-            explicit_tier = doc["metadata"].get("tier", None)
-            if explicit_tier:
-                if explicit_tier == 1:
-                    organized["pattern_recognition"].append(doc)
-                    tier1_count += 1
-                elif explicit_tier == 2:
-                    organized["hypothesis_testing"].append(doc)
-                    tier2_count += 1
-                else:
-                    organized["confirmation"].append(doc)
-                    tier3_count += 1
-                continue
-            
-            # TIER 1: Pattern Recognition (Drug info, quick patterns)
-            if (reasoning_type in [
-                "drug_information", "evidence_based_pharmacology", "drug_benefits"
-            ] or source in [
-                "drugbank", "therapeutic_pharmacology", "evidence_based_pharmacology"
-            ] or doc_type in [
-                "drug_profile", "drug_benefits", "drug_class_profile"
-            ] or any(keyword in text_lower for keyword in [
-                "medication", "dosage", "pharmacology", "drug class", "mechanism of action"
-            ])):
+            if tier == 1:
                 organized["pattern_recognition"].append(doc)
-                tier1_count += 1
-            
-            # TIER 2: Hypothesis Testing (Clinical guidelines, therapeutic reasoning)
-            elif (reasoning_type in [
-                "evidence_based_medicine", "therapeutic_guideline", "knowledge_graph_guided", 
-                "multi_step_diagnostic"
-            ] or source in [
-                "therapeutic_guidelines", "medreason", "msdiagnosis"
-            ] or doc_type in [
-                "therapeutic_guideline", "reasoning_chain", "treatment_hierarchy"
-            ] or any(keyword in text_lower for keyword in [
-                "first-line", "guideline", "recommendation", "evidence-based", "clinical trial"
-            ])):
+                tier_counts[1] += 1
+            elif tier == 2:
                 organized["hypothesis_testing"].append(doc)
-                tier2_count += 1
-            
-            # TIER 3: Confirmation (Clinical outcomes, case studies, evidence)
-            elif (reasoning_type in [
-                "clinical_outcomes", "real_world_evidence", "case_study"
-            ] or source in [
-                "clinical_outcomes", "pmc_patients"
-            ] or doc_type in [
-                "success_story", "clinical_symptoms", "case_study"
-            ] or any(keyword in text_lower for keyword in [
-                "case study", "patient outcome", "clinical success", "real-world"
-            ])):
+                tier_counts[2] += 1
+            elif tier == 3:
                 organized["confirmation"].append(doc)
-                tier3_count += 1
-            
-            # Legacy source handling
-            elif source in ["medreason", "msdiagnosis"]:
-                organized["hypothesis_testing"].append(doc)
-                tier2_count += 1
-            elif source in ["pmc_patients"]:
-                organized["confirmation"].append(doc)
-                tier3_count += 1
-            elif source in ["drugbank"]:
-                organized["pattern_recognition"].append(doc)
-                tier1_count += 1
-            
-            # Default assignment based on content analysis
+                tier_counts[3] += 1
             else:
-                # Analyze text content for tier assignment
-                if self._is_drug_related(text_lower):
+                # Fallback for documents without explicit tier
+                source = doc["metadata"].get("source", "")
+                reasoning_type = doc["metadata"].get("reasoning_type", "")
+                
+                # Map based on updated sources
+                if source in ["therapeutic_pharmacology", "evidence_based_pharmacology"]:
                     organized["pattern_recognition"].append(doc)
-                    tier1_count += 1
-                elif self._is_guideline_related(text_lower):
+                    tier_counts[1] += 1
+                elif source in ["therapeutic_guidelines"]:
                     organized["hypothesis_testing"].append(doc)
-                    tier2_count += 1
-                else:
+                    tier_counts[2] += 1
+                elif source in ["clinical_outcomes"]:
                     organized["confirmation"].append(doc)
-                    tier3_count += 1
+                    tier_counts[3] += 1
+                else:
+                    # Default to confirmation
+                    organized["confirmation"].append(doc)
+                    tier_counts[3] += 1
         
-        # Log initial distribution
-        logger.info(f"📊 Initial document distribution:")
-        logger.info(f"   Tier 1 (Pattern Recognition): {tier1_count}")
-        logger.info(f"   Tier 2 (Hypothesis Testing): {tier2_count}")
-        logger.info(f"   Tier 3 (Confirmation): {tier3_count}")
+        # Log final distribution
+        logger.info(f"📊 Organized documents by reasoning tiers:")
+        logger.info(f"   Tier 1 (Pattern Recognition): {tier_counts[1]}")
+        logger.info(f"   Tier 2 (Hypothesis Testing): {tier_counts[2]}")
+        logger.info(f"   Tier 3 (Confirmation): {tier_counts[3]}")
         
-        # Ensure balanced distribution (prevent empty tiers)
-        total_docs = len(documents)
-        if total_docs > 0:
-            organized = self._rebalance_tiers(organized, total_docs)
-        
-        # Final logging
-        logger.info(f"📊 Final organized documents by reasoning tiers:")
-        logger.info(f"   Tier 1 (Pattern Recognition): {len(organized['pattern_recognition'])}")
-        logger.info(f"   Tier 2 (Hypothesis Testing): {len(organized['hypothesis_testing'])}")
-        logger.info(f"   Tier 3 (Confirmation): {len(organized['confirmation'])}")
+        # Validate no empty tiers
+        if tier_counts[1] == 0 or tier_counts[2] == 0 or tier_counts[3] == 0:
+            logger.warning("⚠️ One or more tiers are empty - this may affect retrieval performance")
         
         return organized
 
-    def _is_drug_related(self, text: str) -> bool:
-        """Check if text is primarily about drugs/medications."""
-        drug_keywords = [
-            "drug", "medication", "therapy", "treatment", "dosage", "pharmacology",
-            "mechanism", "therapeutic", "prescription", "pharmaceutical", "clinical pharmacology"
-        ]
-        keyword_count = sum(1 for keyword in drug_keywords if keyword in text)
-        return keyword_count >= 2
-
-    def _is_guideline_related(self, text: str) -> bool:
-        """Check if text is primarily about clinical guidelines."""
-        guideline_keywords = [
-            "guideline", "recommendation", "first-line", "evidence-based", "clinical trial",
-            "systematic review", "meta-analysis", "consensus", "standard of care"
-        ]
-        keyword_count = sum(1 for keyword in guideline_keywords if keyword in text)
-        return keyword_count >= 2
-
-    def _rebalance_tiers(self, organized: Dict[str, List[Dict]], total_docs: int) -> Dict[str, List[Dict]]:
-        """Rebalance tiers to ensure no tier is empty and maintain reasonable distribution."""
+    def analyze_dataset_quality(self, documents: List[Dict]) -> Dict:
+        """Analyze the quality and composition of the foundation dataset."""
         
-        # Target distribution: 30% Tier1, 35% Tier2, 35% Tier3
-        target_tier1 = max(int(total_docs * 0.30), 1)
-        target_tier2 = max(int(total_docs * 0.35), 1)
-        target_tier3 = max(int(total_docs * 0.35), 1)
+        analysis = {
+            "total_documents": len(documents),
+            "sources": {},
+            "reasoning_types": {},
+            "tiers": {},
+            "avg_document_length": 0,
+            "quality_indicators": {
+                "evidence_based": 0,
+                "synthetic": 0,
+                "clinical": 0
+            }
+        }
         
-        current_tier1 = len(organized["pattern_recognition"])
-        current_tier2 = len(organized["hypothesis_testing"])
-        current_tier3 = len(organized["confirmation"])
+        total_length = 0
         
-        # If any tier is empty, redistribute
-        if current_tier1 == 0 or current_tier2 == 0 or current_tier3 == 0:
-            logger.info("🔄 Rebalancing tiers to prevent empty tiers...")
+        for doc in documents:
+            # Source analysis
+            source = doc["metadata"].get("source", "unknown")
+            analysis["sources"][source] = analysis["sources"].get(source, 0) + 1
             
-            # Collect all documents
-            all_docs = (organized["pattern_recognition"] + 
-                       organized["hypothesis_testing"] + 
-                       organized["confirmation"])
+            # Reasoning type analysis
+            reasoning_type = doc["metadata"].get("reasoning_type", "unknown")
+            analysis["reasoning_types"][reasoning_type] = analysis["reasoning_types"].get(reasoning_type, 0) + 1
             
-            # Redistribute evenly
-            organized["pattern_recognition"] = all_docs[:target_tier1]
-            organized["hypothesis_testing"] = all_docs[target_tier1:target_tier1 + target_tier2]
-            organized["confirmation"] = all_docs[target_tier1 + target_tier2:]
+            # Tier analysis
+            tier = doc["metadata"].get("tier", "unknown")
+            analysis["tiers"][f"tier_{tier}"] = analysis["tiers"].get(f"tier_{tier}", 0) + 1
             
-            logger.info(f"🔄 Redistributed documents:")
-            logger.info(f"   Target Tier 1: {target_tier1}, Actual: {len(organized['pattern_recognition'])}")
-            logger.info(f"   Target Tier 2: {target_tier2}, Actual: {len(organized['hypothesis_testing'])}")
-            logger.info(f"   Target Tier 3: {target_tier3}, Actual: {len(organized['confirmation'])}")
+            # Length analysis
+            text_length = len(doc.get("text", ""))
+            total_length += text_length
+            
+            # Quality indicators
+            text_lower = doc.get("text", "").lower()
+            if any(term in text_lower for term in ["evidence", "trial", "study", "research"]):
+                analysis["quality_indicators"]["evidence_based"] += 1
+            if any(term in text_lower for term in ["sample", "example", "mock", "test"]):
+                analysis["quality_indicators"]["synthetic"] += 1
+            if any(term in text_lower for term in ["patient", "clinical", "diagnosis", "treatment"]):
+                analysis["quality_indicators"]["clinical"] += 1
         
-        return organized
+        if len(documents) > 0:
+            analysis["avg_document_length"] = total_length / len(documents)
+        
+        return analysis
 
     def save_documents(self, documents: List[Dict[str, str]], output_path: Path) -> None:
         """Save processed documents to JSON file."""
@@ -259,47 +195,3 @@ class HierarchicalDocumentProcessor:
         except Exception as e:
             logger.error(f"Error loading documents from {input_path}: {str(e)}")
             return []
-
-    def analyze_dataset_quality(self, documents: List[Dict]) -> Dict:
-        """Analyze the quality and composition of the foundation dataset."""
-        
-        analysis = {
-            "total_documents": len(documents),
-            "sources": {},
-            "reasoning_types": {},
-            "avg_document_length": 0,
-            "quality_indicators": {
-                "evidence_based": 0,
-                "synthetic": 0,
-                "clinical": 0
-            }
-        }
-        
-        total_length = 0
-        
-        for doc in documents:
-            # Source analysis
-            source = doc["metadata"].get("source", "unknown")
-            analysis["sources"][source] = analysis["sources"].get(source, 0) + 1
-            
-            # Reasoning type analysis
-            reasoning_type = doc["metadata"].get("reasoning_type", "unknown")
-            analysis["reasoning_types"][reasoning_type] = analysis["reasoning_types"].get(reasoning_type, 0) + 1
-            
-            # Length analysis
-            text_length = len(doc.get("text", ""))
-            total_length += text_length
-            
-            # Quality indicators
-            text_lower = doc.get("text", "").lower()
-            if any(term in text_lower for term in ["evidence", "trial", "study", "research"]):
-                analysis["quality_indicators"]["evidence_based"] += 1
-            if any(term in text_lower for term in ["sample", "example", "mock", "test"]):
-                analysis["quality_indicators"]["synthetic"] += 1
-            if any(term in text_lower for term in ["patient", "clinical", "diagnosis", "treatment"]):
-                analysis["quality_indicators"]["clinical"] += 1
-        
-        if len(documents) > 0:
-            analysis["avg_document_length"] = total_length / len(documents)
-        
-        return analysis

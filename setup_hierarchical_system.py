@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Setup script to create Hierarchical system collections with improved data handling.
-UPDATED VERSION - Better error handling and tier validation
+Setup script to create Hierarchical system collections.
+COMPLETELY UPDATED VERSION - Works with new foundation fetchers
 """
 
 import sys
@@ -74,23 +74,26 @@ def validate_tier_distribution(organized_docs: Dict[str, List[Dict]]) -> bool:
         empty_tiers.append("Tier 3 (Confirmation)")
     
     if empty_tiers:
-        logger.warning(f"⚠️ Empty tiers detected: {', '.join(empty_tiers)}")
+        logger.error(f"❌ Empty tiers detected: {', '.join(empty_tiers)}")
+        logger.error("This will cause hierarchical retrieval to fail!")
         return False
     
-    # Check for severely imbalanced distribution
-    max_tier_size = max(tier1_count, tier2_count, tier3_count)
-    min_tier_size = min(tier1_count, tier2_count, tier3_count)
+    # Log distribution percentages
+    tier1_pct = (tier1_count / total_docs) * 100
+    tier2_pct = (tier2_count / total_docs) * 100
+    tier3_pct = (tier3_count / total_docs) * 100
     
-    if max_tier_size > 10 * min_tier_size:  # One tier is 10x larger than another
-        logger.warning(f"⚠️ Severely imbalanced tier distribution: T1:{tier1_count}, T2:{tier2_count}, T3:{tier3_count}")
-        return False
+    logger.info(f"📊 Tier distribution:")
+    logger.info(f"   Tier 1: {tier1_count} docs ({tier1_pct:.1f}%)")
+    logger.info(f"   Tier 2: {tier2_count} docs ({tier2_pct:.1f}%)")
+    logger.info(f"   Tier 3: {tier3_count} docs ({tier3_pct:.1f}%)")
     
     logger.info(f"✅ Tier distribution validation passed")
     return True
 
 
 def setup_hierarchical_system():
-    """Main setup function for Hierarchical system with improved validation."""
+    """Main setup function for Hierarchical system."""
     start_time = time.time()
     
     logger.info("🚀 Starting Hierarchical System Setup")
@@ -99,7 +102,8 @@ def setup_hierarchical_system():
     # Initialize configuration
     try:
         config = Config()
-        logger.info(f"✅ Loaded config: {config.get_device_info()}")
+        device_info = config.get_device_info()
+        logger.info(f"✅ Loaded config: {device_info['environment']} on {device_info.get('cuda_device_name', 'CPU')}")
     except Exception as e:
         logger.error(f"❌ Failed to load config: {e}")
         return False
@@ -136,9 +140,7 @@ def setup_hierarchical_system():
         logger.error(f"📁 Expected location: {foundation_info['path']}")
         logger.error("")
         logger.error("🔧 To create foundation dataset:")
-        logger.error("   python fetch_foundation_data.py --quick")
-        logger.error("   python fetch_foundation_data.py --max-results 1000")
-        logger.error("   python better_foundation_sources.py")
+        logger.error("   python fetch_foundation_data.py --max-results 3000")
         return False
     
     # Load and process foundation data
@@ -157,6 +159,7 @@ def setup_hierarchical_system():
         logger.info(f"📊 Dataset analysis:")
         logger.info(f"   Total documents: {analysis['total_documents']}")
         logger.info(f"   Sources: {list(analysis['sources'].keys())}")
+        logger.info(f"   Tiers: {analysis['tiers']}")
         logger.info(f"   Evidence-based: {analysis['quality_indicators']['evidence_based']}")
         logger.info(f"   Synthetic: {analysis['quality_indicators']['synthetic']}")
         logger.info(f"   Clinical: {analysis['quality_indicators']['clinical']}")
@@ -167,20 +170,18 @@ def setup_hierarchical_system():
         # Validate tier distribution
         if not validate_tier_distribution(organized_docs):
             logger.error("❌ Tier distribution validation failed")
-            logger.error("This may cause poor hierarchical retrieval performance")
-            response = input("Continue anyway? (y/N): ").strip().lower()
-            if response not in ['y', 'yes']:
-                logger.info("Setup cancelled due to tier distribution issues")
-                return False
+            return False
         
         logger.info("✅ Loaded and organized foundation dataset")
         
     except Exception as e:
         logger.error(f"❌ Failed to load foundation data: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     
     # Log organization stats
-    logger.info("📊 Document organization:")
+    logger.info("📊 Document organization summary:")
     total_docs = 0
     for tier_name, docs in organized_docs.items():
         logger.info(f"   {tier_name}: {len(docs)} documents")
@@ -201,10 +202,18 @@ def setup_hierarchical_system():
         retriever.load_hierarchical_collections()
         
         # Test hierarchical search
-        test_results = retriever.hierarchical_search("diabetes treatment")
+        test_results = retriever.hierarchical_search("diabetes treatment metformin")
         total_test_results = sum(len(test_results.get(tier, [])) for tier in ["tier1_patterns", "tier2_hypotheses", "tier3_confirmation"])
-        logger.info("✅ Collections created successfully")
-        logger.info(f"🔍 Test search returned {total_test_results} results from 3 tiers")
+        
+        if total_test_results > 0:
+            logger.info("✅ Collections created successfully")
+            logger.info(f"🔍 Test search returned {total_test_results} results from 3 tiers")
+            
+            # Show test results breakdown
+            for tier_name, results in test_results.items():
+                logger.info(f"   {tier_name}: {len(results)} results")
+        else:
+            logger.warning("⚠️ Collections created but test search returned no results")
         
         setup_time = time.time() - start_time
         logger.info(f"⏱️ Hierarchical setup completed in {setup_time:.1f} seconds")
@@ -233,18 +242,22 @@ def main():
         print("\n" + "=" * 60)
         print("🎉 HIERARCHICAL SYSTEM SETUP COMPLETED SUCCESSFULLY!")
         print("=" * 60)
-        print("✅ Collections created:")
-        print("   - tier1_pattern_recognition")
-        print("   - tier2_hypothesis_testing")
-        print("   - tier3_confirmation")
-        print("🔬 You can now run: python src/evaluation/run_evaluation.py --quick --models hierarchical_system")
+        print("✅ Collections created with proper tier distribution:")
+        print("   - tier1_pattern_recognition (Drug information)")
+        print("   - tier2_hypothesis_testing (Clinical guidelines)")
+        print("   - tier3_confirmation (Clinical outcomes)")
+        print("")
+        print("🔬 Ready for evaluation!")
+        print("   python src/evaluation/run_evaluation.py --quick --models hierarchical_system")
         print("=" * 60)
     else:
         print("\n" + "=" * 60)
         print("❌ HIERARCHICAL SYSTEM SETUP FAILED!")
         print("=" * 60)
-        print("🔧 Check the logs above for specific errors")
-        print("💡 Try running with sample data or check foundation data availability")
+        print("🔧 Common fixes:")
+        print("   1. Run: python fetch_foundation_data.py --max-results 3000")
+        print("   2. Check that data/foundation/foundation_medical_data.json exists")
+        print("   3. Ensure Ollama is running: ollama serve")
         print("=" * 60)
         sys.exit(1)
 
