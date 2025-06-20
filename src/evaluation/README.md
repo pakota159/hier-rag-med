@@ -35,4 +35,4 @@ python src/evaluation/run_evaluation.py --quick --models kg_system
 python src/evaluation/run_evaluation.py --quick --models hierarchical_system
 
 # Full test
-python src/evaluation/run_evaluation.py --full --models hierarchical_system
+python src/evaluation/run_evaluation.py --models hierarchical_system
