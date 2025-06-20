@@ -1,78 +1,10 @@
-# GPU RunPod Configuration - Primary Config for RTX 4090
-# Optimized for high-performance evaluation on RunPod infrastructure
+# src/evaluation/configs/gpu_runpod_config.yaml
+# Updated GPU RunPod Configuration - PubMedQA Disabled (Already in MIRAGE)
 
-# Platform identification
-platform: "RunPod GPU"
-environment: "production"
-gpu_optimized: true
-
-# Results and data directories
-results_dir: "evaluation/results"
-data_dir: "data"
-cache_dir: "evaluation/cache"
-logs_dir: "evaluation/logs"
-
-# GPU-optimized model configurations
-models:
-  embedding:
-    name: "sentence-transformers/all-MiniLM-L6-v2"
-    device: "cuda"
-    batch_size: 128  # RTX 4090 optimization (up from 16)
-    max_length: 512
-    normalize_embeddings: true
-    trust_remote_code: false
-    
-  llm:
-    name: "mistral:7b-instruct"
-    device: "cuda"
-    batch_size: 32  # RTX 4090 optimization (up from 8)
-    temperature: 0.7
-    context_window: 4096
-    max_new_tokens: 512
-    do_sample: false
-    
-  # Model system configurations
-  kg_system:
-    enabled: true
-    device: "cuda"
-    memory_efficient: true
-    compile_model: true  # PyTorch 2.0 compilation
-    mixed_precision: true  # FP16 for speed
-    gradient_checkpointing: false  # Disabled for inference
-    
-  hierarchical_system:
-    enabled: true
-    device: "cuda"
-    memory_efficient: true
-    compile_model: true
-    mixed_precision: true
-    gradient_checkpointing: false
-
-# GPU performance optimizations
-performance:
-  # GPU-specific settings
-  use_gpu_acceleration: true
-  mixed_precision: true
-  compile_models: true
-  memory_efficient: true
-  
-  # CUDA optimizations
-  cuda_deterministic: false  # Faster but non-deterministic
-  cuda_benchmark: true  # Optimize for consistent input sizes
-  
-  # Memory management
-  gpu_memory_fraction: 0.85  # Use 85% of 24GB = ~20GB
-  memory_growth: true
-  allow_memory_growth: true
-  
-  # Batch processing
-  parallel_processing: true
-  max_workers: 4
-  prefetch_factor: 2
-  
-  # Caching
-  enable_model_cache: true
-  enable_result_cache: true
+# General settings
+enable_result_cache: true
+max_memory_usage: 0.9  # Use 90% of available GPU memory
+precision: "float16"   # Use mixed precision for GPU optimization
 
 # Benchmark configurations with GPU optimization
 benchmarks:
@@ -88,13 +20,17 @@ benchmarks:
     quick_eval_samples: 100  # For quick testing
     
     # Evaluation parameters
-    metrics: ["accuracy", "f1", "precision", "recall"]
-    target_accuracy: 0.75
+    metrics: ["accuracy", "f1", "precision", "recall", "clinical_accuracy"]
+    target_accuracy: 0.74
     
     # GPU-specific optimizations
     prefetch_batches: 2
     num_workers: 4
     pin_memory: true
+    
+    # MIRAGE-specific QADataset integration
+    use_official_dataset: true
+    dataset_source: "https://github.com/Teddy-XiongGZ/MIRAGE"
     
   medreason:
     enabled: true
@@ -108,33 +44,20 @@ benchmarks:
     quick_eval_samples: 50
     
     # Evaluation parameters
-    metrics: ["accuracy", "reasoning_score", "consistency"]
-    target_accuracy: 0.72
+    metrics: ["accuracy", "reasoning_score", "consistency", "reasoning_chain_quality"]
+    target_accuracy: 0.71
     
     # GPU-specific optimizations
     prefetch_batches: 2
     num_workers: 4
     pin_memory: true
     
+  # PubMedQA DISABLED - Already included in MIRAGE benchmark
   pubmedqa:
-    enabled: true
+    enabled: false  # DISABLED: Already covered by MIRAGE
     name: "PubMedQA"
-    data_path: "data/benchmarks/pubmedqa"
-    cache_file: "pubmedqa_benchmark.json"
-    
-    # GPU-optimized settings
-    batch_size: 64  # Large batch for high throughput
-    max_samples: null
-    quick_eval_samples: 200
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "bleu", "rouge"]
-    target_accuracy: 0.76
-    
-    # GPU-specific optimizations
-    prefetch_batches: 3
-    num_workers: 6
-    pin_memory: true
+    disabled_reason: "PubMedQA questions are already included in the MIRAGE benchmark"
+    alternative: "Use MIRAGE benchmark which includes PubMedQA-style research questions"
     
   msmarco:
     enabled: true
@@ -148,171 +71,41 @@ benchmarks:
     quick_eval_samples: 1000
     
     # Evaluation parameters
-    metrics: ["ndcg@10", "map", "mrr", "recall@100"]
-    target_ndcg: 0.32
+    metrics: ["mrr", "ndcg", "recall_at_k", "precision_at_k"]
+    target_mrr: 0.35
     
     # GPU-specific optimizations
-    prefetch_batches: 4
-    num_workers: 8
+    prefetch_batches: 3
+    num_workers: 6
     pin_memory: true
 
-# Evaluation orchestration
-evaluation:
-  # Execution strategy
-  parallel_benchmarks: false  # Sequential for memory management
-  parallel_models: false      # Sequential for stability
-  
-  # Progress tracking
-  enable_progress_tracking: true
-  save_intermediate_results: true
-  checkpoint_frequency: 2  # Save every 2 benchmarks
-  
-  # Error handling
-  continue_on_error: true
-  max_retries: 3
-  retry_delay: 5  # seconds
-  
-  # Timeouts (in seconds)
-  benchmark_timeout: 3600  # 1 hour per benchmark
-  model_timeout: 1800      # 30 minutes per model
-  
-  # Memory management
+# System configurations
+systems:
+  kg_system:
+    enabled: true
+    name: "Knowledge Graph Enhanced RAG"
+    model_path: "models/kg_enhanced"
+    
+  hierarchical_system:
+    enabled: true
+    name: "Hierarchical Diagnostic RAG"
+    model_path: "models/hierarchical"
+
+# GPU memory management
+memory_management:
   clear_cache_between_benchmarks: true
-  clear_cache_between_models: true
-  force_garbage_collection: true
-
-# Logging configuration
-logging:
-  level: "INFO"
-  format: "%(asctime)s | %(levelname)-8s | GPU | %(message)s"
-  
-  # File logging
-  log_to_file: true
-  log_file: "evaluation/logs/gpu_evaluation.log"
-  max_log_size: "100MB"
-  backup_count: 5
-  
-  # Console logging
-  log_to_console: true
-  console_level: "INFO"
-  
-  # GPU-specific logging
-  log_gpu_stats: true
-  gpu_stats_interval: 30  # seconds
-  
-  # Performance logging
-  log_timing: true
-  log_memory_usage: true
-  log_batch_sizes: true
-
-# Monitoring and metrics
-monitoring:
-  # GPU monitoring
-  enable_gpu_monitoring: true
-  gpu_poll_interval: 10  # seconds
-  log_gpu_memory: true
-  log_gpu_utilization: true
-  
-  # Performance monitoring
-  track_inference_time: true
-  track_memory_usage: true
-  track_throughput: true
-  
-  # Alerts (for long-running evaluations)
-  enable_alerts: false
-  memory_threshold: 0.9  # Alert at 90% GPU memory
-  time_threshold: 7200   # Alert after 2 hours
+  gradient_checkpointing: true
+  mixed_precision: true
+  max_sequence_length: 2048
 
 # Output configuration
 output:
-  # Results format
-  save_format: "json"
-  include_metadata: true
-  include_gpu_stats: true
-  include_timing_data: true
+  save_detailed_results: true
+  generate_visualizations: true
+  export_formats: ["json", "csv", "html"]
   
-  # Compression
-  compress_results: true
-  compression_level: 6
-  
-  # Backup
-  create_backups: true
-  backup_count: 3
-  
-  # Reports
-  generate_html_report: true
-  generate_pdf_report: false  # Disable for faster processing
-  include_visualizations: true
-
-# RunPod-specific settings
-runpod:
-  # Container settings
-  container_name: "hierragmed-gpu-eval"
-  
-  # Network configuration
-  expose_ports: [8501]  # Streamlit port
-  
-  # Volume mounts
-  data_volume: "/workspace/data"
-  results_volume: "/workspace/results"
-  logs_volume: "/workspace/logs"
-  
-  # Environment variables
-  environment:
-    CUDA_VISIBLE_DEVICES: "0"
-    PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:512"
-    TOKENIZERS_PARALLELISM: "false"
-    OMP_NUM_THREADS: "8"
-    
-  # Resource limits
-  gpu_memory_limit: "22GB"  # Leave 2GB buffer
-  cpu_memory_limit: "30GB"
-  
-  # Startup configuration
-  warmup_models: true
-  preload_data: true
-  verify_gpu: true
-
-# Development and debugging
-debug:
-  # Debug modes
-  enable_debug: false
-  verbose_logging: false
-  profile_memory: false
-  profile_time: false
-  
-  # Testing
-  dry_run: false
-  sample_data_only: false
-  skip_model_loading: false
-  
-  # GPU debugging
-  check_cuda_errors: true
-  log_cuda_calls: false
-  memory_debug: false
-
-# Streamlit configuration for RunPod
-streamlit:
-  # Server settings
-  server:
-    address: "0.0.0.0"
-    port: 8501
-    enableXsrfProtection: false
-    enableCORS: true
-    
-  # UI settings
-  theme:
-    base: "dark"
-    primaryColor: "#FF6B6B"
-    backgroundColor: "#0E1117"
-    secondaryBackgroundColor: "#262730"
-    textColor: "#FAFAFA"
-    
-  # Performance
-  maxUploadSize: 200  # MB
-  maxMessageSize: 200  # MB
-  
-  # GPU-specific UI
-  show_gpu_metrics: true
-  refresh_interval: 5  # seconds
-  enable_real_time_monitoring: true
+# Performance monitoring
+monitoring:
+  track_gpu_usage: true
+  log_memory_usage: true
+  benchmark_timing: true

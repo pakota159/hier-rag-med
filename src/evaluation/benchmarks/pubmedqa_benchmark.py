@@ -1,126 +1,73 @@
+# src/evaluation/benchmarks/pubmedqa_benchmark.py
 """
-Enhanced PubMedQA Benchmark with Real Dataset Loading - FIXED VERSION
+PubMedQA Benchmark - DISABLED
+This benchmark has been disabled because PubMedQA questions are already included in the MIRAGE benchmark.
 """
-
-import re
-import json
-import sys
-import numpy as np
-from pathlib import Path
-from typing import Dict, List, Any
 
 from .base_benchmark import BaseBenchmark
 from loguru import logger
+from typing import Dict, List, Any
 
-from src.evaluation.data.data_loader import BenchmarkDataLoader
-
-# Add project root to path for data loader import
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
 
 class PubMedQABenchmark(BaseBenchmark):
-    """PubMedQA benchmark with real dataset loading."""
+    """
+    PubMedQA benchmark - DISABLED.
+    
+    This benchmark is disabled because:
+    1. PubMedQA questions are already included in the MIRAGE benchmark
+    2. MIRAGE provides a more comprehensive evaluation covering both clinical reasoning and research questions
+    3. Avoiding duplicate evaluation of the same question types
+    
+    Use MIRAGE benchmark instead for research literature QA evaluation.
+    """
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.name = "PubMedQA"
-        self.data_loader = BenchmarkDataLoader(config)
+        self.name = "PubMedQA (DISABLED)"
+        self.disabled = True
+        self.disabled_reason = "PubMedQA questions are already included in the MIRAGE benchmark"
         
-        # Initialize evaluation models
-        self.similarity_model = None
-        self._init_evaluation_models()
+        logger.warning("⚠️ PubMedQA benchmark is DISABLED")
+        logger.info("   Reason: Questions already covered by MIRAGE benchmark")
+        logger.info("   Alternative: Use MIRAGE benchmark for research literature evaluation")
     
     def load_dataset(self) -> List[Dict]:
-        """Load PubMedQA dataset using centralized data loader."""
-        logger.info(f"🔄 Loading PubMedQA dataset using data loader...")
-        
-        try:
-            # FIXED: Proper unlimited sample handling
-            if self.is_unlimited or self.sample_size is None:
-                max_samples_param = None  # Unlimited
-                logger.info(f"   📊 PubMedQA: Loading FULL dataset (unlimited)")
-            else:
-                max_samples_param = self.sample_size
-                logger.info(f"   📊 PubMedQA: Loading LIMITED dataset ({self.sample_size} samples)")
-            
-            # Use the centralized data loader
-            data = self.data_loader.load_benchmark_data(
-                benchmark_name="pubmedqa",
-                split="test",
-                max_samples=max_samples_param  # FIXED: Use proper parameter
-            )
-            
-            if data and len(data) > 0:
-                # Convert to PubMedQA format if needed
-                formatted_data = []
-                for item in data:
-                    formatted_item = {
-                        "id": item.get("question_id", item.get("id", f"pubmedqa_{len(formatted_data)}")),
-                        "question": item.get("question", ""),
-                        "answer": item.get("answer", ""),
-                        "context": item.get("context", ""),
-                        "reasoning_type": item.get("reasoning_type", "research_question"),
-                        "medical_specialty": item.get("medical_specialty", "general")
-                    }
-                    formatted_data.append(formatted_item)
-                
-                logger.info(f"✅ Loaded {len(formatted_data)} PubMedQA questions via data loader")
-                return formatted_data
-            else:
-                raise ConnectionError("Failed to load PubMedQA benchmark data. Please check your internet connection and the data source.")
-            
-        except Exception as e:
-            logger.error(f"❌ Data loader failed for PubMedQA: {e}")
-            raise e
+        """Return empty dataset as this benchmark is disabled."""
+        logger.error("❌ PubMedQA benchmark is disabled - use MIRAGE instead")
+        return []
     
-    def _init_evaluation_models(self):
-        """Initialize models for evaluation."""
-        try:
-            from sentence_transformers import SentenceTransformer
-            self.similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
-        except ImportError:
-            logger.warning("sentence-transformers not available for similarity scoring")
-            self.similarity_model = None
-    
-    def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[Dict]) -> Dict:
-        """Evaluate a model response against ground truth."""
-        expected_answer = question.get("answer", "")
-        
-        # Basic exact match
-        exact_match = response.lower().strip() == expected_answer.lower().strip()
-        
-        # Semantic similarity if model available
-        semantic_score = 0.0
-        if self.similarity_model and expected_answer:
-            try:
-                embeddings = self.similarity_model.encode([response, expected_answer])
-                semantic_score = float(np.dot(embeddings[0], embeddings[1]) / 
-                                     (np.linalg.norm(embeddings[0]) * np.linalg.norm(embeddings[1])))
-            except:
-                semantic_score = 0.0
-        
-        # Evidence quality scoring
-        evidence_score = self._score_evidence_quality(response, question)
-        
-        # Overall score
-        score = (exact_match * 0.4 + semantic_score * 0.4 + evidence_score * 0.2)
-        
+    def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[str]) -> Dict[str, Any]:
+        """Return empty evaluation as this benchmark is disabled."""
+        logger.error("❌ PubMedQA evaluation disabled - use MIRAGE instead")
         return {
-            "score": score,
-            "correct": exact_match or semantic_score > 0.8,
-            "exact_match": exact_match,
-            "semantic_similarity": semantic_score,
-            "evidence_quality": evidence_score,
-            "reasoning_type": question.get("reasoning_type", "research_question")
+            "error": "PubMedQA benchmark is disabled",
+            "reason": self.disabled_reason,
+            "alternative": "Use MIRAGE benchmark for research literature evaluation",
+            "overall_score": 0.0
         }
     
-    def _score_evidence_quality(self, response: str, question: Dict) -> float:
-        """Score evidence quality in response."""
-        # Research quality indicators
-        quality_terms = ["study", "evidence", "research", "trial", "meta-analysis", 
-                        "systematic", "peer-reviewed", "published", "data", "results"]
-        
-        response_lower = response.lower()
-        term_count = sum(1 for term in quality_terms if term in response_lower)
-        
-        return min(term_count / 5.0, 1.0)  # Normalize to 0-1
+    def get_evaluation_summary(self, results: List[Dict]) -> Dict[str, Any]:
+        """Return disabled status summary."""
+        return {
+            "benchmark": "PubMedQA",
+            "status": "DISABLED",
+            "reason": self.disabled_reason,
+            "alternative": "MIRAGE benchmark includes PubMedQA-style research questions",
+            "total_questions": 0,
+            "message": "Use MIRAGE benchmark for comprehensive medical QA evaluation including research literature"
+        }
+    
+    @staticmethod
+    def is_enabled() -> bool:
+        """Return False as this benchmark is disabled."""
+        return False
+    
+    @staticmethod
+    def get_alternative() -> str:
+        """Return alternative benchmark recommendation."""
+        return "MIRAGE"
+    
+    @staticmethod
+    def get_disable_reason() -> str:
+        """Return reason for disabling."""
+        return "PubMedQA questions are already included in the MIRAGE benchmark"

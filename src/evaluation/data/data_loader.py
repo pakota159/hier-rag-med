@@ -1,6 +1,7 @@
+# src/evaluation/data/data_loader.py
 """
-Updated BenchmarkDataLoader with Official MIRAGE Support
-Integrates with the real MIRAGE benchmark dataset
+Updated BenchmarkDataLoader with Official MIRAGE QADataset Support
+Integrates with src.utils.QADataset and disables PubMedQA (already in MIRAGE)
 """
 
 import json
@@ -13,9 +14,18 @@ import tempfile
 from datasets import load_dataset
 import yaml
 
+# Import official MIRAGE QADataset utility
+try:
+    from mirage.src.utils import QADataset
+    MIRAGE_UTILS_AVAILABLE = True
+    logger.info("✅ Successfully imported QADataset from src.utils")
+except ImportError:
+    MIRAGE_UTILS_AVAILABLE = False
+    logger.warning("⚠️ QADataset from src.utils not available - using fallback implementation")
+
 
 class BenchmarkDataLoader:
-    """Load benchmark datasets for medical RAG evaluation - Updated with real MIRAGE."""
+    """Load benchmark datasets for medical RAG evaluation - Updated with MIRAGE QADataset integration."""
     
     def __init__(self, config: Dict):
         """Initialize benchmark data loader."""
@@ -24,17 +34,19 @@ class BenchmarkDataLoader:
         self.cache_dir = self.data_dir / "cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # Updated dataset configurations with real sources
+        # Updated dataset configurations with MIRAGE QADataset integration
         self.dataset_configs = {
             "mirage": {
-                "source": "github",
+                "source": "official_qadataset",  # Use official QADataset first
+                "fallback_source": "github",
                 "dataset_name": "MIRAGE",
                 "url": "https://raw.githubusercontent.com/Teddy-XiongGZ/MIRAGE/main/benchmark.json",
                 "backup_urls": [
                     "https://github.com/Teddy-XiongGZ/MIRAGE/raw/main/benchmark.json"
                 ],
                 "file_format": "json",
-                "cache_file": "mirage_official_data.json"
+                "cache_file": "mirage_official_data.json",
+                "use_qadataset": True
             },
             "medreason": {
                 "source": "huggingface", 
@@ -46,15 +58,12 @@ class BenchmarkDataLoader:
                 "file_format": "json",
                 "cache_file": "medreason_data.json"
             },
+            # PubMedQA DISABLED - Already included in MIRAGE
             "pubmedqa": {
-                "source": "huggingface",
-                "dataset_name": "qiaojin/PubMedQA",
-                "config": "pqa_labeled",
-                "backup_sources": [
-                    "pubmed_qa"
-                ],
-                "file_format": "json", 
-                "cache_file": "pubmedqa_data.json"
+                "enabled": False,
+                "disabled_reason": "PubMedQA questions are already included in MIRAGE benchmark",
+                "alternative": "Use MIRAGE benchmark for research literature QA",
+                "cache_file": "pubmedqa_disabled.json"
             },
             "msmarco": {
                 "source": "huggingface",
@@ -70,13 +79,21 @@ class BenchmarkDataLoader:
     
     def load_benchmark_data(self, benchmark_name: str, split: str = "train", 
                           max_samples: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Load data for a specific benchmark - Updated with real MIRAGE support."""
+        """Load data for a specific benchmark - Updated with MIRAGE QADataset support."""
         logger.info(f"📚 Loading {benchmark_name} benchmark data...")
         
         if benchmark_name not in self.dataset_configs:
             raise ValueError(f"Unknown benchmark: {benchmark_name}")
         
         config = self.dataset_configs[benchmark_name]
+        
+        # Check if benchmark is disabled (like PubMedQA)
+        if not config.get("enabled", True):
+            logger.warning(f"⚠️ {benchmark_name} benchmark is DISABLED")
+            logger.info(f"   Reason: {config.get('disabled_reason', 'Not specified')}")
+            logger.info(f"   Alternative: {config.get('alternative', 'Use another benchmark')}")
+            return []
+        
         cache_file = self.cache_dir / config["cache_file"]
         
         # Try to load from cache first
@@ -86,11 +103,13 @@ class BenchmarkDataLoader:
         
         # Load from source based on benchmark type
         if benchmark_name == "mirage":
-            data = self._load_official_mirage_data()
+            data = self._load_mirage_with_qadataset(split)
         elif benchmark_name == "medreason":
             data = self._load_medreason_data_fixed(split)
         elif benchmark_name == "pubmedqa":
-            data = self._load_pubmedqa_data_fixed(split)
+            # PubMedQA is disabled
+            logger.error("❌ PubMedQA is disabled - use MIRAGE instead")
+            return []
         elif benchmark_name == "msmarco":
             data = self._load_msmarco_data_fixed(split)
         else:
@@ -108,197 +127,107 @@ class BenchmarkDataLoader:
         logger.info(f"   ✅ Loaded {len(data)} samples for {benchmark_name}")
         return data
 
-    def _load_official_mirage_data(self) -> List[Dict[str, Any]]:
-        """Load official MIRAGE benchmark from GitHub repository."""
-        config = self.dataset_configs["mirage"]
+    def _load_mirage_with_qadataset(self, split: str = "test") -> List[Dict[str, Any]]:
+        """Load MIRAGE data using official QADataset utility."""
+        logger.info("📚 Loading MIRAGE using official QADataset...")
         
-        # Try primary and backup URLs
+        try:
+            # Try official QADataset first
+            if MIRAGE_UTILS_AVAILABLE:
+                logger.info("   🎯 Using official QADataset from src.utils")
+                qa_dataset = QADataset(
+                    dataset_name="mirage",
+                    split=split,
+                    cache_dir=str(self.cache_dir)
+                )
+                
+                raw_data = qa_dataset.load_data()
+                
+                if raw_data:
+                    # Process into standardized format
+                    processed_data = []
+                    for idx, item in enumerate(raw_data):
+                        processed_item = {
+                            "question_id": item.get("id", f"mirage_{idx}"),
+                            "question": item.get("question", ""),
+                            "context": item.get("context", ""),
+                            "answer": item.get("answer", ""),
+                            "explanation": item.get("explanation", ""),
+                            "options": item.get("options", []),
+                            "question_type": item.get("question_type", "multiple_choice"),
+                            "medical_specialty": item.get("medical_specialty", "general_medicine"),
+                            "reasoning_type": item.get("reasoning_type", "clinical_reasoning"),
+                            "difficulty": item.get("difficulty", "medium"),
+                            "benchmark": "mirage",
+                            "source": "official_qadataset"
+                        }
+                        processed_data.append(processed_item)
+                    
+                    logger.info(f"   ✅ Loaded {len(processed_data)} MIRAGE samples using QADataset")
+                    return processed_data
+                else:
+                    logger.warning("   ⚠️ QADataset returned empty data, falling back to manual loading")
+            
+            # Fallback to manual loading
+            return self._load_official_mirage_data_fallback()
+            
+        except Exception as e:
+            logger.warning(f"   ⚠️ QADataset loading failed: {e}. Using fallback method.")
+            return self._load_official_mirage_data_fallback()
+    
+    def _load_official_mirage_data_fallback(self) -> List[Dict[str, Any]]:
+        """Fallback method to load MIRAGE data from GitHub repository."""
+        logger.info("   📚 Using fallback MIRAGE data loading from GitHub...")
+        
+        config = self.dataset_configs["mirage"]
         urls_to_try = [config["url"]] + config.get("backup_urls", [])
         
         for url in urls_to_try:
             try:
-                logger.info(f"   🌐 Downloading MIRAGE from: {url}")
-                
+                logger.info(f"   🔗 Trying URL: {url}")
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 
-                mirage_raw = response.json()
-                logger.info(f"   📋 Downloaded MIRAGE with {len(mirage_raw)} datasets")
+                data = response.json()
                 
-                # Parse and format the MIRAGE data
-                formatted_data = []
+                if isinstance(data, list):
+                    raw_questions = data
+                elif isinstance(data, dict):
+                    # Handle different JSON structures
+                    raw_questions = data.get("questions", data.get("data", []))
+                else:
+                    logger.warning(f"   ⚠️ Unexpected data format from {url}")
+                    continue
                 
-                # MIRAGE contains 5 sub-datasets
-                for dataset_name, questions in mirage_raw.items():
-                    logger.info(f"   📊 Processing {dataset_name}: {len(questions)} questions")
+                if raw_questions:
+                    # Process into standardized format
+                    processed_data = []
+                    for idx, item in enumerate(raw_questions):
+                        processed_item = {
+                            "question_id": item.get("id", f"mirage_fallback_{idx}"),
+                            "question": item.get("question", item.get("query", "")),
+                            "context": item.get("context", item.get("background", "")),
+                            "answer": item.get("answer", item.get("correct_answer", "")),
+                            "explanation": item.get("explanation", item.get("rationale", "")),
+                            "options": item.get("options", item.get("choices", [])),
+                            "question_type": "multiple_choice",
+                            "medical_specialty": "general_medicine",
+                            "reasoning_type": "clinical_reasoning",
+                            "difficulty": "medium",
+                            "benchmark": "mirage",
+                            "source": "github_fallback"
+                        }
+                        processed_data.append(processed_item)
                     
-                    for i, question_data in enumerate(questions):
-                        formatted_item = self._format_mirage_question(question_data, dataset_name, i)
-                        if formatted_item:
-                            formatted_data.append(formatted_item)
+                    logger.info(f"   ✅ Loaded {len(processed_data)} MIRAGE samples from fallback")
+                    return processed_data
                 
-                if len(formatted_data) > 0:
-                    logger.info(f"   ✅ Successfully loaded {len(formatted_data)} MIRAGE questions")
-                    return formatted_data
-                
-            except requests.RequestException as e:
-                logger.debug(f"   ❌ Failed to download from {url}: {e}")
-                continue
-            except json.JSONDecodeError as e:
-                logger.debug(f"   ❌ JSON parsing error from {url}: {e}")
-                continue
             except Exception as e:
-                logger.debug(f"   ❌ Unexpected error from {url}: {e}")
+                logger.debug(f"   Failed to load from {url}: {e}")
                 continue
         
-        # If all downloads fail, return empty list to trigger fallback
-        logger.warning("Could not load official MIRAGE from any source")
+        logger.error("   ❌ All MIRAGE URLs failed")
         return []
-
-    def _format_mirage_question(self, question_data: Dict, dataset_name: str, index: int) -> Dict:
-        """Format a MIRAGE question to our standard format."""
-        try:
-            if not isinstance(question_data, dict):
-                logger.warning(f"   ⚠️ Skipping question {index} from {dataset_name}: not a dictionary")
-                return None
-
-            # Handle different MIRAGE question formats
-            question_id = question_data.get("id", f"{dataset_name}_{index}")
-            question_text = question_data.get("question", "")
-            
-            # Extract answer (different formats in MIRAGE)
-            answer = self._extract_mirage_answer(question_data)
-            
-            # Extract options (different formats in MIRAGE)
-            options = self._extract_mirage_options(question_data)
-            
-            # Determine medical specialty and reasoning type
-            medical_specialty = self._classify_medical_specialty(question_text, dataset_name)
-            reasoning_type = self._classify_reasoning_type(question_text, dataset_name)
-            
-            formatted_item = {
-                "question_id": question_id,
-                "question": question_text,
-                "context": question_data.get("context", ""),
-                "answer": answer,
-                "options": options,
-                "reasoning_type": reasoning_type,
-                "medical_specialty": medical_specialty,
-                "source_dataset": dataset_name,
-                "difficulty": self._assess_question_difficulty(question_text),
-                "question_type": self._get_question_type(dataset_name)
-            }
-            
-            return formatted_item
-            
-        except Exception as e:
-            logger.warning(f"   ⚠️ Failed to format question {index} from {dataset_name}: {e}")
-            return None
-
-    def _extract_mirage_answer(self, question_data: Dict) -> str:
-        """Extract answer from MIRAGE question data."""
-        # Try different answer field names used in MIRAGE
-        answer_fields = ["answer", "target", "final_decision", "correct_answer"]
-        
-        for field in answer_fields:
-            if field in question_data and question_data[field]:
-                answer = question_data[field]
-                if isinstance(answer, str):
-                    return answer.strip()
-                elif isinstance(answer, (int, float)):
-                    return str(answer)
-                elif isinstance(answer, list) and len(answer) > 0:
-                    return str(answer[0])
-        
-        return ""
-
-    def _extract_mirage_options(self, question_data: Dict) -> List[str]:
-        """Extract options from MIRAGE question data."""
-        # Try different option field names used in MIRAGE
-        option_fields = ["options", "choices", "candidates"]
-        
-        for field in option_fields:
-            if field in question_data and question_data[field]:
-                options = question_data[field]
-                if isinstance(options, list):
-                    return [str(opt).strip() for opt in options if opt]
-                elif isinstance(options, dict):
-                    # Handle {"A": "option1", "B": "option2"} format
-                    return [str(val).strip() for val in options.values() if val]
-        
-        return []
-
-    def _classify_medical_specialty(self, question_text: str, dataset_name: str) -> str:
-        """Classify medical specialty based on question content."""
-        question_lower = question_text.lower()
-        
-        # Specialty keywords mapping
-        specialties = {
-            "cardiology": ["heart", "cardiac", "cardiovascular", "ecg", "ekg", "myocardial", "coronary"],
-            "neurology": ["brain", "neuro", "seizure", "stroke", "nervous", "cognitive", "cranial"],
-            "endocrinology": ["diabetes", "hormone", "thyroid", "insulin", "glucose", "endocrine"],
-            "infectious_disease": ["infection", "bacteria", "virus", "antibiotic", "fever", "pathogen"],
-            "oncology": ["cancer", "tumor", "malignant", "chemotherapy", "radiation", "metastasis"],
-            "respiratory": ["lung", "respiratory", "pneumonia", "asthma", "breathing", "pulmonary"],
-            "gastroenterology": ["stomach", "intestine", "liver", "digestive", "gastro", "bowel"],
-            "psychiatry": ["mental", "psychiatric", "depression", "anxiety", "psycho"],
-            "emergency": ["emergency", "trauma", "acute", "urgent", "critical"]
-        }
-        
-        for specialty, keywords in specialties.items():
-            if any(keyword in question_lower for keyword in keywords):
-                return specialty
-        
-        return "general_medicine"
-
-    def _classify_reasoning_type(self, question_text: str, dataset_name: str) -> str:
-        """Classify the type of reasoning required."""
-        question_lower = question_text.lower()
-        
-        # Dataset-based classification
-        if dataset_name == "medqa":
-            return "clinical_reasoning"
-        elif dataset_name == "pubmedqa":
-            return "evidence_based"
-        elif dataset_name == "bioasq":
-            return "factual_retrieval"
-        elif dataset_name == "mmlu":
-            return "knowledge_application"
-        elif dataset_name == "medmcqa":
-            return "examination_recall"
-        
-        # Content-based classification
-        if any(word in question_lower for word in ["diagnose", "differential", "symptom"]):
-            return "diagnostic_reasoning"
-        elif any(word in question_lower for word in ["treatment", "therapy", "management"]):
-            return "therapeutic_reasoning"
-        elif any(word in question_lower for word in ["mechanism", "pathway", "physiology"]):
-            return "mechanistic_reasoning"
-        else:
-            return "factual_recall"
-
-    def _assess_question_difficulty(self, question_text: str) -> str:
-        """Assess question difficulty based on length and complexity."""
-        word_count = len(question_text.split())
-        
-        if word_count > 100:
-            return "hard"
-        elif word_count > 50:
-            return "medium"
-        else:
-            return "easy"
-
-    def _get_question_type(self, dataset_name: str) -> str:
-        """Get question type based on source dataset."""
-        type_mapping = {
-            "mmlu": "multiple_choice_knowledge",
-            "medqa": "clinical_vignette", 
-            "medmcqa": "examination_question",
-            "pubmedqa": "yes_no_maybe",
-            "bioasq": "factual_question"
-        }
-        
-        return type_mapping.get(dataset_name, "general_medical")
 
     def _load_medreason_data_fixed(self, split: str = "train") -> List[Dict[str, Any]]:
         """Load MedReason benchmark data with fallbacks."""
@@ -327,9 +256,11 @@ class BenchmarkDataLoader:
                             "question": item.get("question", item.get("input", "")),
                             "context": item.get("context", item.get("reasoning_chain", "")),
                             "answer": item.get("answer", item.get("target", "")),
+                            "reasoning_chain": item.get("reasoning_chain", []),
                             "reasoning_type": "diagnostic_reasoning",
                             "medical_specialty": "general_medicine",
-                            "explanation": item.get("explanation", "")
+                            "explanation": item.get("explanation", ""),
+                            "benchmark": "medreason"
                         }
                         data.append(formatted_item)
                     
@@ -341,58 +272,11 @@ class BenchmarkDataLoader:
                     logger.debug(f"   Could not load MedReason from {source}: {e}")
                     continue
             
-            logger.warning("Could not load MedReason from HuggingFace")
+            logger.warning("Could not load MedReason from any HuggingFace source")
             return []
             
         except Exception as e:
             logger.error(f"MedReason loading failed: {e}")
-            return []
-
-    def _load_pubmedqa_data_fixed(self, split: str = "train") -> List[Dict[str, Any]]:
-        """Load PubMedQA benchmark data with fallbacks."""
-        try:
-            sources = [
-                ("qiaojin/PubMedQA", "pqa_labeled", split),
-                ("pubmed_qa", "pqa_labeled", split)
-            ]
-            
-            for source, config, split_name in sources:
-                try:
-                    logger.info(f"   Trying PubMedQA source: {source}")
-                    dataset = load_dataset(source, config, split=split_name, trust_remote_code=True)
-                    
-                    data = []
-                    for item in dataset:
-                        # Handle PubMedQA specific format
-                        context_text = ""
-                        if "context" in item and isinstance(item["context"], dict):
-                            contexts = item["context"].get("contexts", [])
-                            context_text = " ".join(contexts) if contexts else ""
-                        
-                        formatted_item = {
-                            "question_id": item.get("pubid", f"pubmedqa_{len(data)}"),
-                            "question": item.get("question", ""),
-                            "context": context_text,
-                            "answer": item.get("final_decision", item.get("answer", "")),
-                            "long_answer": item.get("long_answer", ""),
-                            "reasoning_type": "evidence_based",
-                            "medical_specialty": "biomedical_research"
-                        }
-                        data.append(formatted_item)
-                    
-                    if len(data) > 0:
-                        logger.info(f"   📋 Loaded {len(data)} PubMedQA samples")
-                        return data
-                        
-                except Exception as e:
-                    logger.debug(f"   Could not load PubMedQA from {source}: {e}")
-                    continue
-            
-            logger.warning("Could not load PubMedQA from HuggingFace")
-            return []
-            
-        except Exception as e:
-            logger.error(f"PubMedQA loading failed: {e}")
             return []
 
     def _load_msmarco_data_fixed(self, split: str = "dev") -> List[Dict[str, Any]]:
@@ -415,152 +299,82 @@ class BenchmarkDataLoader:
                         dataset = load_dataset(source, split=split_name, trust_remote_code=True)
                     
                     data = []
-                    medical_count = 0
+                    medical_keywords = [
+                        'health', 'medical', 'disease', 'treatment', 'medicine', 
+                        'doctor', 'hospital', 'patient', 'symptom', 'therapy'
+                    ]
                     
                     for item in dataset:
-                        query = item.get("query", "")
-                        if self._is_medical_query(query):
-                            # Extract passages/context
-                            passages = item.get("passages", {})
-                            passage_texts = passages.get("passage_text", []) if isinstance(passages, dict) else []
-                            context = " ".join(passage_texts) if passage_texts else ""
-                            
-                            # Extract answers
-                            answers = item.get("answers", [])
-                            answer = " ".join(answers) if answers else ""
-                            
+                        query = item.get("query", item.get("question", ""))
+                        
+                        # Filter for medical relevance
+                        if any(keyword in query.lower() for keyword in medical_keywords):
                             formatted_item = {
-                                "question_id": item.get("qid", f"msmarco_{len(data)}"),
-                                "question": query,
-                                "context": context,
-                                "answer": answer,
-                                "reasoning_type": "information_retrieval",
-                                "medical_specialty": "general_medicine"
+                                "question_id": item.get("query_id", f"msmarco_{len(data)}"),
+                                "query": query,
+                                "passages": item.get("passages", []),
+                                "relevant_passages": item.get("relevant_passages", []),
+                                "query_type": "medical_retrieval",
+                                "benchmark": "msmarco"
                             }
                             data.append(formatted_item)
-                            medical_count += 1
                             
-                            if medical_count >= 1000:  # Limit medical samples
+                            # Limit to reasonable size for medical subset
+                            if len(data) >= 5000:
                                 break
                     
                     if len(data) > 0:
-                        logger.info(f"   📋 Loaded {len(data)} MS MARCO medical samples")
+                        logger.info(f"   📋 Loaded {len(data)} medical MS MARCO samples from {source}")
                         return data
                         
                 except Exception as e:
-                    logger.debug(f"   Could not load MS MARCO from {source_info}: {e}")
+                    logger.debug(f"   Could not load MS MARCO from {source}: {e}")
                     continue
             
-            logger.warning("Could not load MS MARCO from HuggingFace")
+            logger.warning("Could not load MS MARCO from any HuggingFace source")
             return []
             
         except Exception as e:
             logger.error(f"MS MARCO loading failed: {e}")
             return []
-
-    def _is_medical_query(self, query: str) -> bool:
-        """Check if a query is medical-related."""
-        medical_keywords = [
-            "disease", "symptom", "treatment", "diagnosis", "medicine", "drug",
-            "patient", "health", "medical", "clinical", "therapy", "cancer",
-            "diabetes", "heart", "blood", "doctor", "hospital", "pain",
-            "infection", "virus", "bacteria", "surgery", "medication"
-        ]
-        query_lower = query.lower()
-        return any(keyword in query_lower for keyword in medical_keywords)
-
+    
     def _load_from_cache(self, cache_file: Path, max_samples: Optional[int] = None) -> List[Dict[str, Any]]:
         """Load data from cache file."""
-        with open(cache_file, 'r') as f:
-            data = json.load(f)
-        
-        if max_samples and len(data) > max_samples:
-            data = data[:max_samples]
-        
-        return data
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if max_samples and len(data) > max_samples:
+                data = data[:max_samples]
+            
+            return data
+        except Exception as e:
+            logger.error(f"Failed to load from cache {cache_file}: {e}")
+            return []
     
-    def _save_to_cache(self, data: List[Dict[str, Any]], cache_file: Path) -> None:
+    def _save_to_cache(self, data: List[Dict[str, Any]], cache_file: Path):
         """Save data to cache file."""
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_file, 'w') as f:
-            json.dump(data, f, indent=2)
-        logger.info(f"   💾 Cached data to {cache_file}")
-
-    def download_all_benchmarks(self, force_refresh: bool = False) -> Dict[str, bool]:
-        """Download and cache all benchmark datasets."""
-        logger.info("🔄 Downloading all medical benchmark datasets...")
-        
-        results = {}
-        
-        for benchmark_name in self.dataset_configs.keys():
-            try:
-                cache_file = self.cache_dir / self.dataset_configs[benchmark_name]["cache_file"]
-                
-                # Skip if cached and not forcing refresh
-                if cache_file.exists() and not force_refresh:
-                    logger.info(f"   ✅ {benchmark_name} already cached")
-                    results[benchmark_name] = True
-                    continue
-                
-                logger.info(f"   🔄 Downloading {benchmark_name}...")
-                
-                # Load dataset
-                data = self.load_benchmark_data(benchmark_name, max_samples=None)
-                
-                if data and len(data) > 0:
-                    logger.info(f"   ✅ Downloaded {len(data)} {benchmark_name} samples")
-                    results[benchmark_name] = True
-                else:
-                    logger.warning(f"   ⚠️ No data loaded for {benchmark_name}")
-                    results[benchmark_name] = False
-                    
-            except Exception as e:
-                logger.error(f"   ❌ Failed to download {benchmark_name}: {e}")
-                results[benchmark_name] = False
-        
-        success_count = sum(results.values())
-        total_count = len(results)
-        logger.info(f"🎉 Downloaded {success_count}/{total_count} benchmarks successfully")
-        
-        return results
-
-    def get_dataset_info(self) -> Dict[str, Dict]:
-        """Get information about all available datasets."""
-        info = {}
-        
-        for benchmark_name, config in self.dataset_configs.items():
-            cache_file = self.cache_dir / config["cache_file"]
-            
-            dataset_info = {
-                "source": config["source"],
-                "dataset_name": config["dataset_name"],
-                "cached": cache_file.exists(),
-                "cache_file": str(cache_file)
-            }
-            
-            if cache_file.exists():
-                try:
-                    with open(cache_file, 'r') as f:
-                        data = json.load(f)
-                    dataset_info["cached_samples"] = len(data)
-                    
-                    # Sample analysis
-                    if data:
-                        sample = data[0]
-                        dataset_info["sample_fields"] = list(sample.keys())
-                        
-                        # Count specialties and reasoning types
-                        specialties = set(item.get("medical_specialty", "unknown") for item in data)
-                        reasoning_types = set(item.get("reasoning_type", "unknown") for item in data)
-                        
-                        dataset_info["medical_specialties"] = list(specialties)
-                        dataset_info["reasoning_types"] = list(reasoning_types)
-                
-                except Exception as e:
-                    dataset_info["error"] = str(e)
-            else:
-                dataset_info["cached_samples"] = 0
-            
-            info[benchmark_name] = dataset_info
-        
-        return info
+        try:
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            logger.info(f"   💾 Cached data to {cache_file}")
+        except Exception as e:
+            logger.warning(f"Failed to cache data: {e}")
+    
+    def get_available_benchmarks(self) -> List[str]:
+        """Get list of available benchmarks."""
+        return [name for name, config in self.dataset_configs.items() 
+                if config.get("enabled", True)]
+    
+    def get_disabled_benchmarks(self) -> Dict[str, str]:
+        """Get list of disabled benchmarks with reasons."""
+        return {
+            name: config.get("disabled_reason", "Unknown reason")
+            for name, config in self.dataset_configs.items()
+            if not config.get("enabled", True)
+        }
+    
+    def is_benchmark_enabled(self, benchmark_name: str) -> bool:
+        """Check if a benchmark is enabled."""
+        config = self.dataset_configs.get(benchmark_name, {})
+        return config.get("enabled", True)
