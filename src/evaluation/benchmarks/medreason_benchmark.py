@@ -77,30 +77,12 @@ class MedReasonBenchmark(BaseBenchmark):
                 
                 logger.info(f"✅ Loaded {len(formatted_data)} MedReason questions via data loader")
                 return formatted_data
-            
+            else:
+                raise ConnectionError("Failed to load MedReason benchmark data. Please check your internet connection and the data source.")
+
         except Exception as e:
             logger.error(f"❌ Data loader failed for MedReason: {e}")
-        
-        # Fallback to minimal synthetic data
-        logger.warning("⚠️ Using minimal fallback dataset for MedReason")
-        return self._generate_minimal_fallback()
-    
-    def _generate_minimal_fallback(self) -> List[Dict]:
-        """Generate minimal fallback dataset if all else fails."""
-        return [
-            {
-                "id": "medreason_fallback_001",
-                "question": "A patient presents with chest pain. What is your diagnostic approach?",
-                "answer": "systematic evaluation including history, ECG, troponins",
-                "reasoning_type": "diagnostic_approach"
-            },
-            {
-                "id": "medreason_fallback_002",
-                "question": "How would you manage acute myocardial infarction?",
-                "answer": "immediate reperfusion therapy, antiplatelet agents, beta-blockers",
-                "reasoning_type": "treatment_planning"
-            }
-        ]
+            raise e
     
     def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[Dict]) -> Dict:
         """Evaluate a model response against ground truth."""

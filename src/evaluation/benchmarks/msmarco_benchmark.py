@@ -66,32 +66,12 @@ class MSMARCOBenchmark(BaseBenchmark):
                 
                 logger.info(f"✅ Loaded {len(formatted_data)} MS MARCO questions via data loader")
                 return formatted_data
-            
+            else:
+                raise ConnectionError("Failed to load MS MARCO benchmark data. Please check your internet connection and the data source.")
+
         except Exception as e:
             logger.error(f"❌ Data loader failed for MS MARCO: {e}")
-        
-        # Fallback to minimal synthetic data
-        logger.warning("⚠️ Using minimal fallback dataset for MS MARCO")
-        return self._generate_minimal_fallback()
-    
-    def _generate_minimal_fallback(self) -> List[Dict]:
-        """Generate minimal fallback dataset if all else fails."""
-        return [
-            {
-                "id": "msmarco_fallback_001",
-                "question": "What are the symptoms of diabetes?",
-                "answer": "Increased thirst, frequent urination, fatigue, blurred vision",
-                "context": "Diabetes mellitus symptoms include polydipsia, polyuria, and fatigue.",
-                "reasoning_type": "information_retrieval"
-            },
-            {
-                "id": "msmarco_fallback_002",
-                "question": "How is hypertension treated?",
-                "answer": "Lifestyle changes, ACE inhibitors, diuretics, calcium channel blockers",
-                "context": "Hypertension treatment includes non-pharmacological and pharmacological approaches.",
-                "reasoning_type": "information_retrieval"
-            }
-        ]
+            raise e
     
     def _init_evaluation_models(self):
         """Initialize models for evaluation."""

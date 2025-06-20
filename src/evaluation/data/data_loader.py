@@ -337,12 +337,12 @@ class BenchmarkDataLoader:
                     logger.debug(f"   Could not load MedReason from {source}: {e}")
                     continue
             
-            logger.warning("Could not load MedReason from HuggingFace, generating synthetic dataset")
-            return self._generate_synthetic_medreason_data()
+            logger.warning("Could not load MedReason from HuggingFace")
+            return []
             
         except Exception as e:
             logger.error(f"MedReason loading failed: {e}")
-            return self._generate_synthetic_medreason_data()
+            return []
 
     def _load_pubmedqa_data_fixed(self, split: str = "test") -> List[Dict[str, Any]]:
         """Load PubMedQA benchmark data with fallbacks."""
@@ -384,12 +384,12 @@ class BenchmarkDataLoader:
                     logger.debug(f"   Could not load PubMedQA from {source}: {e}")
                     continue
             
-            logger.warning("Could not load PubMedQA from HuggingFace, generating synthetic dataset")
-            return self._generate_synthetic_pubmedqa_data()
+            logger.warning("Could not load PubMedQA from HuggingFace")
+            return []
             
         except Exception as e:
             logger.error(f"PubMedQA loading failed: {e}")
-            return self._generate_synthetic_pubmedqa_data()
+            return []
 
     def _load_msmarco_data_fixed(self, split: str = "dev") -> List[Dict[str, Any]]:
         """Load MS MARCO benchmark data with medical filtering."""
@@ -447,12 +447,12 @@ class BenchmarkDataLoader:
                     logger.debug(f"   Could not load MS MARCO from {source_info}: {e}")
                     continue
             
-            logger.warning("Could not load MS MARCO from HuggingFace, generating synthetic dataset")
-            return self._generate_synthetic_msmarco_data()
+            logger.warning("Could not load MS MARCO from HuggingFace")
+            return []
             
         except Exception as e:
             logger.error(f"MS MARCO loading failed: {e}")
-            return self._generate_synthetic_msmarco_data()
+            return []
 
     def _is_medical_query(self, query: str) -> bool:
         """Check if a query is medical-related."""
@@ -464,56 +464,6 @@ class BenchmarkDataLoader:
         ]
         query_lower = query.lower()
         return any(keyword in query_lower for keyword in medical_keywords)
-
-    def _generate_synthetic_medreason_data(self) -> List[Dict[str, Any]]:
-        """Generate synthetic MedReason dataset."""
-        logger.info("   🏗️ Generating synthetic MedReason dataset...")
-        
-        base_data = [
-            {
-                "question_id": "medreason_synthetic_001",
-                "question": "A 45-year-old patient presents with chest pain and shortness of breath. What is the diagnostic approach?",
-                "context": "Patient has substernal chest pain, diaphoresis, and shortness of breath for 2 hours.",
-                "answer": "Obtain ECG, cardiac enzymes, and chest X-ray to rule out acute coronary syndrome.",
-                "reasoning_type": "diagnostic_reasoning",
-                "medical_specialty": "emergency_medicine",
-                "explanation": "Classic presentation requires immediate cardiac evaluation to exclude MI."
-            }
-        ]
-        return base_data * 100  # Create larger synthetic dataset
-
-    def _generate_synthetic_pubmedqa_data(self) -> List[Dict[str, Any]]:
-        """Generate synthetic PubMedQA dataset."""
-        logger.info("   🏗️ Generating synthetic PubMedQA dataset...")
-        
-        base_data = [
-            {
-                "question_id": "pubmedqa_synthetic_001",
-                "question": "Does metformin reduce cardiovascular risk in diabetic patients?",
-                "context": "Multiple studies have examined metformin's cardiovascular effects in diabetes.",
-                "answer": "yes",
-                "long_answer": "Yes, metformin has been shown to reduce cardiovascular risk in diabetic patients.",
-                "reasoning_type": "evidence_based",
-                "medical_specialty": "endocrinology"
-            }
-        ]
-        return base_data * 100
-
-    def _generate_synthetic_msmarco_data(self) -> List[Dict[str, Any]]:
-        """Generate synthetic MS MARCO medical dataset."""
-        logger.info("   🏗️ Generating synthetic MS MARCO dataset...")
-        
-        base_data = [
-            {
-                "question_id": "msmarco_synthetic_001",
-                "question": "symptoms of diabetes",
-                "context": "Diabetes symptoms include increased thirst, frequent urination, and fatigue.",
-                "answer": "Common diabetes symptoms are polydipsia, polyuria, and unexplained fatigue.",
-                "reasoning_type": "information_retrieval",
-                "medical_specialty": "endocrinology"
-            }
-        ]
-        return base_data * 200
 
     def _load_from_cache(self, cache_file: Path, max_samples: Optional[int] = None) -> List[Dict[str, Any]]:
         """Load data from cache file."""

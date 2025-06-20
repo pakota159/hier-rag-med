@@ -66,32 +66,12 @@ class PubMedQABenchmark(BaseBenchmark):
                 
                 logger.info(f"✅ Loaded {len(formatted_data)} PubMedQA questions via data loader")
                 return formatted_data
+            else:
+                raise ConnectionError("Failed to load PubMedQA benchmark data. Please check your internet connection and the data source.")
             
         except Exception as e:
             logger.error(f"❌ Data loader failed for PubMedQA: {e}")
-        
-        # Fallback to minimal synthetic data
-        logger.warning("⚠️ Using minimal fallback dataset for PubMedQA")
-        return self._generate_minimal_fallback()
-    
-    def _generate_minimal_fallback(self) -> List[Dict]:
-        """Generate minimal fallback dataset if all else fails."""
-        return [
-            {
-                "id": "pubmedqa_fallback_001",
-                "question": "Does metformin reduce cardiovascular mortality in diabetic patients?",
-                "answer": "Yes",
-                "context": "Studies show metformin reduces cardiovascular events in type 2 diabetes.",
-                "reasoning_type": "research_question"
-            },
-            {
-                "id": "pubmedqa_fallback_002",
-                "question": "Is aspirin effective for primary prevention of cardiovascular disease?",
-                "answer": "Yes, with increased bleeding risk",
-                "context": "Meta-analyses demonstrate cardiovascular benefit but increased bleeding risk.",
-                "reasoning_type": "research_question"
-            }
-        ]
+            raise e
     
     def _init_evaluation_models(self):
         """Initialize models for evaluation."""
