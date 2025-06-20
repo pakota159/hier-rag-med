@@ -1,5 +1,5 @@
 """
-Complete MedReason Benchmark implementation with all required methods
+Complete MedReason Benchmark implementation with debugging and proper metrics calculation
 src/evaluation/benchmarks/medreason_benchmark.py
 """
 
@@ -91,12 +91,17 @@ class MedReasonBenchmark(BaseBenchmark):
         
         expected = question.get("answer", "")
         reasoning_type = question.get("reasoning_type", "general")
+        question_id = question.get("id", "unknown")
+        
+        # Debug logging
+        logger.debug(f"Evaluating MedReason question {question_id}")
+        logger.debug(f"Response length: {len(response) if response else 0}")
         
         # Handle empty or None responses
         if not response or not response.strip():
-            logger.warning(f"Empty response for question {question.get('id', 'unknown')}")
+            logger.warning(f"Empty response for question {question_id}")
             return {
-                "question_id": question.get("id"),
+                "question_id": question_id,
                 "score": 0.0,
                 "correct": False,
                 "metrics": {
@@ -130,10 +135,18 @@ class MedReasonBenchmark(BaseBenchmark):
             # Ensure score is between 0 and 1
             overall_score = max(0.0, min(1.0, overall_score))
             
-            return {
-                "question_id": question.get("id"),
-                "score": overall_score * 100,
-                "correct": overall_score > 0.6,
+            # Debug logging
+            logger.debug(f"Question {question_id} scores:")
+            logger.debug(f"  Reasoning: {reasoning_quality:.3f}")
+            logger.debug(f"  Clinical: {clinical_accuracy:.3f}")
+            logger.debug(f"  Diagnostic: {diagnostic_process:.3f}")
+            logger.debug(f"  Knowledge: {knowledge_integration:.3f}")
+            logger.debug(f"  Overall: {overall_score:.3f}")
+            
+            result = {
+                "question_id": question_id,
+                "score": overall_score * 100,  # Convert to percentage
+                "correct": overall_score > 0.6,  # Threshold for "correct"
                 "metrics": {
                     "reasoning_quality": reasoning_quality,
                     "clinical_accuracy": clinical_accuracy, 
@@ -146,10 +159,13 @@ class MedReasonBenchmark(BaseBenchmark):
                 "reasoning_type": reasoning_type
             }
             
+            logger.debug(f"Final result for {question_id}: score={result['score']:.2f}, correct={result['correct']}")
+            return result
+            
         except Exception as e:
-            logger.error(f"Error evaluating MedReason response: {e}")
+            logger.error(f"Error evaluating MedReason response for {question_id}: {e}")
             return {
-                "question_id": question.get("id"),
+                "question_id": question_id,
                 "score": 0.0,
                 "correct": False,
                 "metrics": {
@@ -164,6 +180,76 @@ class MedReasonBenchmark(BaseBenchmark):
                 "reasoning_type": reasoning_type,
                 "error": str(e)
             }
+    
+    def calculate_metrics(self, results: List[Dict]) -> Dict:
+        """Calculate MedReason-specific metrics from evaluation results."""
+        logger.info(f"Calculating metrics for {len(results)} MedReason results")
+        
+        if not results:
+            logger.warning("No results to calculate metrics for MedReason")
+            return {
+                "accuracy": 0.0,
+                "total_questions": 0,
+                "correct_answers": 0,
+                "average_score": 0.0,
+                "reasoning_quality": 0.0,
+                "clinical_accuracy": 0.0,
+                "diagnostic_process": 0.0,
+                "knowledge_integration": 0.0,
+                "benchmark_name": self.name
+            }
+        
+        # Filter out error results
+        valid_results = [r for r in results if "error" not in r and r.get("score") is not None]
+        
+        logger.info(f"Valid results: {len(valid_results)}/{len(results)}")
+        
+        if not valid_results:
+            logger.warning("No valid results for MedReason")
+            return {
+                "accuracy": 0.0,
+                "total_questions": len(results),
+                "correct_answers": 0,
+                "average_score": 0.0,
+                "error_rate": 100.0,
+                "benchmark_name": self.name
+            }
+        
+        # Calculate metrics
+        total_questions = len(valid_results)
+        correct_answers = sum(1 for r in valid_results if r.get("correct", False))
+        accuracy = (correct_answers / total_questions) * 100 if total_questions > 0 else 0.0
+        
+        # Calculate component averages
+        avg_score = np.mean([r.get("score", 0) for r in valid_results])
+        avg_reasoning = np.mean([r.get("metrics", {}).get("reasoning_quality", 0) for r in valid_results])
+        avg_clinical = np.mean([r.get("metrics", {}).get("clinical_accuracy", 0) for r in valid_results])
+        avg_diagnostic = np.mean([r.get("metrics", {}).get("diagnostic_process", 0) for r in valid_results])
+        avg_knowledge = np.mean([r.get("metrics", {}).get("knowledge_integration", 0) for r in valid_results])
+        
+        # Debug logging
+        logger.info(f"MedReason Final Metrics:")
+        logger.info(f"  Accuracy: {accuracy:.2f}%")
+        logger.info(f"  Correct: {correct_answers}/{total_questions}")
+        logger.info(f"  Avg Score: {avg_score:.2f}")
+        logger.info(f"  Reasoning: {avg_reasoning:.3f}")
+        logger.info(f"  Clinical: {avg_clinical:.3f}")
+        
+        metrics = {
+            "accuracy": accuracy,
+            "total_questions": total_questions,
+            "correct_answers": correct_answers,
+            "average_score": avg_score,
+            "reasoning_quality": avg_reasoning,
+            "clinical_accuracy": avg_clinical,
+            "diagnostic_process": avg_diagnostic,
+            "knowledge_integration": avg_knowledge,
+            "failed_questions": len(results) - len(valid_results),
+            "error_rate": ((len(results) - len(valid_results)) / len(results)) * 100 if results else 0.0,
+            "benchmark_name": self.name
+        }
+        
+        return metrics
     
     def _assess_reasoning_quality(self, response: str, reasoning_type: str) -> float:
         """Assess medical reasoning quality based on type."""
