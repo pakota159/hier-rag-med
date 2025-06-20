@@ -101,7 +101,11 @@ def setup_logging(results_dir: str):
 def load_config():
     """Load configuration with optimization."""
     config_loader = ConfigLoader()
-    config = config_loader.load()
+    config = config_loader.load_config()
+    
+    # Convert EvaluationConfig to dictionary for backward compatibility
+    if hasattr(config, 'to_dict'):
+        return config.to_dict()
     return config
 
 
