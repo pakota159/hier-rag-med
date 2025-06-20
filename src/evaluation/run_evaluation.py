@@ -1,41 +1,47 @@
 #!/usr/bin/env python3
 """
-Fixed GPU evaluation script for HierRAGMed.
-Runs real evaluation using actual KG and Hierarchical systems.
+FIXED: HierRAGMed GPU Evaluation Runner
+Corrects the full/quick mode configuration to properly handle unlimited datasets.
 """
 
 import argparse
-import gc
-import os
 import sys
+import os
+import gc
+import json
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
+from datetime import datetime
 
-import torch
+# Import core components
 from loguru import logger
+import torch
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import real evaluation components directly to avoid circular imports
-from src.evaluation.evaluators.kg_evaluator import KGEvaluator
-from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
+from src.evaluation.utils.config_loader import ConfigLoader
 from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
-from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark  
+from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark
 from src.evaluation.benchmarks.pubmedqa_benchmark import PubMedQABenchmark
 from src.evaluation.benchmarks.msmarco_benchmark import MSMARCOBenchmark
+from src.evaluation.evaluators.kg_evaluator import KGEvaluator
+from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
 
 
 def validate_gpu_environment():
     """Validate GPU environment and log details."""
     logger.info("🔍 Validating GPU environment...")
     
-    # Check CUDA availability
     if not torch.cuda.is_available():
-        raise RuntimeError("❌ CUDA not available. GPU evaluation requires CUDA.")
+        logger.warning("⚠️ CUDA not available - running on CPU")
+        return {
+            "gpu_available": False,
+            "device": "cpu",
+            "platform": "Local"
+        }
     
     # Get GPU information
     gpu_count = torch.cuda.device_count()
@@ -46,16 +52,17 @@ def validate_gpu_environment():
     # Check CUDA version
     cuda_version = torch.version.cuda
     
-    # Detect platform (RunPod, local, etc.)
+    # Detect platform
     platform = "RunPod" if "runpod" in os.environ.get("HOSTNAME", "").lower() else "Local"
     
-    logger.info("✅ GPU Environment Validated:")
+    logger.info("✅ GPU Environment:")
     logger.info(f"   GPU: {gpu_name}")
     logger.info(f"   Memory: {gpu_memory:.1f}GB")
     logger.info(f"   CUDA: {cuda_version}")
     logger.info(f"   Platform: {platform}")
     
     return {
+        "gpu_available": True,
         "gpu_count": gpu_count,
         "current_device": current_device,
         "gpu_name": gpu_name,
@@ -66,97 +73,40 @@ def validate_gpu_environment():
 
 
 def setup_gpu_optimization():
-    """Configure GPU optimizations for RTX 4090."""
-    logger.info("🔧 Configuring GPU optimizations...")
-    
-    # Set CUDA device
-    torch.cuda.set_device(0)
-    
-    # Clear GPU cache
+    """Configure GPU optimizations."""
+    if not torch.cuda.is_available():
+        return
+        
+    # Clear cache and optimize GPU settings
     torch.cuda.empty_cache()
-    gc.collect()
-    
-    # Set environment variables for RTX 4090 optimization
-    os.environ.update({
-        "CUDA_VISIBLE_DEVICES": "0",
-        "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:512",
-        "CUDA_LAUNCH_BLOCKING": "0",  # Async CUDA operations
-        "TOKENIZERS_PARALLELISM": "false",
-        "OMP_NUM_THREADS": "8"
-    })
-    
-    # Enable CUDA optimizations for Ampere architecture (RTX 4090)
-    if hasattr(torch.backends.cuda, 'matmul'):
-        torch.backends.cuda.matmul.allow_tf32 = True
-    if hasattr(torch.backends.cudnn, 'allow_tf32'):
-        torch.backends.cudnn.allow_tf32 = True
     if hasattr(torch.backends.cudnn, 'benchmark'):
         torch.backends.cudnn.benchmark = True
     
-    logger.info("✅ GPU optimizations configured")
-
-
-def load_config():
-    """Load evaluation configuration."""
-    return {
-        "results_dir": "evaluation/results",
-        "models": {
-            "kg_system": {
-                "enabled": True,
-                "config_path": "src/kg/config.yaml",
-                "collection_name": "kg_medical_docs"
-            },
-            "hierarchical_system": {
-                "enabled": True,
-                "config_path": "src/basic_reasoning/config.yaml",
-                "collection_names": {
-                    "primary": "primary_symptoms",
-                    "differential": "differential_diagnosis", 
-                    "final": "final_diagnosis"
-                }
-            }
-        },
-        "benchmarks": {
-            "mirage": {"enabled": True, "sample_size": 100},
-            "medreason": {"enabled": True, "sample_size": 100},
-            "pubmedqa": {"enabled": True, "sample_size": 100},
-            "msmarco": {"enabled": True, "sample_size": 100}
-        },
-        "gpu_optimizations": {
-            "batch_size_embedding": 128,
-            "batch_size_llm": 32,
-            "mixed_precision": True,
-            "memory_efficient": True
-        },
-        "logging": {"level": "INFO"}
-    }
+    logger.info("🔥 GPU optimizations applied")
 
 
 def setup_logging(results_dir: str):
-    """Setup evaluation logging."""
-    logs_dir = Path(results_dir) / "logs"
+    """Setup logging for evaluation."""
+    # Create logs directory
+    logs_dir = Path(results_dir).parent / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = logs_dir / f"gpu_evaluation_{timestamp}.log"
+    # Configure loguru
+    log_file = logs_dir / f"evaluation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    logger.add(log_file, format="{time} | {level} | {message}")
     
-    logger.remove()
-    logger.add(
-        sys.stdout, 
-        level="INFO", 
-        format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | GPU | {message}"
-    )
-    logger.add(
-        log_file, 
-        level="INFO", 
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | GPU | {message}"
-    )
-    
-    logger.info(f"📝 GPU evaluation logging initialized: {log_file}")
+    logger.info(f"📝 Logging to: {log_file}")
+
+
+def load_config():
+    """Load configuration with optimization."""
+    config_loader = ConfigLoader()
+    config = config_loader.load()
+    return config
 
 
 def initialize_benchmarks(config: Dict, benchmark_filter: Optional[List[str]] = None):
-    """Initialize real benchmarks."""
+    """Initialize benchmarks with CORRECTED sample size handling."""
     benchmarks = {}
     
     # Available benchmark classes
@@ -179,6 +129,17 @@ def initialize_benchmarks(config: Dict, benchmark_filter: Optional[List[str]] = 
                 logger.info(f"🎯 Initializing {benchmark_name.upper()} benchmark...")
                 benchmark_config = config["benchmarks"][benchmark_name].copy()
                 benchmark_config["name"] = benchmark_name
+                
+                # CRITICAL FIX: Ensure sample_size matches the config intent
+                max_samples = benchmark_config.get("max_samples")
+                if max_samples is None:
+                    # Full dataset mode - remove any sample limits
+                    benchmark_config["sample_size"] = float('inf')  # Unlimited
+                    logger.info(f"   📊 {benchmark_name}: FULL DATASET (unlimited samples)")
+                else:
+                    # Limited sample mode
+                    benchmark_config["sample_size"] = max_samples
+                    logger.info(f"   📊 {benchmark_name}: LIMITED to {max_samples} samples")
                 
                 benchmarks[benchmark_name] = benchmark_classes[benchmark_name](benchmark_config)
                 logger.info(f"✅ {benchmark_name.upper()} benchmark ready")
@@ -227,76 +188,44 @@ def initialize_evaluators(config: Dict, model_filter: Optional[List[str]] = None
     return evaluators
 
 
+def run_benchmark_evaluation(benchmark_name: str, benchmark, evaluators: Dict):
+    """Run a single benchmark against all evaluators."""
+    logger.info(f"🎯 Running {benchmark_name.upper()} benchmark...")
+    
+    benchmark_results = {}
+    questions = benchmark.get_questions()
+    
+    logger.info(f"   📋 Processing {len(questions)} questions for {benchmark_name}")
+    
+    for evaluator_name, evaluator in evaluators.items():
+        try:
+            logger.info(f"   🔄 Evaluating {evaluator_name} on {benchmark_name}...")
+            
+            # Run evaluation
+            results = evaluator.evaluate_benchmark(benchmark, questions)
+            benchmark_results[evaluator_name] = results
+            
+            # Log summary
+            if "metrics" in results:
+                accuracy = results["metrics"].get("accuracy", 0)
+                logger.info(f"   ✅ {evaluator_name}: {accuracy:.1f}% accuracy")
+            
+            # Clear GPU cache between evaluators
+            clear_gpu_cache()
+            
+        except Exception as e:
+            logger.error(f"   ❌ {evaluator_name} failed on {benchmark_name}: {e}")
+            benchmark_results[evaluator_name] = {"error": str(e)}
+    
+    return benchmark_results
+
+
 def clear_gpu_cache():
     """Clear GPU cache between evaluations."""
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
         gc.collect()
-
-
-def monitor_gpu_usage():
-    """Monitor GPU usage during evaluation."""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        
-        return {
-            "allocated_gb": round(allocated, 2),
-            "reserved_gb": round(reserved, 2),
-            "total_gb": round(total, 2),
-            "utilization_percent": round((allocated / total) * 100, 1)
-        }
-    return {}
-
-
-def run_benchmark_evaluation(benchmark_name: str, benchmark, evaluators: Dict):
-    """Run real evaluation on a single benchmark."""
-    logger.info(f"🚀 Running evaluation: {benchmark_name.upper()}")
-    
-    benchmark_results = {
-        "benchmark_name": benchmark_name,
-        "start_time": datetime.now().isoformat(),
-        "models": {}
-    }
-    
-    for model_name, evaluator in evaluators.items():
-        try:
-            logger.info(f"   🔬 Evaluating {model_name} on {benchmark_name}...")
-            
-            # Clear GPU cache before each model
-            clear_gpu_cache()
-            
-            model_start_time = datetime.now()
-            model_results = evaluator.evaluate_benchmark(benchmark)
-            model_end_time = datetime.now()
-            
-            eval_time = (model_end_time - model_start_time).total_seconds()
-            
-            benchmark_results["models"][model_name] = {
-                "results": model_results,
-                "evaluation_time_seconds": eval_time,
-                "gpu_stats": monitor_gpu_usage()
-            }
-            
-            # Log results
-            if "error" not in model_results:
-                accuracy = model_results.get("metrics", {}).get("accuracy", 0)
-                logger.info(f"   ✅ {model_name} completed in {eval_time:.1f}s (Accuracy: {accuracy:.1f}%)")
-            else:
-                logger.warning(f"   ⚠️ {model_name} failed in {eval_time:.1f}s")
-                
-        except Exception as e:
-            logger.error(f"   ❌ {model_name} failed: {e}")
-            benchmark_results["models"][model_name] = {
-                "error": str(e),
-                "status": "failed",
-                "evaluation_time_seconds": 0
-            }
-    
-    benchmark_results["end_time"] = datetime.now().isoformat()
-    return benchmark_results
 
 
 def save_results(results: Dict, results_dir: Path):
@@ -306,7 +235,6 @@ def save_results(results: Dict, results_dir: Path):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_file = results_dir / f"gpu_evaluation_results_{timestamp}.json"
     
-    import json
     with open(results_file, 'w') as f:
         json.dump(results, f, indent=2)
     
@@ -316,7 +244,7 @@ def save_results(results: Dict, results_dir: Path):
 
 def run_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = None, models_filter: Optional[List[str]] = None):
     """
-    Run real GPU evaluation with actual models and benchmarks.
+    FIXED: Run evaluation with proper full/quick mode handling.
     
     Args:
         mode: 'quick' (small sample), 'full' (complete evaluation)
@@ -329,16 +257,23 @@ def run_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = 
     # Load configuration and setup
     config = load_config()
     
-    # Adjust config based on mode
+    # FIXED: Adjust config based on mode with EXPLICIT sample size control
     if mode == "quick":
-        for benchmark_name in config["benchmarks"]:
-            config["benchmarks"][benchmark_name]["sample_size"] = 10
         logger.info("🚀 Quick mode - Running small sample evaluation")
+        for benchmark_name in config["benchmarks"]:
+            # Use quick_eval_samples for quick mode
+            quick_samples = config["benchmarks"][benchmark_name].get("quick_eval_samples", 10)
+            config["benchmarks"][benchmark_name]["max_samples"] = quick_samples
+            logger.info(f"   📊 {benchmark_name}: LIMITED to {quick_samples} samples (quick mode)")
     else:
-        logger.info("🚀 Full mode - Running complete evaluation")
+        logger.info("🚀 Full mode - Running complete evaluation on FULL datasets")
+        for benchmark_name in config["benchmarks"]:
+            # Explicitly set to None for unlimited
+            config["benchmarks"][benchmark_name]["max_samples"] = None
+            logger.info(f"   📊 {benchmark_name}: FULL DATASET (unlimited samples)")
     
     # Setup results directory
-    results_dir = Path(config["results_dir"])
+    results_dir = Path(config.get("results_dir", "evaluation/results"))
     setup_logging(str(results_dir))
     
     # Log start
@@ -360,7 +295,11 @@ def run_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = 
                 "mode": mode,
                 "gpu_info": gpu_info,
                 "benchmarks": list(benchmarks.keys()),
-                "models": list(evaluators.keys())
+                "models": list(evaluators.keys()),
+                "sample_limits": {
+                    name: config["benchmarks"][name].get("max_samples", "unlimited")
+                    for name in benchmarks.keys()
+                }
             },
             "results": {}
         }
@@ -396,8 +335,8 @@ def run_evaluation(mode: str = "full", benchmarks_filter: Optional[List[str]] = 
 
 
 def main():
-    """Main evaluation entry point."""
-    parser = argparse.ArgumentParser(description="HierRAGMed GPU Evaluation")
+    """Main evaluation entry point with FIXED argument handling."""
+    parser = argparse.ArgumentParser(description="HierRAGMed GPU Evaluation - FIXED VERSION")
     parser.add_argument("--mode", choices=["quick", "full"], default="full", 
                         help="Evaluation mode")
     parser.add_argument("--models", nargs="+", 
@@ -424,7 +363,7 @@ def main():
         mode = args.mode
     
     try:
-        logger.info("🎉 Starting HierRAGMed Evaluation")
+        logger.info("🎉 Starting HierRAGMed Evaluation - FIXED VERSION")
         
         results = run_evaluation(
             mode=mode,
@@ -437,37 +376,21 @@ def main():
         print("🎉 EVALUATION COMPLETED SUCCESSFULLY!")
         print("="*60)
         
-        metadata = results["metadata"]
-        print(f"⏱️ Total duration: {metadata.get('total_duration_seconds', 0):.1f} seconds")
-        print(f"🎯 Mode: {metadata.get('mode', 'unknown').upper()}")
-        print(f"🔥 GPU: {metadata.get('gpu_info', {}).get('gpu_name', 'Unknown')}")
-        print(f"📊 Benchmarks: {', '.join(metadata.get('benchmarks', []))}")
-        print(f"🔬 Models: {', '.join(metadata.get('models', []))}")
+        for benchmark_name, benchmark_results in results["results"].items():
+            print(f"\n📊 {benchmark_name.upper()} Results:")
+            for model_name, model_results in benchmark_results.items():
+                if "metrics" in model_results:
+                    accuracy = model_results["metrics"].get("accuracy", 0)
+                    print(f"   {model_name}: {accuracy:.1f}% accuracy")
+                else:
+                    print(f"   {model_name}: ERROR")
         
-        # Print results summary
-        print(f"\n📈 Results Summary:")
-        for benchmark_name, benchmark_data in results["results"].items():
-            if "error" not in benchmark_data:
-                print(f"   • {benchmark_name.upper()}:")
-                for model_name, model_data in benchmark_data.get("models", {}).items():
-                    if "results" in model_data and "error" not in model_data["results"]:
-                        accuracy = model_data["results"].get("metrics", {}).get("accuracy", 0)
-                        eval_time = model_data.get("evaluation_time_seconds", 0)
-                        print(f"     - {model_name}: {accuracy:.1f}% accuracy ({eval_time:.1f}s)")
-                    else:
-                        print(f"     - {model_name}: FAILED")
-            else:
-                print(f"   • {benchmark_name.upper()}: FAILED")
+        print(f"\n💾 Results saved to: evaluation/results/")
+        print("="*60)
         
-        print("\n" + "="*60)
-        
-    except KeyboardInterrupt:
-        logger.warning("⚠️ Evaluation interrupted by user")
-        sys.exit(1)
     except Exception as e:
         logger.error(f"❌ Evaluation failed: {e}")
-        print(f"\n❌ Evaluation failed: {e}")
-        sys.exit(1)
+        raise
 
 
 if __name__ == "__main__":
