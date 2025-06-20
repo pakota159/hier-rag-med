@@ -5,7 +5,8 @@ src/evaluation/benchmarks/medreason_benchmark.py
 
 import re
 import json
-from typing import Dict, List, Any
+import numpy as np
+from typing import Dict, List, Any, Set
 from pathlib import Path
 
 from .base_benchmark import BaseBenchmark
@@ -17,39 +18,67 @@ class MedReasonBenchmark(BaseBenchmark):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "MedReason"
-    
+        
+        # Medical concept patterns for assessment
+        self.medical_patterns = {
+            'symptoms': [
+                'pain', 'fever', 'nausea', 'vomiting', 'diarrhea', 'fatigue', 'weakness',
+                'shortness', 'breath', 'chest pain', 'headache', 'dizziness', 'sweating'
+            ],
+            'conditions': [
+                'diabetes', 'hypertension', 'heart failure', 'myocardial', 'stroke', 'asthma',
+                'copd', 'pneumonia', 'infection', 'cancer', 'arthritis', 'depression'
+            ],
+            'treatments': [
+                'medication', 'therapy', 'surgery', 'treatment', 'management', 'intervention',
+                'antihypertensive', 'antibiotic', 'analgesic', 'insulin', 'metformin'
+            ],
+            'investigations': [
+                'blood test', 'x-ray', 'ct scan', 'mri', 'ecg', 'echo', 'biopsy',
+                'laboratory', 'imaging', 'examination', 'assessment'
+            ]
+        }
+        
+        # Clinical reasoning indicators
+        self.reasoning_indicators = {
+            'systematic': ['systematic', 'step-by-step', 'approach', 'method', 'process'],
+            'differential': ['differential', 'consider', 'rule out', 'exclude', 'possible'],
+            'evidence': ['evidence', 'studies', 'research', 'guidelines', 'literature'],
+            'causality': ['because', 'due to', 'caused by', 'leads to', 'results in']
+        }
+        
     def load_dataset(self) -> List[Dict]:
         """Load MedReason dataset."""
-        # Sample MedReason-style questions
+        # Enhanced MedReason-style questions with better coverage
         sample_data = [
             {
                 "id": "medreason_001",
-                "question": "A patient presents with chest pain. What is your diagnostic approach?",
-                "answer": "systematic evaluation including history, ECG, troponins",
+                "question": "A 55-year-old patient presents with chest pain. What is your systematic diagnostic approach?",
+                "answer": "systematic evaluation including detailed history, physical examination, ECG, cardiac enzymes, chest X-ray",
                 "reasoning_type": "diagnostic_approach"
             },
             {
                 "id": "medreason_002",
-                "question": "How would you manage a patient with acute myocardial infarction?",
-                "answer": "immediate reperfusion therapy, antiplatelet agents, beta-blockers, ACE inhibitors",
+                "question": "How would you manage a patient with acute ST-elevation myocardial infarction?",
+                "answer": "immediate reperfusion therapy, dual antiplatelet therapy, beta-blockers, ACE inhibitors, statin therapy",
                 "reasoning_type": "treatment_planning"
             },
             {
                 "id": "medreason_003", 
-                "question": "What are the differential diagnoses for shortness of breath?",
-                "answer": "heart failure, asthma, COPD, pneumonia, pulmonary embolism",
+                "question": "What are the differential diagnoses for acute shortness of breath in an elderly patient?",
+                "answer": "acute heart failure, pneumonia, COPD exacerbation, pulmonary embolism, pneumothorax",
                 "reasoning_type": "differential_diagnosis"
             },
             {
                 "id": "medreason_004",
                 "question": "Explain the pathophysiology of type 2 diabetes mellitus.",
-                "answer": "insulin resistance leading to beta-cell dysfunction and hyperglycemia",
+                "answer": "insulin resistance in peripheral tissues leading to compensatory hyperinsulinemia, eventual beta-cell dysfunction and relative insulin deficiency",
                 "reasoning_type": "pathophysiology"
             },
             {
                 "id": "medreason_005",
-                "question": "What investigations would you order for suspected stroke?",
-                "answer": "CT brain, blood glucose, ECG, full blood count, coagulation studies",
+                "question": "What investigations would you order for a patient with suspected acute stroke?",
+                "answer": "immediate CT brain, blood glucose, ECG, full blood count, coagulation studies, renal function",
                 "reasoning_type": "investigation_planning"
             }
         ]
@@ -63,78 +92,123 @@ class MedReasonBenchmark(BaseBenchmark):
         expected = question.get("answer", "")
         reasoning_type = question.get("reasoning_type", "general")
         
-        # Calculate reasoning components
-        reasoning_quality = self._assess_reasoning_quality(response, reasoning_type)
-        clinical_accuracy = self._assess_clinical_accuracy(response, expected)
-        diagnostic_process = self._assess_diagnostic_process(response)
-        knowledge_integration = self._assess_knowledge_integration(response, retrieved_docs)
+        # Handle empty or None responses
+        if not response or not response.strip():
+            logger.warning(f"Empty response for question {question.get('id', 'unknown')}")
+            return {
+                "question_id": question.get("id"),
+                "score": 0.0,
+                "correct": False,
+                "metrics": {
+                    "reasoning_quality": 0.0,
+                    "clinical_accuracy": 0.0,
+                    "diagnostic_process": 0.0,
+                    "knowledge_integration": 0.0,
+                    "overall_score": 0.0
+                },
+                "response": response,
+                "expected": expected,
+                "reasoning_type": reasoning_type,
+                "error": "Empty response"
+            }
         
-        # Overall score (weighted combination)
-        overall_score = (
-            reasoning_quality * 0.4 +
-            clinical_accuracy * 0.3 +
-            diagnostic_process * 0.2 +
-            knowledge_integration * 0.1
-        )
-        
-        return {
-            "question_id": question.get("id"),
-            "score": overall_score * 100,
-            "correct": overall_score > 0.6,
-            "metrics": {
-                "reasoning_quality": reasoning_quality,
-                "clinical_accuracy": clinical_accuracy, 
-                "diagnostic_process": diagnostic_process,
-                "knowledge_integration": knowledge_integration,
-                "overall_score": overall_score
-            },
-            "response": response,
-            "expected": expected,
-            "reasoning_type": reasoning_type
-        }
+        try:
+            # Calculate reasoning components
+            reasoning_quality = self._assess_reasoning_quality(response, reasoning_type)
+            clinical_accuracy = self._assess_clinical_accuracy(response, expected)
+            diagnostic_process = self._assess_diagnostic_process(response)
+            knowledge_integration = self._assess_knowledge_integration(response, retrieved_docs)
+            
+            # Overall score (weighted combination)
+            overall_score = (
+                reasoning_quality * 0.4 +
+                clinical_accuracy * 0.3 +
+                diagnostic_process * 0.2 +
+                knowledge_integration * 0.1
+            )
+            
+            # Ensure score is between 0 and 1
+            overall_score = max(0.0, min(1.0, overall_score))
+            
+            return {
+                "question_id": question.get("id"),
+                "score": overall_score * 100,
+                "correct": overall_score > 0.6,
+                "metrics": {
+                    "reasoning_quality": reasoning_quality,
+                    "clinical_accuracy": clinical_accuracy, 
+                    "diagnostic_process": diagnostic_process,
+                    "knowledge_integration": knowledge_integration,
+                    "overall_score": overall_score
+                },
+                "response": response,
+                "expected": expected,
+                "reasoning_type": reasoning_type
+            }
+            
+        except Exception as e:
+            logger.error(f"Error evaluating MedReason response: {e}")
+            return {
+                "question_id": question.get("id"),
+                "score": 0.0,
+                "correct": False,
+                "metrics": {
+                    "reasoning_quality": 0.0,
+                    "clinical_accuracy": 0.0,
+                    "diagnostic_process": 0.0,
+                    "knowledge_integration": 0.0,
+                    "overall_score": 0.0
+                },
+                "response": response,
+                "expected": expected,
+                "reasoning_type": reasoning_type,
+                "error": str(e)
+            }
     
     def _assess_reasoning_quality(self, response: str, reasoning_type: str) -> float:
         """Assess medical reasoning quality based on type."""
+        if not response:
+            return 0.0
+            
         response_lower = response.lower()
+        total_score = 0.0
         
         # Base reasoning indicators
-        base_indicators = {
-            'systematic_approach': ['systematic', 'approach', 'step', 'first', 'next', 'then'],
-            'clinical_thinking': ['consider', 'rule out', 'differential', 'likely', 'unlikely'],
-            'evidence_based': ['evidence', 'studies', 'guidelines', 'literature', 'research'],
-            'medical_knowledge': ['pathophysiology', 'mechanism', 'etiology', 'epidemiology']
-        }
+        base_score = 0.0
+        for category, indicators in self.reasoning_indicators.items():
+            indicator_count = sum(1 for indicator in indicators if indicator in response_lower)
+            category_score = min(indicator_count / 2.0, 1.0)
+            base_score += category_score
+        
+        base_score = base_score / len(self.reasoning_indicators)
+        total_score += base_score * 0.6
         
         # Type-specific indicators
         type_indicators = {
-            'diagnostic_approach': ['history', 'examination', 'investigation', 'diagnosis'],
-            'treatment_planning': ['treatment', 'management', 'therapy', 'medication'],
-            'differential_diagnosis': ['differential', 'consider', 'rule out', 'possibilities'],
-            'pathophysiology': ['mechanism', 'pathway', 'process', 'leads to'],
-            'investigation_planning': ['test', 'investigation', 'imaging', 'laboratory']
+            'diagnostic_approach': ['history', 'examination', 'investigation', 'diagnosis', 'assessment'],
+            'treatment_planning': ['treatment', 'management', 'therapy', 'medication', 'intervention'],
+            'differential_diagnosis': ['differential', 'consider', 'rule out', 'possibilities', 'exclude'],
+            'pathophysiology': ['mechanism', 'pathway', 'process', 'leads to', 'causes'],
+            'investigation_planning': ['test', 'investigation', 'imaging', 'laboratory', 'blood']
         }
         
-        total_score = 0.0
-        
-        # Score base reasoning
-        for category, indicators in base_indicators.items():
-            indicator_count = sum(1 for indicator in indicators if indicator in response_lower)
-            category_score = min(indicator_count / 2, 1.0)
-            total_score += category_score * 0.6  # 60% weight to base reasoning
-        
-        # Score type-specific reasoning
         if reasoning_type in type_indicators:
             indicators = type_indicators[reasoning_type]
             indicator_count = sum(1 for indicator in indicators if indicator in response_lower)
-            type_score = min(indicator_count / 2, 1.0)
-            total_score += type_score * 0.4  # 40% weight to type-specific
+            type_score = min(indicator_count / 3.0, 1.0)
+            total_score += type_score * 0.4
+        else:
+            total_score += 0.3  # Default bonus for unknown types
         
-        return min(total_score / len(base_indicators), 1.0)
+        return min(total_score, 1.0)
     
     def _assess_clinical_accuracy(self, response: str, expected: str) -> float:
         """Assess clinical accuracy using medical concept matching."""
+        if not response:
+            return 0.0
+            
         if not expected:
-            return 0.7  # Default score
+            return 0.5  # Default score when no reference available
         
         response_lower = response.lower()
         expected_lower = expected.lower()
@@ -147,97 +221,131 @@ class MedReasonBenchmark(BaseBenchmark):
             # Fallback to word overlap
             return self._calculate_word_overlap(response_lower, expected_lower)
         
-        # Calculate concept overlap
-        overlap = len(response_concepts.intersection(expected_concepts))
-        accuracy = overlap / len(expected_concepts) if expected_concepts else 0.7
+        # Calculate concept overlap using Jaccard similarity
+        if not response_concepts:
+            return 0.1  # Some credit for effort
+            
+        intersection = len(response_concepts.intersection(expected_concepts))
+        union = len(response_concepts.union(expected_concepts))
         
-        return min(accuracy, 1.0)
+        if union == 0:
+            return 0.5
+            
+        jaccard_similarity = intersection / union
+        
+        # Also consider word-level overlap as fallback
+        word_overlap = self._calculate_word_overlap(response_lower, expected_lower)
+        
+        # Combine both scores
+        combined_score = (jaccard_similarity * 0.7) + (word_overlap * 0.3)
+        
+        return min(combined_score, 1.0)
     
-    def _extract_medical_concepts(self, text: str) -> set:
+    def _extract_medical_concepts(self, text: str) -> Set[str]:
         """Extract medical concepts from text."""
-        # Medical patterns
-        medical_patterns = [
-            r'\b\w*cardio\w*\b', r'\b\w*vascular\w*\b', r'\b\w*diabetes\w*\b',
-            r'\b\w*hypertension\w*\b', r'\b\w*syndrome\w*\b', r'\b\w*disease\w*\b',
-            r'\b\w*therapy\w*\b', r'\b\w*treatment\w*\b', r'\b\w*medication\w*\b'
-        ]
-        
         concepts = set()
-        for pattern in medical_patterns:
-            matches = re.findall(pattern, text, re.IGNORECASE)
-            concepts.update(match.lower() for match in matches)
         
-        # Specific medical terms
-        medical_terms = [
-            'ecg', 'troponin', 'chest pain', 'myocardial infarction', 'heart failure',
-            'insulin', 'glucose', 'metformin', 'beta-blocker', 'ace inhibitor',
-            'pneumonia', 'asthma', 'copd', 'stroke', 'ct scan'
-        ]
+        # Extract concepts from predefined patterns
+        for category, patterns in self.medical_patterns.items():
+            for pattern in patterns:
+                if pattern in text:
+                    concepts.add(pattern)
         
-        for term in medical_terms:
-            if term in text:
-                concepts.add(term)
+        # Extract potential medical terms (words ending in common medical suffixes)
+        medical_suffixes = ['osis', 'itis', 'emia', 'uria', 'pathy', 'ology', 'gram', 'scopy']
+        words = text.split()
+        
+        for word in words:
+            word_clean = re.sub(r'[^\w]', '', word)
+            if len(word_clean) > 4:
+                if any(word_clean.endswith(suffix) for suffix in medical_suffixes):
+                    concepts.add(word_clean)
         
         return concepts
     
     def _calculate_word_overlap(self, response: str, expected: str) -> float:
-        """Calculate word overlap as fallback."""
-        response_words = set(re.findall(r'\b\w+\b', response))
-        expected_words = set(re.findall(r'\b\w+\b', expected))
-        
-        # Remove common words
-        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
-        response_words -= stop_words
-        expected_words -= stop_words
+        """Calculate simple word overlap as fallback measure."""
+        if not response or not expected:
+            return 0.0
+            
+        response_words = set(response.split())
+        expected_words = set(expected.split())
         
         if not expected_words:
-            return 0.7
-        
-        overlap = len(response_words.intersection(expected_words))
-        return overlap / len(expected_words)
+            return 0.5
+            
+        if not response_words:
+            return 0.0
+            
+        intersection = len(response_words.intersection(expected_words))
+        return intersection / len(expected_words)
     
     def _assess_diagnostic_process(self, response: str) -> float:
-        """Assess diagnostic process structure."""
+        """Assess diagnostic reasoning process quality."""
+        if not response:
+            return 0.0
+            
         response_lower = response.lower()
         
-        # Diagnostic process components
-        process_steps = {
-            'history_taking': ['history', 'patient reports', 'presenting', 'onset', 'duration'],
-            'physical_examination': ['examination', 'physical', 'vital signs', 'inspection'],
-            'investigation': ['test', 'laboratory', 'imaging', 'ecg', 'blood', 'x-ray'],
-            'interpretation': ['results', 'findings', 'shows', 'reveals', 'indicates'],
-            'management': ['treatment', 'management', 'therapy', 'medication', 'plan']
-        }
-        
-        step_scores = []
-        for step, keywords in process_steps.items():
-            step_score = sum(1 for keyword in keywords if keyword in response_lower)
-            normalized_score = min(step_score / 2, 1.0)
-            step_scores.append(normalized_score)
-        
-        return sum(step_scores) / len(step_scores)
-    
-    def _assess_knowledge_integration(self, response: str, retrieved_docs: List[Dict]) -> float:
-        """Assess integration of retrieved knowledge."""
-        if not retrieved_docs:
-            return 0.6  # Default if no docs
-        
-        response_lower = response.lower()
-        
-        # Knowledge integration indicators
-        integration_indicators = [
-            'based on', 'according to', 'evidence suggests', 'studies show',
-            'research indicates', 'literature supports', 'guidelines recommend'
+        # Check for systematic diagnostic approach
+        diagnostic_steps = [
+            'history', 'examination', 'investigation', 'differential', 'diagnosis'
         ]
         
-        integration_count = sum(1 for indicator in integration_indicators if indicator in response_lower)
+        step_score = sum(1 for step in diagnostic_steps if step in response_lower)
+        step_score = min(step_score / len(diagnostic_steps), 1.0)
         
-        # Citation patterns
-        citation_patterns = ['study', 'trial', 'research', 'analysis', 'findings']
-        citation_count = sum(1 for pattern in citation_patterns if pattern in response_lower)
+        # Check for clinical reasoning structure
+        structure_indicators = [
+            'first', 'initially', 'then', 'next', 'finally', 'because', 'therefore'
+        ]
+        
+        structure_score = sum(1 for indicator in structure_indicators if indicator in response_lower)
+        structure_score = min(structure_score / 3.0, 1.0)
         
         # Combine scores
-        integration_score = min(integration_count / 2, 1.0)
-        citation_score = min(citation_count / 3, 1.0)
+        total_score = (step_score * 0.6) + (structure_score * 0.4)
         
-        return (integration_score * 0.6 + citation_score * 0.4)
+        return min(total_score, 1.0)
+    
+    def _assess_knowledge_integration(self, response: str, retrieved_docs: List[Dict]) -> float:
+        """Assess how well the response integrates retrieved knowledge."""
+        if not response:
+            return 0.0
+            
+        # Base score for having a response
+        base_score = 0.3
+        
+        # If no retrieved docs, return base score
+        if not retrieved_docs:
+            return base_score
+        
+        response_lower = response.lower()
+        
+        # Check if response mentions concepts from retrieved documents
+        integration_score = 0.0
+        total_docs = len(retrieved_docs)
+        
+        for doc in retrieved_docs[:5]:  # Check top 5 documents
+            doc_content = doc.get('content', '') or doc.get('text', '')
+            if doc_content:
+                doc_lower = doc_content.lower()
+                
+                # Find common words (excluding stop words)
+                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were'}
+                
+                response_words = set(response_lower.split()) - stop_words
+                doc_words = set(doc_lower.split()) - stop_words
+                
+                if response_words and doc_words:
+                    overlap = len(response_words.intersection(doc_words))
+                    doc_integration = overlap / len(response_words)
+                    integration_score += doc_integration
+        
+        if total_docs > 0:
+            integration_score = integration_score / total_docs
+        
+        # Combine base score with integration score
+        final_score = base_score + (integration_score * 0.7)
+        
+        return min(final_score, 1.0)
