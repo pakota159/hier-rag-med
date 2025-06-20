@@ -1,6 +1,5 @@
 """
-Enhanced MedReason Benchmark with Real Dataset Loading
-REPLACE: src/evaluation/benchmarks/medreason_benchmark.py
+Enhanced MedReason Benchmark with Real Dataset Loading - FIXED VERSION
 """
 
 import re
@@ -47,11 +46,19 @@ class MedReasonBenchmark(BaseBenchmark):
         logger.info(f"🔄 Loading MedReason dataset using data loader...")
         
         try:
+            # FIXED: Proper unlimited sample handling
+            if self.is_unlimited or self.sample_size is None:
+                max_samples_param = None  # Unlimited
+                logger.info(f"   📊 MedReason: Loading FULL dataset (unlimited)")
+            else:
+                max_samples_param = self.sample_size
+                logger.info(f"   📊 MedReason: Loading LIMITED dataset ({self.sample_size} samples)")
+            
             # Use the centralized data loader
             data = self.data_loader.load_benchmark_data(
                 benchmark_name="medreason",
                 split="test",
-                max_samples=self.sample_size if self.sample_size < 1000 else None
+                max_samples=max_samples_param  # FIXED: Use proper parameter
             )
             
             if data and len(data) > 0:
@@ -95,338 +102,57 @@ class MedReasonBenchmark(BaseBenchmark):
             }
         ]
     
-    def _generate_comprehensive_medreason_dataset(self) -> List[Dict]:
-        """Generate comprehensive synthetic MedReason dataset."""
-        synthetic_data = []
-        
-        # Reasoning types with question templates
-        reasoning_templates = {
-            "diagnostic_approach": [
-                ("A 65-year-old patient presents with chest pain. What is your systematic diagnostic approach?", "systematic evaluation including detailed history, physical examination, ECG, cardiac enzymes, chest X-ray"),
-                ("How would you approach a patient with acute shortness of breath?", "ABC assessment, history, examination, chest X-ray, arterial blood gas, echocardiogram"),
-                ("What is your diagnostic approach for abdominal pain in elderly patients?", "systematic history, examination, laboratory tests, imaging based on clinical findings"),
-                ("How do you evaluate a patient with headache?", "detailed history, neurological examination, consider imaging if red flags present"),
-                ("What is your approach to fever in immunocompromised patients?", "urgent assessment, cultures, empirical antibiotics, search for source"),
-            ],
-            "treatment_planning": [
-                ("How would you manage a patient with acute ST-elevation myocardial infarction?", "immediate reperfusion therapy, dual antiplatelet therapy, beta-blockers, ACE inhibitors, statin therapy"),
-                ("What is your treatment plan for newly diagnosed type 2 diabetes?", "lifestyle modifications, metformin, glucose monitoring, cardiovascular risk assessment"),
-                ("How do you treat severe asthma exacerbation?", "high-flow oxygen, nebulized bronchodilators, systemic corticosteroids, assess response"),
-                ("What is the management of acute heart failure?", "diuretics, ACE inhibitors, beta-blockers, monitoring fluid balance"),
-                ("How do you treat community-acquired pneumonia?", "antibiotics based on severity, supportive care, oxygen if needed"),
-            ],
-            "differential_diagnosis": [
-                ("What are the differential diagnoses for acute shortness of breath in an elderly patient?", "acute heart failure, pneumonia, COPD exacerbation, pulmonary embolism, pneumothorax"),
-                ("What causes acute abdominal pain in young adults?", "appendicitis, gastroenteritis, peptic ulcer, ovarian cyst, kidney stones"),
-                ("What are the causes of altered mental status?", "hypoglycemia, infection, drug intoxication, stroke, metabolic disorders"),
-                ("What can cause chest pain in young patients?", "musculoskeletal, anxiety, pericarditis, pneumothorax, esophageal spasm"),
-                ("What are causes of acute kidney injury?", "prerenal causes, intrinsic renal disease, postrenal obstruction"),
-            ],
-            "pathophysiology": [
-                ("Explain the pathophysiology of type 2 diabetes mellitus.", "insulin resistance in peripheral tissues leading to compensatory hyperinsulinemia, eventual beta-cell dysfunction"),
-                ("Describe the mechanism of heart failure.", "reduced cardiac output leads to activation of RAAS and sympathetic nervous system"),
-                ("What is the pathophysiology of asthma?", "chronic airway inflammation leading to bronchospasm, mucus production, airway remodeling"),
-                ("Explain how hypertension develops.", "increased peripheral resistance or cardiac output due to multiple factors"),
-                ("What causes atherosclerosis?", "endothelial dysfunction, lipid accumulation, inflammation, plaque formation"),
-            ],
-            "investigation_planning": [
-                ("What investigations would you order for a patient with suspected acute stroke?", "immediate CT brain, blood glucose, ECG, full blood count, coagulation studies"),
-                ("Which tests evaluate liver function?", "ALT, AST, bilirubin, alkaline phosphatase, albumin, PT/INR"),
-                ("What investigations are needed for suspected pneumonia?", "chest X-ray, blood cultures, sputum culture, inflammatory markers"),
-                ("How do you investigate suspected thyroid dysfunction?", "TSH, free T4, free T3 if indicated, thyroid antibodies"),
-                ("What tests assess kidney function?", "serum creatinine, eGFR, urinalysis, electrolytes"),
-            ]
-        }
-        
-        # Generate questions for each reasoning type
-        question_id = 1
-        for reasoning_type, questions in reasoning_templates.items():
-            for question, answer in questions:
-                synthetic_data.append({
-                    "id": f"medreason_{question_id:03d}",
-                    "question": question,
-                    "answer": answer,
-                    "reasoning_type": reasoning_type
-                })
-                question_id += 1
-        
-        # Add more complex clinical scenarios
-        complex_scenarios = [
-            {
-                "id": f"medreason_{question_id:03d}",
-                "question": "A 70-year-old diabetic patient presents with fever and confusion. How do you approach this case?",
-                "answer": "systematic assessment for sepsis, blood cultures, urinalysis, glucose monitoring, broad-spectrum antibiotics",
-                "reasoning_type": "diagnostic_approach"
-            },
-            {
-                "id": f"medreason_{question_id+1:03d}",
-                "question": "How do you manage a patient with both COPD and heart failure?",
-                "answer": "careful fluid balance, bronchodilators, diuretics, oxygen therapy, monitor for drug interactions",
-                "reasoning_type": "treatment_planning"
-            }
-        ]
-        
-        synthetic_data.extend(complex_scenarios)
-        question_id += len(complex_scenarios)
-        
-        # Generate additional questions to reach 300 total
-        reasoning_types = list(reasoning_templates.keys())
-        while len(synthetic_data) < 300:
-            reasoning_type = reasoning_types[question_id % len(reasoning_types)]
-            synthetic_data.append({
-                "id": f"medreason_{question_id:03d}",
-                "question": f"Clinical reasoning question {question_id} about {reasoning_type.replace('_', ' ')}.",
-                "answer": f"Evidence-based medical reasoning answer {question_id} demonstrating {reasoning_type.replace('_', ' ')}.",
-                "reasoning_type": reasoning_type
-            })
-            question_id += 1
-        
-        logger.info(f"✅ Generated {len(synthetic_data)} comprehensive MedReason questions")
-        return synthetic_data
-    
     def evaluate_response(self, question: Dict, response: str, retrieved_docs: List[Dict]) -> Dict:
-        """Evaluate single MedReason response."""
+        """Evaluate a model response against ground truth."""
+        expected_answer = question.get("answer", "")
+        reasoning_type = question.get("reasoning_type", "clinical_reasoning")
         
-        expected = question.get("answer", "")
-        reasoning_type = question.get("reasoning_type", "general")
-        question_id = question.get("id", "unknown")
+        # Basic exact match
+        exact_match = response.lower().strip() == expected_answer.lower().strip()
         
-        # Handle empty or None responses
-        if not response or not response.strip():
-            logger.warning(f"Empty response for MedReason question {question_id}")
-            return {
-                "question_id": question_id,
-                "score": 0.0,
-                "correct": False,
-                "metrics": {
-                    "reasoning_quality": 0.0,
-                    "clinical_accuracy": 0.0,
-                    "diagnostic_process": 0.0,
-                    "knowledge_integration": 0.0,
-                    "overall_score": 0.0
-                },
-                "response": response or "",
-                "expected": expected,
-                "reasoning_type": reasoning_type,
-                "error": "Empty response"
-            }
+        # Reasoning quality scoring
+        reasoning_score = self._score_reasoning_quality(response, reasoning_type)
         
-        try:
-            # Calculate reasoning components with generous scoring
-            reasoning_quality = self._assess_reasoning_quality(response, reasoning_type)
-            clinical_accuracy = self._assess_clinical_accuracy(response, expected)
-            diagnostic_process = self._assess_diagnostic_process(response)
-            knowledge_integration = self._assess_knowledge_integration(response, retrieved_docs)
-            
-            # More generous overall scoring
-            overall_score = (
-                reasoning_quality * 0.3 +
-                clinical_accuracy * 0.3 +
-                diagnostic_process * 0.2 +
-                knowledge_integration * 0.2
-            )
-            
-            # Ensure minimum score for any non-empty response
-            if overall_score < 0.1:
-                overall_score = 0.1
-            
-            # Lower threshold for "correct" - medical reasoning is complex
-            is_correct = overall_score > 0.25  # 25% threshold for medical reasoning
-            
-            # Convert to percentage
-            score_percentage = overall_score * 100
-            
-            result = {
-                "question_id": question_id,
-                "score": float(score_percentage),
-                "correct": bool(is_correct),
-                "metrics": {
-                    "reasoning_quality": float(reasoning_quality),
-                    "clinical_accuracy": float(clinical_accuracy), 
-                    "diagnostic_process": float(diagnostic_process),
-                    "knowledge_integration": float(knowledge_integration),
-                    "overall_score": float(overall_score)
-                },
-                "response": response,
-                "expected": expected,
-                "reasoning_type": reasoning_type
-            }
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error evaluating MedReason response for {question_id}: {e}")
-            return {
-                "question_id": question_id,
-                "score": 0.0,
-                "correct": False,
-                "metrics": {
-                    "reasoning_quality": 0.0,
-                    "clinical_accuracy": 0.0,
-                    "diagnostic_process": 0.0,
-                    "knowledge_integration": 0.0,
-                    "overall_score": 0.0
-                },
-                "response": response or "",
-                "expected": expected,
-                "reasoning_type": reasoning_type,
-                "error": str(e)
-            }
-    
-    def calculate_metrics(self, results: List[Dict]) -> Dict:
-        """Override base class to ensure proper MedReason metrics calculation."""
-        logger.info(f"🧮 Calculating MedReason metrics for {len(results)} results")
+        # Medical pattern matching
+        pattern_score = self._score_medical_patterns(response)
         
-        if not results:
-            return {
-                "accuracy": 0.0,
-                "total_questions": 0,
-                "correct_answers": 0,
-                "average_score": 0.0,
-                "benchmark_name": self.name
-            }
-        
-        # Filter out error results
-        valid_results = [r for r in results if "error" not in r and "score" in r]
-        
-        if not valid_results:
-            return {
-                "accuracy": 0.0,
-                "total_questions": len(results),
-                "correct_answers": 0,
-                "average_score": 0.0,
-                "error_rate": 100.0,
-                "benchmark_name": self.name
-            }
-        
-        # Calculate metrics
-        total_questions = len(valid_results)
-        correct_answers = sum(1 for r in valid_results if r.get("correct", False))
-        accuracy = (correct_answers / total_questions) * 100
-        avg_score = sum(r.get("score", 0) for r in valid_results) / total_questions
+        # Overall score
+        score = (exact_match * 0.3 + reasoning_score * 0.4 + pattern_score * 0.3)
         
         return {
-            "accuracy": float(accuracy),
-            "total_questions": int(total_questions),
-            "correct_answers": int(correct_answers),
-            "average_score": float(avg_score),
-            "benchmark_name": self.name,
-            "failed_questions": len(results) - len(valid_results),
-            "error_rate": ((len(results) - len(valid_results)) / len(results)) * 100 if results else 0.0
+            "score": score,
+            "correct": exact_match or reasoning_score > 0.7,
+            "exact_match": exact_match,
+            "reasoning_quality": reasoning_score,
+            "medical_pattern_score": pattern_score,
+            "reasoning_type": reasoning_type
         }
     
-    def _assess_reasoning_quality(self, response: str, reasoning_type: str) -> float:
-        """Assess medical reasoning quality with generous scoring."""
-        if not response:
-            return 0.0
-            
+    def _score_reasoning_quality(self, response: str, reasoning_type: str) -> float:
+        """Score the quality of medical reasoning in response."""
         response_lower = response.lower()
-        base_score = 0.2  # Give 20% just for having a response
         
-        # Look for reasoning indicators
-        found_indicators = 0
-        for category, indicators in self.reasoning_indicators.items():
-            for indicator in indicators:
-                if indicator in response_lower:
-                    found_indicators += 1
+        # Get relevant indicators for this reasoning type
+        indicators = self.reasoning_indicators.get(reasoning_type.split('_')[0], [])
+        if not indicators:
+            indicators = self.reasoning_indicators['systematic']  # Default
         
-        indicator_score = min(found_indicators / 5.0, 0.6)
+        # Count reasoning indicators
+        indicator_count = sum(1 for indicator in indicators if indicator in response_lower)
         
-        # Type-specific bonus
-        type_indicators = {
-            'diagnostic_approach': ['history', 'examination', 'investigation', 'diagnosis', 'assessment'],
-            'treatment_planning': ['treatment', 'management', 'therapy', 'medication', 'intervention'],
-            'differential_diagnosis': ['differential', 'consider', 'rule out', 'possibilities', 'exclude'],
-            'pathophysiology': ['mechanism', 'pathway', 'process', 'leads to', 'causes'],
-            'investigation_planning': ['test', 'investigation', 'imaging', 'laboratory', 'blood']
-        }
+        # Score based on presence of reasoning indicators
+        reasoning_score = min(indicator_count / len(indicators), 1.0)
         
-        type_bonus = 0.0
-        if reasoning_type in type_indicators:
-            indicators = type_indicators[reasoning_type]
-            found = sum(1 for indicator in indicators if indicator in response_lower)
-            type_bonus = min(found / 3.0, 0.2)
-        
-        return min(base_score + indicator_score + type_bonus, 1.0)
+        return reasoning_score
     
-    def _assess_clinical_accuracy(self, response: str, expected: str) -> float:
-        """Assess clinical accuracy with generous scoring."""
-        if not response:
-            return 0.0
-        if not expected:
-            return 0.3
-        
+    def _score_medical_patterns(self, response: str) -> float:
+        """Score based on medical pattern matching."""
         response_lower = response.lower()
-        expected_lower = expected.lower()
+        total_patterns = 0
+        found_patterns = 0
         
-        # Simple word overlap with generous scoring
-        response_words = set(word for word in response_lower.split() if len(word) > 2)
-        expected_words = set(word for word in expected_lower.split() if len(word) > 2)
+        for category, patterns in self.medical_patterns.items():
+            total_patterns += len(patterns)
+            found_patterns += sum(1 for pattern in patterns if pattern in response_lower)
         
-        if not expected_words:
-            return 0.3
-        if not response_words:
-            return 0.1
-        
-        # Calculate overlap
-        intersection = len(response_words.intersection(expected_words))
-        union = len(response_words.union(expected_words))
-        
-        if union == 0:
-            return 0.3
-        
-        # Generous scoring: both Jaccard and overlap ratio
-        jaccard = intersection / union
-        overlap_ratio = intersection / len(expected_words)
-        
-        return max(jaccard, overlap_ratio * 0.5, 0.1)
-    
-    def _assess_diagnostic_process(self, response: str) -> float:
-        """Assess diagnostic reasoning process with generous scoring."""
-        if not response:
-            return 0.0
-            
-        response_lower = response.lower()
-        base_score = 0.2
-        
-        # Look for diagnostic steps
-        diagnostic_words = [
-            'history', 'examination', 'investigation', 'differential', 'diagnosis',
-            'patient', 'symptoms', 'signs', 'test', 'evaluate', 'assess'
-        ]
-        
-        found_words = sum(1 for word in diagnostic_words if word in response_lower)
-        word_score = min(found_words / 5.0, 0.5)
-        
-        # Look for structure
-        structure_words = ['first', 'then', 'next', 'finally', 'initially', 'subsequently']
-        structure_count = sum(1 for word in structure_words if word in response_lower)
-        structure_score = min(structure_count / 2.0, 0.3)
-        
-        return min(base_score + word_score + structure_score, 1.0)
-    
-    def _assess_knowledge_integration(self, response: str, retrieved_docs: List[Dict]) -> float:
-        """Assess knowledge integration with generous scoring."""
-        if not response:
-            return 0.0
-            
-        base_score = 0.4
-        
-        if not retrieved_docs:
-            return base_score
-        
-        response_lower = response.lower()
-        integration_bonus = 0.0
-        
-        for doc in retrieved_docs[:3]:
-            doc_content = doc.get('content', '') or doc.get('text', '')
-            if doc_content and len(doc_content) > 10:
-                doc_words = set(word for word in doc_content.lower().split() if len(word) > 3)
-                response_words = set(word for word in response_lower.split() if len(word) > 3)
-                
-                if doc_words and response_words:
-                    overlap = len(response_words.intersection(doc_words))
-                    if overlap > 0:
-                        integration_bonus += 0.1
-        
-        return min(base_score + integration_bonus, 1.0)
+        return found_patterns / total_patterns if total_patterns > 0 else 0.0
