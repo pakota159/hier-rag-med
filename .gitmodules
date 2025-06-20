@@ -1,3 +1,4 @@
 [submodule "mirage"]
 	path = mirage
 	url = https://github.com/Teddy-XiongGZ/MIRAGE.git
+	ignore = untracked
