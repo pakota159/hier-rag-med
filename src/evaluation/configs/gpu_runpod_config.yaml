@@ -17,7 +17,7 @@ benchmarks:
     # GPU-optimized settings
     batch_size: 32  # Questions per batch
     max_samples: null  # Use full dataset
-    quick_eval_samples: 100  # For quick testing
+    quick_eval_samples: 200  # For quick testing
     
     # Evaluation parameters
     metrics: ["accuracy", "f1", "precision", "recall", "clinical_accuracy"]
@@ -41,7 +41,7 @@ benchmarks:
     # GPU-optimized settings
     batch_size: 16  # Reasoning chains per batch
     max_samples: null
-    quick_eval_samples: 50
+    quick_eval_samples: 200
     
     # Evaluation parameters
     metrics: ["accuracy", "reasoning_score", "consistency", "reasoning_chain_quality"]

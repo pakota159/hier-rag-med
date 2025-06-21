@@ -418,7 +418,7 @@ def run_evaluation(
         logger.info("⚡ Quick mode enabled - limiting sample sizes")
         for benchmark_name in config.get("benchmarks", {}):
             if config["benchmarks"][benchmark_name].get("enabled", True):
-                config["benchmarks"][benchmark_name]["sample_size"] = 10
+                config["benchmarks"][benchmark_name]["sample_size"] = 200
     
     # Initialize components
     benchmarks = initialize_benchmarks(config, benchmark_filter)

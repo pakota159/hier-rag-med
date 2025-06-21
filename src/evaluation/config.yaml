@@ -111,7 +111,7 @@ benchmarks:
     # Conservative settings
     batch_size: 16
     max_samples: null
-    quick_eval_samples: 50  # Smaller for quick testing
+    quick_eval_samples: 200  # Smaller for quick testing
     
     # Evaluation parameters
     metrics: ["accuracy", "f1", "precision", "recall"]
@@ -146,7 +146,7 @@ benchmarks:
     # Conservative settings
     batch_size: 8
     max_samples: null
-    quick_eval_samples: 25
+    quick_eval_samples: 200
     
     # Evaluation parameters
     metrics: ["accuracy", "reasoning_score", "consistency"]
@@ -181,7 +181,7 @@ benchmarks:
     # Conservative settings
     batch_size: 16
     max_samples: null
-    quick_eval_samples: 100
+    quick_eval_samples: 200
     
     # Evaluation parameters
     metrics: ["accuracy", "bleu", "rouge"]
