@@ -1,0 +1,387 @@
+{
+  "metadata": {
+    "start_time": "2025-06-20T04:29:36.535040",
+    "mode": "quick",
+    "gpu_info": {
+      "gpu_count": 1,
+      "current_device": 0,
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "gpu_memory_gb": 23.64288330078125,
+      "cuda_version": "11.8",
+      "platform": "Local"
+    },
+    "benchmarks": [
+      "msmarco"
+    ],
+    "models": [
+      "hierarchical_system"
+    ],
+    "end_time": "2025-06-20T04:29:57.176759",
+    "total_duration_seconds": 20.641719
+  },
+  "results": {
+    "msmarco": {
+      "benchmark_name": "msmarco",
+      "start_time": "2025-06-20T04:29:36.725081",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "msmarco",
+            "evaluation_time": 20.21429991722107,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 0.0,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "msmarco"
+            },
+            "individual_results": [
+              {
+                "question_id": "msmarco_0005",
+                "query": "symptoms of diabetes mellitus",
+                "query_type": "symptom_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0006",
+                "query": "treatment for hypertension first line",
+                "query_type": "treatment_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0007",
+                "query": "myocardial infarction diagnosis criteria",
+                "query_type": "diagnostic_criteria",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0008",
+                "query": "side effects of statins",
+                "query_type": "adverse_effects",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0009",
+                "query": "heart failure classification NYHA",
+                "query_type": "classification",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 4,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0005",
+                "query": "symptoms of diabetes mellitus",
+                "query_type": "symptom_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0006",
+                "query": "treatment for hypertension first line",
+                "query_type": "treatment_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0007",
+                "query": "myocardial infarction diagnosis criteria",
+                "query_type": "diagnostic_criteria",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0008",
+                "query": "side effects of statins",
+                "query_type": "adverse_effects",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0009",
+                "query": "heart failure classification NYHA",
+                "query_type": "classification",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 4,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 20.216265,
+          "gpu_stats": {
+            "allocated_gb": 0.09,
+            "reserved_gb": 0.1,
+            "total_gb": 23.64,
+            "utilization_percent": 0.4
+          }
+        }
+      },
+      "end_time": "2025-06-20T04:29:57.176738"
+    }
+  }
+}

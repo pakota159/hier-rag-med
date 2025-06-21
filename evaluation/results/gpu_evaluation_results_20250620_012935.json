@@ -1,0 +1,979 @@
+{
+  "metadata": {
+    "start_time": "2025-06-20T01:28:02.763222",
+    "mode": "quick",
+    "gpu_info": {
+      "gpu_count": 1,
+      "current_device": 0,
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "gpu_memory_gb": 23.64288330078125,
+      "cuda_version": "11.8",
+      "platform": "Local"
+    },
+    "benchmarks": [
+      "mirage",
+      "medreason",
+      "pubmedqa",
+      "msmarco"
+    ],
+    "models": [
+      "hierarchical_system"
+    ],
+    "end_time": "2025-06-20T01:29:35.743613",
+    "total_duration_seconds": 92.980391
+  },
+  "results": {
+    "mirage": {
+      "benchmark_name": "mirage",
+      "start_time": "2025-06-20T01:28:02.892462",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "mirage",
+            "evaluation_time": 20.24636697769165,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 48.60542405933579,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "mirage"
+            },
+            "individual_results": [
+              {
+                "question_id": "mirage_0297",
+                "question_type": "clinical",
+                "score": 52.01075268817205,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.07526881720430108,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.75,
+                  "research_quality": 1.0
+                },
+                "response": " Based on the presented symptoms (chest pain and shortness of breath) and the repeated pattern recognition, hypothetical testing, and confirmation of Heart Failure with Reduced Ejection Fraction, it is most likely that the patient's condition is Heart Failure with Reduced Ejection Fraction. This diagnosis is supported by the first-line evidence-based treatment for this condition being ACE inhibitors + Beta-blockers + Diuretics and the robust clinical trial evidence demonstrating significant improvements in patient-oriented outcomes including reduced mortality, cardiovascular hospitalization, and worsening of heart failure symptoms. It is essential to further investigate other potential causes of chest pain and shortness of breath, such as coronary artery disease or pulmonary conditions, and tailor the diagnostic and treatment plans accordingly based on the patient's specific clinical presentation and test results.",
+                "ground_truth": "Acute coronary syndrome should be considered given the presentation of chest pain and dyspnea.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0298",
+                "question_type": "clinical",
+                "score": 53.421052631578945,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.21052631578947367,
+                  "medical_accuracy": 1.0,
+                  "clinical_relevance": 0.25,
+                  "research_quality": 1.0
+                },
+                "response": " The first-line treatment for Type 2 Diabetes Mellitus is Metformin, based on strong clinical evidence demonstrating significant improvements in patient-oriented outcomes including reduced mortality and morbidity. This recommendation is a Grade A recommendation supported by robust clinical trial evidence.",
+                "ground_truth": "Metformin is the first-line pharmacological treatment for type 2 diabetes mellitus.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0299",
+                "question_type": "clinical",
+                "score": 46.857142857142854,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.07142857142857142,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.5,
+                  "research_quality": 1.0
+                },
+                "response": " Risk factors for developing hypertension include:\n\n1. Age: The risk of developing hypertension increases with age, particularly after 30 years old.\n2. Genetics: A family history of hypertension can increase an individual's likelihood of developing the condition.\n3. Obesity: Excess weight, especially around the waist, is associated with an increased risk of hypertension.\n4. Sedentary lifestyle: Lack of regular physical activity contributes to hypertension development.\n5. Diet: Consuming a diet high in sodium and low in fruits, vegetables, and fiber increases the risk.\n6. Alcohol consumption: Regularly consuming more than two alcoholic drinks per day can lead to an increased risk of hypertension.\n7. Tobacco use: Smoking tobacco increases the risk of developing hypertension.\n8. Chronic kidney disease: Kidney damage from conditions like diabetes or high blood pressure can cause hypertension.\n9. Diabetes Mellitus: People with diabetes have a higher likelihood of developing hypertension.\n10. Stress: Chronic stress has been linked to the development of hypertension.\n11. Race/Ethnicity: African Americans, Mexican Americans, and some Asian Americans are at increased risk for hypertension.\n12. Sleep apnea: This sleep disorder is associated with an increased risk of hypertension.",
+                "ground_truth": "Risk factors include age, family history, obesity, high sodium intake, physical inactivity, and excessive alcohol consumption.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0297",
+                "question_type": "clinical",
+                "score": 42.1578947368421,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.07894736842105263,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.25,
+                  "research_quality": 1.0
+                },
+                "response": " Based on the presented symptoms (chest pain and shortness of breath) and the repeated pattern recognition, hypothesis testing, and confirmation processes, a probable diagnosis for this patient could be Heart Failure with Reduced Ejection Fraction. This diagnosis is supported by the evidence-based clinical decision-making that prioritizes ACE inhibitors, Beta-blockers, and Diuretics as the preferred first-line therapy for Heart Failure with Reduced Ejection Fraction. However, it's important to note that this response should be cross-referenced with other relevant information from the patient's history and physical examination before reaching a definitive diagnosis.",
+                "ground_truth": "Acute coronary syndrome should be considered given the presentation of chest pain and dyspnea.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0298",
+                "question_type": "clinical",
+                "score": 54.14285714285714,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.22857142857142856,
+                  "medical_accuracy": 1.0,
+                  "clinical_relevance": 0.25,
+                  "research_quality": 1.0
+                },
+                "response": " The first-line treatment for Type 2 Diabetes Mellitus is Metformin. This conclusion is based on strong evidence from robust clinical trial data demonstrating significant improvements in patient-oriented outcomes, including reduced mortality and morbidity.",
+                "ground_truth": "Metformin is the first-line pharmacological treatment for type 2 diabetes mellitus.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0299",
+                "question_type": "clinical",
+                "score": 46.42424242424242,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.06060606060606061,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.5,
+                  "research_quality": 1.0
+                },
+                "response": " The risk factors for developing hypertension can be categorized into modifiable and non-modifiable factors.\n\nNon-Modifiable Risk Factors:\n1. Age: Hypertension is more common in older adults.\n2. Genetics: Family history of hypertension increases the risk.\n3. Race/Ethnicity: African Americans, Mexican Americans, and Native Americans have a higher risk.\n4. Gender: Men are generally at greater risk for hypertension than women, but postmenopausal women have an increased risk.\n\nModifiable Risk Factors:\n1. Lack of Physical Activity: Regular physical activity can help prevent hypertension.\n2. Obesity: Being overweight or obese increases the risk of developing hypertension.\n3. Diet: Consuming a diet high in sodium and low in potassium, calcium, and magnesium can contribute to hypertension.\n4. Alcohol Use: Drinking more than two alcoholic drinks per day increases the risk.\n5. Tobacco Use: Smoking cigarettes or using other tobacco products increases the risk.\n6. Stress: Chronic stress may play a role in developing high blood pressure.\n7. Sleep Apnea: This condition can cause hypertension.\n8. Diabetes Mellitus and Prediabetes: These conditions increase the risk of developing hypertension.\n9. Kidney Disease: Chronic kidney disease can lead to hypertension.\n10. High Cholesterol Levels: This condition can contribute to the development of hypertension.",
+                "ground_truth": "Risk factors include age, family history, obesity, high sodium intake, physical inactivity, and excessive alcohol consumption.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0297",
+                "question_type": "clinical",
+                "score": 46.162162162162154,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.05405405405405406,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.5,
+                  "research_quality": 1.0
+                },
+                "response": " Based on the presented symptoms (chest pain and shortness of breath) and the repeated pattern recognition, hypothetical testing, and confirmation stages focused on Heart Failure with Reduced Ejection Fraction, it is highly probable that the patient's most likely diagnosis is Heart Failure with Reduced Ejection Fraction. This diagnosis is strongly supported by the evidence-based first-line treatment recommendation of ACE inhibitors, Beta-blockers, and Diuretics for this condition. However, further investigations and diagnostic tests are necessary to confirm the diagnosis and rule out other potential causes of the symptoms.",
+                "ground_truth": "Acute coronary syndrome should be considered given the presentation of chest pain and dyspnea.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0298",
+                "question_type": "clinical",
+                "score": 55.614035087719294,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.14035087719298245,
+                  "medical_accuracy": 1.0,
+                  "clinical_relevance": 0.5,
+                  "research_quality": 1.0
+                },
+                "response": " The first-line treatment for Type 2 Diabetes Mellitus is Metformin. This recommendation is based on strong clinical evidence demonstrating significant improvements in patient-oriented outcomes, including reduced mortality and morbidity. The robust clinical trial evidence supports the initiation of therapy according to evidence-based protocols, monitoring for therapeutic effectiveness using validated endpoints, optimizing dosing based on clinical response and tolerance, and considering combination therapy when indicated by guidelines.",
+                "ground_truth": "Metformin is the first-line pharmacological treatment for type 2 diabetes mellitus.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0299",
+                "question_type": "clinical",
+                "score": 46.62773722627737,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.06569343065693431,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.5,
+                  "research_quality": 1.0
+                },
+                "response": " Risk factors for developing essential hypertension include:\n\n1. Family History: If a close relative (parent, brother, sister) has high blood pressure, there is an increased chance of developing it as well.\n\n2. Age: The risk of hypertension increases with age, especially after the age of 65.\n\n3. Race/Ethnicity: Certain racial groups, such as African Americans, have a higher risk of developing hypertension.\n\n4. Obesity: Being overweight or obese can increase the likelihood of developing high blood pressure.\n\n5. Lack of Physical Activity: A sedentary lifestyle contributes to the development of hypertension.\n\n6. Poor Diet: Consuming too much sodium and not enough potassium, calcium, and magnesium can lead to high blood pressure.\n\n7. Alcohol Consumption: Regularly drinking more than 2 alcoholic beverages per day can increase the risk of hypertension.\n\n8. Tobacco Use: Smoking tobacco increases the risk of developing hypertension.\n\n9. Chronic Kidney Disease: Kidneys that are not functioning properly may contribute to the development of high blood pressure.\n\n10. Diabetes Mellitus: Having diabetes puts a person at higher risk for developing hypertension.\n\n11. Stress: Chronic stress can lead to high blood pressure over time.\n\n12. Sleep Apnea: Obstructive sleep apnea is associated with an increased risk of hypertension.",
+                "ground_truth": "Risk factors include age, family history, obesity, high sodium intake, physical inactivity, and excessive alcohol consumption.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_0297",
+                "question_type": "clinical",
+                "score": 42.63636363636364,
+                "correct": false,
+                "metrics": {
+                  "similarity_score": 0.09090909090909091,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.25,
+                  "research_quality": 1.0
+                },
+                "response": " Based on the presented pattern recognition (Heart Failure with Reduced Ejection Fraction), hypothesis testing (use of ACE inhibitors, Beta-blockers, and Diuretics as first-line therapy), and confirmation (robust clinical trial evidence demonstrating significant improvements in patient-oriented outcomes including reduced mortality, cardiovascular hospitalization, and worsening heart failure symptoms), the most likely diagnosis for a 45-year-old patient presenting with chest pain and shortness of breath is Heart Failure with Reduced Ejection Fraction. It is important to note that this diagnosis should be confirmed through further clinical evaluation and diagnostic tests.",
+                "ground_truth": "Acute coronary syndrome should be considered given the presentation of chest pain and dyspnea.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 20.248071,
+          "gpu_stats": {
+            "allocated_gb": 0.09,
+            "reserved_gb": 0.1,
+            "total_gb": 23.64,
+            "utilization_percent": 0.4
+          }
+        }
+      },
+      "end_time": "2025-06-20T01:28:23.337424"
+    },
+    "medreason": {
+      "benchmark_name": "medreason",
+      "start_time": "2025-06-20T01:28:23.338896",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "medreason",
+            "evaluation_time": 26.70391535758972,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 28.23105557165395,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "medreason"
+            },
+            "individual_results": [
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 16.19463601532567,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.06999999999999999,
+                  "medical_accuracy": 0.1724137931034483,
+                  "clinical_workflow": 0.1111111111111111,
+                  "specialty_knowledge": 0.6
+                },
+                "response": " Based on the information provided, there is no clear link or pattern recognition related to Disseminated Discoid Lupus Erythematosus (DDLE) and Systemic Lupus Erythematosus (SLE). The patterns recognized here are all related to contraindications for Metformin use, which does not seem relevant to the question about the percentage of DDLE patients who develop SLE.\n\nHowever, it's important to note that the progression from DDLE to SLE is not as straightforward as a simple percentage. The progression varies among individuals, and not all patients with DDLE will develop SLE. A careful clinical evaluation, taking into account individual patient factors, is necessary for accurate diagnosis and prognosis.\n\nFor more specific information on the progression of DDLE to SLE, it would be beneficial to consult comprehensive sources such as medical guidelines, large-scale studies, or expert consensus reports on lupus. For example, the American College of Rheumatology (ACR) and the European League Against Rheumatism (EULAR) have published guidelines on the management of Lupus that could provide more detailed information about this topic.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 46.44444444444444,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.09999999999999999,
+                  "medical_accuracy": 1.0,
+                  "clinical_workflow": 0.2222222222222222,
+                  "specialty_knowledge": 0.8
+                },
+                "response": " Based on the presented symptoms and the patient's medical history, it appears that the patient might have an overactive bladder (OAB) or urinary frequency without urgency (UFWU). Given that the patient has Type 2 Diabetes Mellitus and her eGFR is not provided, it would be inappropriate to recommend Metformin as a treatment for OAB.\n\nIn terms of interventions, the following options could be considered:\n\n1. Prescribe an antimuscarinic medication such as oxybutynin or tolterodine, which are first-line treatments for OAB. However, these medications may worsen symptoms in patients with obstructive uropathy or uncontrolled glaucoma.\n2. If the patient has no known urinary tract infection (UTI) and a UTI is not suspected based on her presentation, consider initiating a trial of mirabegron, which is a \u03b23-adrenergic agonist that can be used as an add-on therapy for patients who do not respond well to antimuscarinics.\n3. Refer the patient to a urologist or urogynecologist for further evaluation if symptoms persist despite initial treatment and if there are no contraindications (e.g., uncontrolled glaucoma, severe constipation).\n4. Ensure that the patient is following appropriate fluid intake recommendations for her medical condition(s) and discuss lifestyle modifications to help manage OAB symptoms, such as bladder training exercises and scheduled voiding.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 17.514285714285712,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.16999999999999998,
+                  "medical_accuracy": 0.35714285714285715,
+                  "clinical_workflow": 0.0,
+                  "specialty_knowledge": 0.0
+                },
+                "response": " The NICE (National Institute for Health and Care Excellence) project is associated with evidence-based guidelines and recommendations related to healthcare, including the use of medications like Atorvastatin. In this case, the NICE project provides a Grade A recommendation for high-intensity statin therapy as the preferred first-line therapy for Hyperlipidemia/Cardiovascular Risk Reduction based on robust clinical trial evidence demonstrating significant improvements in cardiovascular outcomes and mortality.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 21.688888888888886,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.16999999999999998,
+                  "medical_accuracy": 0.0,
+                  "clinical_workflow": 0.4444444444444444,
+                  "specialty_knowledge": 0.6
+                },
+                "response": " Based on the information provided about the patient's medication history, the primary focus should be on addressing the conditions related to Lisinopril (ACE Inhibitor), such as Hypertension, Heart Failure, Post-MI, and Diabetic Nephropathy.\n\nRegarding the question about the medially directed strabismus (squint), this is a sign that suggests an issue with the eye muscles or nerves. This condition is typically not related to Lisinopril or the conditions it treats. However, certain side effects of Lisinopril can affect vision, such as dry eyes or blurred vision. It's important to rule out these potential drug-induced ocular symptoms before considering other causes for the strabismus.\n\nIf the patient has not reported any changes in their vision and the strabismus persists, further investigations should be conducted to identify the underlying cause. This may involve additional testing such as an MRI or neurological examination to rule out potential central nervous system abnormalities.\n\nIn summary, while Lisinopril is primarily indicated for conditions like hypertension and heart failure, it's essential to consider all aspects of a patient's health when making a diagnosis. In this case, the medially directed strabismus may not be directly related to Lisinopril, but its potential side effects should still be ruled out first.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 19.429411764705883,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.21,
+                  "medical_accuracy": 0.36764705882352944,
+                  "clinical_workflow": 0.0,
+                  "specialty_knowledge": 0.0
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation processes you've outlined, it appears that Lisinopril is an angiotensin-converting enzyme (ACE) inhibitor which should be avoided in pregnant women due to potential harmful effects on the fetus. Therefore, the antiepileptic drug that is not associated with congenital malformation when used in pregnant women would typically not be an ACE inhibitor. This question seems to be asking for information about a different class of medication (antiepileptics) rather than Lisinopril which is an ACE inhibitor. Common antiepileptic drugs that are considered relatively safe during pregnancy include valproic acid and lamotrigine, but it's essential to consult specific guidelines and discuss the use of any medication during pregnancy with a healthcare provider.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 31.866666666666667,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.37999999999999995,
+                  "medical_accuracy": 0.2,
+                  "clinical_workflow": 0.3333333333333333,
+                  "specialty_knowledge": 0.4
+                },
+                "response": " Based on the presented pattern recognition, hypothesis testing, and confirmation process, the differential diagnosis for the clinical condition is Heart Failure with Reduced Ejection Fraction (HFref). The first-line evidence-based treatment consists of ACE inhibitors, Beta-blockers, and Diuretics. The mechanism of action involves neurohormonal blockade and preload/afterload reduction.\n\nMetoprolol Succinate is an evidence-based, guideline-recommended therapy for HFref with proven clinical benefits in randomized controlled trials (CURE, TRITON-TIMI, PLATO, CHAMPION trials, ESC/AHA guidelines). However, it is crucial to consider important contraindications such as decompensated heart failure, severe bradycardia, and high-grade AV block.\n\nRegarding your question about the anatomical snuffbox, it refers to a space located between the extensor pollicis longus tendon and the radial nerve in the forearm. It is used for palpation of the tendon of Abductor Pollicis Longus (APL) during physical examination.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 29.12222222222222,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.31,
+                  "medical_accuracy": 0.4166666666666667,
+                  "clinical_workflow": 0.1111111111111111,
+                  "specialty_knowledge": 0.2
+                },
+                "response": " Based on the given information, it appears that we are dealing with a class of medications known as Angiotensin Receptor Blockers (ARBS) and drugs that reduce hepatic glucose production primarily through AMPK activation.\n\nTier 1 - Pattern Recognition:\nThe pattern recognized here is the mechanism of action for these medications, which include ARBs and other diabetes medications that work by reducing hepatic glucose production mainly through AMPK activation. These drugs also improve peripheral insulin sensitivity and may improve incretin signaling.\n\nTier 2 - Hypothesis Testing:\nHypotheses tested here are the specific actions of ARBs and these diabetes medications, focusing on their inhibition of angiotensin-converting enzyme (ACE) to reduce vasoconstriction and aldosterone release. Additionally, it was noted that both ARBs and the mentioned diabetes drugs have well-characterized molecular mechanisms that have been validated in preclinical and clinical studies.\n\nTier 3 - Confirmation:\nThe diagnosis is confirmed by comprehensive clinical evidence that supports the effectiveness of these medications as first-line or preferred therapy for their respective indications (hypertension, type 2 diabetes). Major guidelines endorse their use, which adds to their validity. The evidence presented highlights the specific molecular mechanisms at play in both preclinical and clinical studies.\n\nRegarding your question on the magnitude of action potential, it is determined by various factors such as ion channel conductance, membrane properties, and external stimuli. However, without a more specific context or medication mentioned, it's difficult to provide a direct answer.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 35.24444444444445,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.42,
+                  "medical_accuracy": 0.3333333333333333,
+                  "clinical_workflow": 0.2222222222222222,
+                  "specialty_knowledge": 0.4
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation processes performed, it is highly likely that the 46-year-old woman with type II diabetes mellitus has experienced a decrease in renal arteriolar blood flow and glomerular filtration rate (GFR) due to the ACE inhibitor lisinopril.\n\nThe repeated identification of Lisinopril as a drug used for treating hypertension, heart failure, post-MI, and diabetic nephropathy in the pattern recognition phase indicates that this medication is associated with these conditions. In the hypothesis testing phase, it was found that there are Grade A recommendations from various clinical guidelines (RENAAL, IDNT, AASK, KDIGO) supporting the renal protection proven by Lisinopril. However, these benefits can also lead to side effects such as decreased urine output, generalized edema, and elevated creatinine levels in some patients due to a potential decrease in renal arteriolar blood flow and glomerular filtration rate (GFR).\n\nIn the confirmation phase, the evidence synthesis and confidence assessment reveal that Lisinopril is associated with renal protection, but it can also cause side effects like decreased urine output, generalized edema, and elevated creatinine levels. Given the patient's presentation of decreased urine output, generalized edema, and an elevated creatinine level compared to baseline, it is highly probable that these observed symptoms are related to Lisinopril use.\n\nIn light of this hierarchical diagnostic response, it is recommended that the primary care physician consider adjusting or discontinuing Lisinopril and closely monitor the patient's renal function until appropriate therapeutic adjustments have been made.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 43.161111111111104,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.26999999999999996,
+                  "medical_accuracy": 0.375,
+                  "clinical_workflow": 0.5555555555555556,
+                  "specialty_knowledge": 1.0
+                },
+                "response": " Based on the presented symptoms, it appears that the patient may be suffering from depression, possibly due to stress or family issues. Given his reported low energy levels, concentration problems, decreased interest in activities he once enjoyed, and thoughts of suicide without a specific plan, these symptoms align with depressive episodes.\n\nIn addition, the patient's sleep disturbances and appetite loss could be related to his depression. It is important to note that this is a tentative diagnosis and further evaluation by a mental health professional is necessary for confirmation.\n\nTreatment options for depression in adolescents typically include psychotherapy, such as cognitive-behavioral therapy (CBT), and selective serotonin reuptake inhibitors (SSRIs). In this case, considering the patient's age and the presence of suicidal ideation, it would be crucial to ensure immediate access to mental health care.\n\nAs a precaution, it is also essential to rule out other possible causes for the symptoms presented, such as substance-induced mood disorder due to alcohol use or an underlying medical condition. Blood tests and psychiatric assessment should be conducted to rule these out.\n\nIn terms of patient safety, the physician should ensure that the patient receives appropriate support, both from family members and mental health professionals, to prevent any potential suicide attempts. Additionally, if the patient's suicidal thoughts persist or worsen, emergency services may need to be involved for immediate intervention.\n\nIn conclusion, the most appropriate next step in management would involve:\n1. Referral for psychiatric evaluation and treatment (psychotherapy and medication)\n2. Ruling out other potential causes for symptoms through blood tests and further investigation\n3. Ensuring the patient's access to immediate mental health support and safety measures to prevent suicide attempts.",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "unknown",
+                "specialty": "general",
+                "score": 21.644444444444446,
+                "correct": false,
+                "metrics": {
+                  "reasoning_depth": 0.27999999999999997,
+                  "medical_accuracy": 0.0,
+                  "clinical_workflow": 0.2222222222222222,
+                  "specialty_knowledge": 0.6
+                },
+                "response": " Based on the information provided, the patient has a T-score of -1.5 at the femur, indicating osteopenia. The strongest predisposing factors for osteopenia are age and gender. As the patient is 66 years old, advanced age is a significant risk factor for developing osteopenia. Additionally, women are at greater risk than men due to hormonal differences. It's important to note that other factors such as genetics, lifestyle, and medical history can also contribute to the development of osteopenia, but age and gender appear to be the strongest predisposing factors in this case.\n\nHere's the reasoning:\n\n1. Pattern Recognition: Identify relevant medical patterns for osteopenia. In this case, the pattern is a T-score of -1.5 at the femur, indicating osteopenia.\n\n   Clinical Recommendation: The patient has been identified with osteopenia, and we need to determine the strongest predisposing factor.\n\n2. Hypothesis Testing: Test hypotheses using evidence-based reasoning chains. In this case, the hypothesis is that age and gender are the strongest predisposing factors for osteopenia.\n\n   Clinical Recommendation: Age and gender have been consistently identified as strong risk factors for osteopenia in various studies and guidelines. The patient's advanced age (66 years old) and female gender make these factors likely to be the strongest predisposing factors in this case.\n\n3. Confirmation: Confirm diagnosis with comprehensive clinical evidence. Integrate all available information for final diagnostic confirmation.\n\n   Evidence 1: Osteopenia is more common with increasing age, and women are at greater risk than men due to hormonal differences. (Source: National Osteoporosis Foundation, American College of Rheumatology)\n\n   Guideline Recommendation: Age and gender are established risk factors for osteopenia. (Grade A recommendation)",
+                "expected_reasoning": [],
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 26.706687,
+          "gpu_stats": {
+            "allocated_gb": 0.18,
+            "reserved_gb": 0.21,
+            "total_gb": 23.64,
+            "utilization_percent": 0.8
+          }
+        }
+      },
+      "end_time": "2025-06-20T01:28:50.267029"
+    },
+    "pubmedqa": {
+      "benchmark_name": "pubmedqa",
+      "start_time": "2025-06-20T01:28:50.270211",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "pubmedqa",
+            "evaluation_time": 23.095386266708374,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 27.15590614216701,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "pubmedqa"
+            },
+            "individual_results": [
+              {
+                "question_id": "pubmedqa_0008",
+                "study_type": "meta_analysis",
+                "score": 16.403726708074533,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.41142857142857137,
+                  "research_quality": 0.0,
+                  "citation_usage": 0.4060869565217391
+                },
+                "response": " Based on the hierarchical diagnostic reasoning, it can be concluded that statins are effective in reducing cardiovascular mortality in primary prevention. This conclusion is derived from the repeated pattern recognition of Hyperlipidemia/Cardiovascular Risk Reduction and the first-line evidence-based treatment being high-intensity statin therapy.\n\nThe hypothesis testing phase confirms that statins are a cornerstone of evidence-based cardiovascular and metabolic medicine, with extensive clinical trial evidence supporting their use in multiple indications. The proven clinical benefits include significant reduction in cardiovascular morbidity and mortality.\n\nIn the confirmation tier, the diagnosis is confirmed by integrating all available information. Grade A recommendations from guidelines suggest a proven mortality benefit with high-intensity statin therapy for Hyperlipidemia/Cardiovascular Risk Reduction, further supporting the conclusion that statins reduce cardiovascular mortality in primary prevention.\n\nThe hierarchical diagnostic response is: Yes, statins reduce cardiovascular mortality in primary prevention based on robust clinical trial evidence demonstrating significant improvements in cardiovascular outcomes.",
+                "expected_answer": "yes",
+                "expected_explanation": "Yes, statins significantly reduce cardiovascular mortality in primary prevention. Meta-analyses show 25-30% reduction in major cardiovascular events.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0009",
+                "study_type": "clinical_trial",
+                "score": 18.920634920634917,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.41142857142857137,
+                  "research_quality": 0.1,
+                  "citation_usage": 0.4577777777777778
+                },
+                "response": " Based on the given pattern and hypothesis testing, Atorvastatin is a high-intensity statin used for the treatment of hyperlipidemia, primary CV prevention, and secondary CV prevention. The primary therapeutic benefits include reducing LDL cholesterol by 40-50% and a major cardiovascular event reduction of 25-30%.\n\nRegarding aspirin and stroke prevention in atrial fibrillation, the answer cannot be definitively determined from the provided information. However, it is known that antiplatelet therapy, specifically dual antiplatelet therapy (Aspirin + P2Y12 inhibitor), is the preferred first-line therapy for Acute Coronary Syndrome based on robust clinical trial evidence demonstrating significant improvements in patient outcomes (Grade A recommendation - Standard of care).\n\nFor stroke prevention in atrial fibrillation, the recommended antiplatelet agent is usually warfarin or a novel oral anticoagulant (NOAC) such as dabigatran, rivaroxaban, apixaban, or edoxaban. Aspirin may be considered for patients who are not eligible for or cannot tolerate these medications, but the choice should be individualized and based on a thorough assessment of the patient's risk factors and bleeding risks (Grade B recommendation).\n\nEvidence:\n- Antithrombotic Therapy and Prevention of Thrombosis, 9th edition. American College of Chest Physicians Evidence-Based Clinical Practice Guidelines (2012) [1]\n- Atrial Fibrillation: The Management of Atrial Fibrillation \u2013 ACCF/AHA/ESC Focused Update of the ACCF/AHA/ESC 2006 Guidelines for the Diagnosis and Management of Atrial Fibrillation. Journal of the American College of Cardiology, 2014 [2]",
+                "expected_answer": "maybe",
+                "expected_explanation": "Aspirin provides some stroke prevention in atrial fibrillation but is less effective than oral anticoagulants.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0006",
+                "study_type": "systematic_review",
+                "score": 37.167142857142856,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.6535714285714286,
+                  "research_quality": 0.7,
+                  "citation_usage": 0.35600000000000004
+                },
+                "response": " Based on the pattern recognition of the clinical condition and the hypothesis testing, it appears that the patient may be suffering from Heart Failure with Reduced Ejection Fraction. The first-line evidence-based treatment for this condition involves the use of ACE inhibitors, Beta-blockers, and Diuretics. These medications work by providing neurohormonal blockade and managing preload/afterload conditions.\n\nThe hypothesis testing phase suggests that these medications are primarily used as first-line antihypertensive therapy per JNC-8 guidelines, reducing systolic blood pressure by 10-15 mmHg on average. They also offer significant cardiovascular protection, as evidenced by the HOPE trial which shows a 22% reduction in CV events. Moreover, these medications provide renal protection as indicated by multiple large-scale randomized controlled trials and meta-analyses, as well as guidelines such as RENAAL, IDNT, AASK, and KDIGO.\n\nTo confirm the diagnosis, it is essential to integrate all available information from physical examination, laboratory results, imaging studies, and patient history. This comprehensive approach will help build a strong evidence base for the final diagnostic confirmation.\n\nRegarding your question about vitamin D supplementation preventing fractures in the elderly, there is evidence supporting this claim. A systematic review and meta-analysis published in the Journal of Clinical Endocrinology & Metabolism found that vitamin D supplementation significantly reduced the risk of fracture in older adults with low levels of vitamin D. However, it's important to note that further research is needed to determine optimal dosing and duration of treatment for fracture prevention in this population.",
+                "expected_answer": "maybe",
+                "expected_explanation": "Vitamin D supplementation may prevent fractures in elderly, particularly when combined with calcium and in vitamin D deficient populations.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0007",
+                "study_type": "comparative_study",
+                "score": 54.529523809523816,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 1.0,
+                  "evidence_synthesis": 0.39365079365079364,
+                  "research_quality": 0.0,
+                  "citation_usage": 0.272
+                },
+                "response": " Based on the available evidence, both ACE inhibitors and ARBs have demonstrated efficacy in treating heart failure. However, ACE inhibitors are generally considered first-line therapy due to a broader range of indications and stronger clinical trial evidence supporting their use. It's important to note that individual patient factors, such as concomitant medications and potential side effects, should be carefully considered when making treatment decisions. Always consult current guidelines and follow up with a healthcare professional for personalized care.",
+                "expected_answer": "no",
+                "expected_explanation": "ACE inhibitors are not superior to ARBs for heart failure. Both show similar mortality benefits with comparable efficacy.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0008",
+                "study_type": "meta_analysis",
+                "score": 11.988819875776398,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.29904761904761906,
+                  "research_quality": 0.0,
+                  "citation_usage": 0.3017391304347826
+                },
+                "response": " Based on the hierarchical diagnostic reasoning, high-intensity statin therapy is the preferred first-line treatment for Hyperlipidemia/Cardiovascular Risk Reduction. This conclusion is derived from pattern recognition (Tier 1), where we identified a clear pattern of Hyperlipidemia/Cardiovascular Risk Reduction, and the consistent first-line evidence-based treatment was high-intensity statin therapy.\n\nIn Tier 2, we tested our hypothesis by cross-referencing multiple medical sources to validate that statins represent a cornerstone of evidence-based cardiovascular and metabolic medicine. The proven clinical benefits of statins include significant reductions in cardiovascular mortality and morbidity.\n\nFinally, in Tier 3, we confirmed our diagnosis with comprehensive clinical evidence. We found grade A recommendations from multiple guidelines that support the use of high-intensity statin therapy for primary prevention, demonstrating a proven mortality benefit. Therefore, yes, it is established that statins reduce cardiovascular mortality in primary prevention.",
+                "expected_answer": "yes",
+                "expected_explanation": "Yes, statins significantly reduce cardiovascular mortality in primary prevention. Meta-analyses show 25-30% reduction in major cardiovascular events.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0009",
+                "study_type": "clinical_trial",
+                "score": 16.92063492063492,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.38476190476190475,
+                  "research_quality": 0.1,
+                  "citation_usage": 0.3377777777777778
+                },
+                "response": " Based on the information provided, Atorvastatin is primarily used to treat Hyperlipidemia, Primary CV Prevention, and Secondary CV Prevention. The primary therapeutic benefits of Atorvastatin include reducing LDL cholesterol by 40-50% and major cardiovascular event reduction of 25-30%.\n\nRegarding the question about aspirin for stroke prevention in atrial fibrillation, the answer can be found in the provided evidence. Although the information focuses on Atorvastatin, the context suggests that you are seeking information related to other medications used in cardiovascular disease management. In this case, the given evidence does not directly address aspirin's effectiveness for stroke prevention in atrial fibrillation.\n\nHowever, it is important to note that the use of aspirin for stroke prevention in atrial fibrillation can be a consideration based on clinical guidelines. For instance, according to American Heart Association/American College of Cardiology (AHA/ACC) and the European Society of Cardiology (ESC) guidelines, anticoagulation therapy is generally recommended as the primary treatment for stroke prevention in patients with nonvalvular atrial fibrillation. Aspirin can be an alternative option in specific cases, but it is typically reserved for patients who cannot tolerate or are at high risk of bleeding with anticoagulants (Grade 2B recommendation).\n\nFor a definitive answer on the use of aspirin for stroke prevention in atrial fibrillation, it would be best to consult the latest guidelines from reputable organizations such as AHA/ACC and ESC or discuss the case with a healthcare professional.",
+                "expected_answer": "maybe",
+                "expected_explanation": "Aspirin provides some stroke prevention in atrial fibrillation but is less effective than oral anticoagulants.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0006",
+                "study_type": "systematic_review",
+                "score": 27.844285714285714,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.5321428571428571,
+                  "research_quality": 0.5,
+                  "citation_usage": 0.188
+                },
+                "response": " Based on the given information, it appears that the clinical condition being addressed is Heart Failure with Reduced Ejection Fraction. The initial pattern recognition identified this as a recurring pattern, and the subsequent hypothesis testing provided further evidence-based reasoning to support this diagnosis.\n\nThe first-line evidence-based treatment suggested for this condition is ACE inhibitors, Beta-blockers, and Diuretics. This treatment strategy aims at neurohormonal blockade and managing preload/afterload conditions.\n\nTo confirm the diagnosis and further validate the proposed treatment plan, it's essential to integrate all available clinical evidence. For instance, large-scale randomized controlled trials and meta-analyses support the clinical effectiveness and safety of Calcium Channel Blockers in their approved therapeutic indications, including hypertension and heart failure. Additionally, RENAAL, IDNT, AASK, KDIGO guidelines provide a Grade A recommendation for calcium channel blockers in renal protection.\n\nRegarding the question about vitamin D supplementation preventing fractures in elderly, multiple systematic reviews and meta-analyses suggest that vitamin D supplementation may reduce the risk of falls and fractures in elderly individuals with low vitamin D levels or those at high risk for falls. However, more research is needed to establish the optimal dosage and duration of supplementation, as well as its potential risks and benefits in different populations.",
+                "expected_answer": "maybe",
+                "expected_explanation": "Vitamin D supplementation may prevent fractures in elderly, particularly when combined with calcium and in vitamin D deficient populations.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0007",
+                "study_type": "comparative_study",
+                "score": 55.53142857142858,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 1.0,
+                  "evidence_synthesis": 0.35238095238095235,
+                  "research_quality": 0.1,
+                  "citation_usage": 0.29600000000000004
+                },
+                "response": " Based on the current hierarchical diagnostic reasoning, ACE inhibitors and ARBs are both effective first-line treatments for Essential Hypertension. They work by blocking the renin-angiotensin system and reducing vasoconstriction. The choice between ACE inhibitors and ARBs may depend on other factors such as patient comorbidities, contraindications, or individual response to therapy.\n\nRegarding heart failure, both ACE inhibitors and ARBs have shown clinical benefits in improving outcomes for patients with heart failure. However, ACE inhibitors have been used more extensively and have a stronger evidence base in this indication compared to ARBs. Therefore, it can be said that ACE inhibitors may have a slightly superior effect in the treatment of heart failure compared to ARBs, but both classes of drugs are effective and essential in the management of heart failure.",
+                "expected_answer": "no",
+                "expected_explanation": "ACE inhibitors are not superior to ARBs for heart failure. Both show similar mortality benefits with comparable efficacy.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0008",
+                "study_type": "meta_analysis",
+                "score": 14.82111801242236,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.38476190476190475,
+                  "research_quality": 0.0,
+                  "citation_usage": 0.3278260869565217
+                },
+                "response": " Based on the hierarchical diagnostic reasoning, the initial differential diagnosis identified is Hyperlipidemia/Cardiovascular Risk Reduction. The first-line evidence-based treatment suggested for this condition is high-intensity statin therapy.\n\nTier 2 - Hypothesis Testing:\nStatins belong to a therapeutic class that has extensive clinical trial evidence supporting their use in multiple indications, including Hyperlipidemia/Cardiovascular Risk Reduction. They have been shown to significantly reduce cardiovascular events and mortality.\n\nTier 3 - Confirmation:\nRobust clinical evidence, including Grade A recommendations, supports the use of high-intensity statin therapy for Hyperlipidemia/Cardiovascular Risk Reduction. This evidence demonstrates significant improvements in cardiovascular outcomes and a proven mortality benefit. Therefore, it can be confidently concluded that statins do reduce cardiovascular mortality in primary prevention.",
+                "expected_answer": "yes",
+                "expected_explanation": "Yes, statins significantly reduce cardiovascular mortality in primary prevention. Meta-analyses show 25-30% reduction in major cardiovascular events.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_0009",
+                "study_type": "clinical_trial",
+                "score": 17.43174603174603,
+                "correct": false,
+                "metrics": {
+                  "answer_accuracy": 0.0,
+                  "evidence_synthesis": 0.30476190476190473,
+                  "research_quality": 0.1,
+                  "citation_usage": 0.6288888888888888
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation process, Atorvastatin is a high-intensity statin used primarily for Hyperlipidemia, Primary CV Prevention, and Secondary CV Prevention. It reduces LDL cholesterol by 40-50% and major cardiovascular event reduction of 25-30%.\n\nRegarding the question about aspirin's effectiveness for stroke prevention in atrial fibrillation, the evidence suggests that it is indeed effective. According to Grade A recommendation - Standard of care, dual antiplatelet therapy (Aspirin + P2Y12 inhibitor) is the preferred first-line therapy for Acute Coronary Syndrome based on robust clinical trial evidence demonstrating significant improvements in patient outcomes. However, it's important to note that this response is based on the available information provided and may not cover all aspects of patient care. Always consult with a healthcare professional for accurate diagnosis and treatment recommendations.",
+                "expected_answer": "maybe",
+                "expected_explanation": "Aspirin provides some stroke prevention in atrial fibrillation but is less effective than oral anticoagulants.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 23.09916,
+          "gpu_stats": {
+            "allocated_gb": 0.18,
+            "reserved_gb": 0.21,
+            "total_gb": 23.64,
+            "utilization_percent": 0.8
+          }
+        }
+      },
+      "end_time": "2025-06-20T01:29:13.590383"
+    },
+    "msmarco": {
+      "benchmark_name": "msmarco",
+      "start_time": "2025-06-20T01:29:13.592995",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "msmarco",
+            "evaluation_time": 21.91530203819275,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 0.0,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "msmarco"
+            },
+            "individual_results": [
+              {
+                "question_id": "msmarco_0005",
+                "query": "symptoms of diabetes mellitus",
+                "query_type": "symptom_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0006",
+                "query": "treatment for hypertension first line",
+                "query_type": "treatment_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0007",
+                "query": "myocardial infarction diagnosis criteria",
+                "query_type": "diagnostic_criteria",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0008",
+                "query": "side effects of statins",
+                "query_type": "adverse_effects",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0009",
+                "query": "heart failure classification NYHA",
+                "query_type": "classification",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 4,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0005",
+                "query": "symptoms of diabetes mellitus",
+                "query_type": "symptom_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0006",
+                "query": "treatment for hypertension first line",
+                "query_type": "treatment_lookup",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0007",
+                "query": "myocardial infarction diagnosis criteria",
+                "query_type": "diagnostic_criteria",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0008",
+                "query": "side effects of statins",
+                "query_type": "adverse_effects",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 2,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_0009",
+                "query": "heart failure classification NYHA",
+                "query_type": "classification",
+                "score": 0.0,
+                "correct": false,
+                "metrics": {
+                  "precision_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "recall_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "ndcg_at_k": {
+                    "1": 0.0,
+                    "3": 0.0,
+                    "5": 0.0,
+                    "10": 0.0
+                  },
+                  "map": 0.0,
+                  "mrr": 0.0
+                },
+                "retrieved_count": 10,
+                "relevant_count": 4,
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 21.918718,
+          "gpu_stats": {
+            "allocated_gb": 0.18,
+            "reserved_gb": 0.2,
+            "total_gb": 23.64,
+            "utilization_percent": 0.8
+          }
+        }
+      },
+      "end_time": "2025-06-20T01:29:35.741910"
+    }
+  }
+}

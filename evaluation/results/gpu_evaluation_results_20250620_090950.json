@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "start_time": "2025-06-20T09:09:27.568620",
+    "mode": "full",
+    "gpu_info": {
+      "gpu_available": true,
+      "gpu_count": 1,
+      "current_device": 0,
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "gpu_memory_gb": 23.64288330078125,
+      "cuda_version": "11.8",
+      "platform": "Local"
+    },
+    "benchmarks": [
+      "mirage",
+      "medreason",
+      "pubmedqa",
+      "msmarco"
+    ],
+    "models": [
+      "hierarchical_system"
+    ],
+    "sample_limits": {
+      "mirage": null,
+      "medreason": null,
+      "pubmedqa": null,
+      "msmarco": null
+    },
+    "end_time": "2025-06-20T09:09:50.706726",
+    "total_duration_seconds": 23.138106
+  },
+  "results": {
+    "mirage": {
+      "hierarchical_system": {
+        "error": "BaseEvaluator.evaluate_benchmark() takes 2 positional arguments but 3 were given"
+      }
+    },
+    "medreason": {
+      "hierarchical_system": {
+        "error": "BaseEvaluator.evaluate_benchmark() takes 2 positional arguments but 3 were given"
+      }
+    },
+    "pubmedqa": {
+      "hierarchical_system": {
+        "error": "BaseEvaluator.evaluate_benchmark() takes 2 positional arguments but 3 were given"
+      }
+    },
+    "msmarco": {
+      "hierarchical_system": {
+        "error": "BaseEvaluator.evaluate_benchmark() takes 2 positional arguments but 3 were given"
+      }
+    }
+  }
+}

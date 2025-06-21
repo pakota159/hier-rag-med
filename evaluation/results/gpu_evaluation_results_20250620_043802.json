@@ -1,0 +1,559 @@
+{
+  "metadata": {
+    "start_time": "2025-06-20T04:36:58.811821",
+    "mode": "quick",
+    "gpu_info": {
+      "gpu_count": 1,
+      "current_device": 0,
+      "gpu_name": "NVIDIA GeForce RTX 4090",
+      "gpu_memory_gb": 23.64288330078125,
+      "cuda_version": "11.8",
+      "platform": "Local"
+    },
+    "benchmarks": [
+      "mirage",
+      "medreason",
+      "pubmedqa",
+      "msmarco"
+    ],
+    "models": [
+      "hierarchical_system"
+    ],
+    "end_time": "2025-06-20T04:38:02.989421",
+    "total_duration_seconds": 64.1776
+  },
+  "results": {
+    "mirage": {
+      "benchmark_name": "mirage",
+      "start_time": "2025-06-20T04:37:02.181318",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "MIRAGE",
+            "evaluation_time": 9.956656217575073,
+            "total_questions": 5,
+            "successful_evaluations": 5,
+            "metrics": {
+              "total_questions": 5,
+              "average_score": 58.13382462859154,
+              "accuracy": 40.0,
+              "correct_answers": 2,
+              "benchmark_name": "MIRAGE"
+            },
+            "individual_results": [
+              {
+                "question_id": "mirage_001",
+                "question_type": "clinical",
+                "score": 82.5,
+                "correct": true,
+                "metrics": {
+                  "semantic_similarity": 0.85,
+                  "medical_accuracy": 1.0,
+                  "clinical_relevance": 0.5,
+                  "overall_score": 0.825
+                },
+                "response": " The first-line treatment for Type 2 Diabetes Mellitus, based on robust clinical trial evidence demonstrating significant improvements in patient outcomes including reduced mortality and cardiovascular events, is Metformin. This recommendation is supported by numerous studies such as the UKPDS, ADOPT, Cochrane meta-analyses, and ADA/EASD guidelines. Evidence-based interventions involving Metformin-based therapy with lifestyle modification have shown significant reductions in cardiovascular events (e.g., a 39% reduction in Myocardial Infarction) and improved glycemic control.",
+                "ground_truth": "Metformin",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_002",
+                "question_type": "clinical",
+                "score": 58.25994515419006,
+                "correct": false,
+                "metrics": {
+                  "semantic_similarity": 0.6851989030838013,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.0,
+                  "overall_score": 0.5825994515419006
+                },
+                "response": " Myocardial Infarction (Heart Attack) symptoms may include:\n\n1. Chest pain or discomfort, which can feel like pressure, fullness, burning, or a squeezing pain that lasts more than a few minutes. The pain may spread to the neck, jaw, back, or arm.\n\n2. Shortness of breath, which can occur with or without chest pain.\n\n3. Nausea, vomiting, lightheadedness, or dizziness.\n\n4. Cold sweat, pale skin, or clammy skin.\n\n5. Rapid or irregular heartbeats.\n\n6. Anxiety or feeling of impending doom.",
+                "ground_truth": "chest pain, shortness of breath, nausea, sweating",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_003",
+                "question_type": "clinical",
+                "score": 48.71697807312012,
+                "correct": false,
+                "metrics": {
+                  "semantic_similarity": 0.39433956146240234,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.25,
+                  "overall_score": 0.48716978073120115
+                },
+                "response": " The medication that is contraindicated in pregnancy for hypertension is ACE inhibitors. Angiotensin-converting enzyme (ACE) inhibitors are not recommended during pregnancy because they can cause harm to the developing fetus, such as fetal death and abnormal kidney development. Instead, medications like methyldopa, labetalol, or nifedipine are preferred for managing hypertension in pregnant women.",
+                "ground_truth": "ACE inhibitors",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_004",
+                "question_type": "clinical",
+                "score": 39.8994297683239,
+                "correct": false,
+                "metrics": {
+                  "semantic_similarity": 0.21798859536647797,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.25,
+                  "overall_score": 0.39899429768323896
+                },
+                "response": " The normal range for HbA1c (Glycohemoglobin A1c) is typically below 5.7%. For individuals with diabetes, an optimal HbA1c target is usually set between 7% and 8%, depending on the patient's individual circumstances. However, closer to 7% or even lower may be a more appropriate goal for some patients, especially those at high risk of complications such as diabetic nephropathy or retinopathy.\n\nFor the given case, the patient likely has Type 2 Diabetes Mellitus with cardiovascular risk. The evidence-based treatment would involve Metformin-based therapy in combination with lifestyle modifications. The goal is to achieve significant reductions in cardiovascular events and improved glycemic control, as demonstrated by a reduction in HbA1c levels (e.g., 8.2% \u2192 6.8%).",
+                "ground_truth": "less than 7% for most adults",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "mirage_005",
+                "question_type": "research",
+                "score": 61.29277014732361,
+                "correct": true,
+                "metrics": {
+                  "semantic_similarity": 0.5458554029464722,
+                  "medical_accuracy": 0.8,
+                  "clinical_relevance": 0.5,
+                  "overall_score": 0.612927701473236
+                },
+                "response": " Statins are a class of medications that work by competitively inhibiting HMG-CoA reductase, an enzyme that plays a crucial role in the production of cholesterol in the liver. By reducing the amount of cholesterol produced, statins help lower the levels of low-density lipoprotein (LDL) or \"bad\" cholesterol in the bloodstream. In addition to their primary mechanism of action, statins also have pleiotropic effects such as anti-inflammatory and antioxidant properties, which contribute to their clinical benefits.",
+                "ground_truth": "HMG-CoA reductase inhibition",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 9.95876,
+          "gpu_stats": {
+            "allocated_gb": 0.18,
+            "reserved_gb": 0.21,
+            "total_gb": 23.64,
+            "utilization_percent": 0.7
+          }
+        }
+      },
+      "end_time": "2025-06-20T04:37:12.279130"
+    },
+    "medreason": {
+      "benchmark_name": "medreason",
+      "start_time": "2025-06-20T04:37:12.281866",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "MedReason",
+            "evaluation_time": 12.296687602996826,
+            "total_questions": 5,
+            "successful_evaluations": 5,
+            "metrics": {
+              "total_questions": 5,
+              "average_score": 37.83333333333333,
+              "accuracy": 0.0,
+              "correct_answers": 0,
+              "benchmark_name": "MedReason"
+            },
+            "individual_results": [
+              {
+                "question_id": "medreason_001",
+                "score": 34.333333333333336,
+                "correct": false,
+                "metrics": {
+                  "reasoning_quality": 0.5499999999999999,
+                  "clinical_accuracy": 0.0,
+                  "diagnostic_process": 0.4,
+                  "knowledge_integration": 0.43333333333333335,
+                  "overall_score": 0.3433333333333333
+                },
+                "response": " Based on the pattern recognition of the presented symptoms, the most likely diagnosis to consider first would be Acute Coronary Syndrome (ACS), given its prevalence and association with chest pain.\n\nIn Tier 2 - Hypothesis Testing, the hypothesis is that Dual antiplatelet therapy (Aspirin + P2Y12 inhibitor) is the preferred first-line therapy for ACS based on robust clinical trial evidence demonstrating significant improvements in patient outcomes. This is supported by numerous clinical trials such as CURE, TRITON-TIMI, PLATO, and guidelines from organizations like ESC/AHA.\n\nIn Tier 3 - Confirmation, the diagnosis of ACS and the recommended treatment approach are further confirmed with comprehensive clinical evidence. The key learning points emphasize the importance of evidence-based therapy in improving patient outcomes, the consistent clinical benefits provided by guideline-recommended treatments, and the necessity of proper implementation for optimal care.\n\nFinal Diagnostic Confirmation: Given the presented symptoms and the strong evidence base supporting Dual antiplatelet therapy as a preferred first-line treatment for ACS, the working diagnosis is Acute Coronary Syndrome. Further diagnostic tests and examinations should be performed to confirm this diagnosis and guide management strategies.",
+                "expected": "systematic evaluation including history, ECG, troponins",
+                "reasoning_type": "diagnostic_approach",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "medreason_002",
+                "score": 46.33333333333333,
+                "correct": false,
+                "metrics": {
+                  "reasoning_quality": 0.32499999999999996,
+                  "clinical_accuracy": 0.6666666666666666,
+                  "diagnostic_process": 0.3,
+                  "knowledge_integration": 0.7333333333333333,
+                  "overall_score": 0.46333333333333326
+                },
+                "response": " Based on the hierarchical diagnostic reasoning process, I recommend managing a patient with Acute Myocardial Infarction (AMI) with Dual Antiplatelet Therapy (Aspirin + P2Y12 inhibitor). This recommendation is supported by robust clinical trial evidence from the CURE, TRITON-TIMI, PLATO trials, and major international guidelines such as ESC/AHA.\n\nIn specific terms:\n1. Administer Aspirin (antiplatelet agent) as soon as possible, ideally within 24 hours of symptom onset, unless there is a high risk of bleeding. The typical dosage is 162-325 mg initially followed by a maintenance dose of 75-100 mg daily.\n2. Add a P2Y12 inhibitor (Clopidogrel, Ticagrelor or Prasugrel) within the first 24 hours for at least 12 months unless there is a high risk of bleeding or a contraindication to dual antiplatelet therapy.\n3. Perform primary percutaneous coronary intervention (PCI) as soon as possible, ideally within 90 minutes of hospital arrival if the patient is stable and suitable for PCI.\n4. Administer other evidence-based treatments such as beta blockers, ACE inhibitors/angiotensin receptor blockers, and statins according to current guidelines and the patient's individual clinical profile.\n5. Monitor the patient closely for complications such as recurrent ischemia, bleeding events, or heart failure, adjusting therapy as necessary based on the patient's response and risk profile.",
+                "expected": "immediate reperfusion therapy, antiplatelet agents, beta-blockers, ACE inhibitors",
+                "reasoning_type": "treatment_planning",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "medreason_003",
+                "score": 23.5,
+                "correct": false,
+                "metrics": {
+                  "reasoning_quality": 0.27499999999999997,
+                  "clinical_accuracy": 0.25,
+                  "diagnostic_process": 0.1,
+                  "knowledge_integration": 0.3,
+                  "overall_score": 0.23500000000000001
+                },
+                "response": " Based on the observed pattern of administration of Furosemide (a loop diuretic), the primary clinical indications suggest possible conditions such as Heart Failure, Edema, or Hypertension. In light of these indications, the most likely differential diagnoses for shortness of breath could be Heart Failure with Reduced Ejection Fraction.\n\nHere are some supporting reasons:\n\n1. Furosemide is often used to manage fluid overload in heart failure patients, and its rapid onset of action suggests an acute exacerbation of the condition.\n\n2. The efficacy of ACE inhibitors + Beta-blockers + Diuretics (including Furosemide) in reducing mortality by 15-35% (SOLVD, MERIT-HF), improving survival rates, and reducing hospitalizations supports the diagnosis of Heart Failure with Reduced Ejection Fraction.\n\n3. The improvement in New York Heart Association (NYHA) functional class from III to I, as well as other clinical success stories demonstrating similar outcomes, further strengthens this diagnosis.",
+                "expected": "heart failure, asthma, COPD, pneumonia, pulmonary embolism",
+                "reasoning_type": "differential_diagnosis",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "medreason_004",
+                "score": 44.00000000000001,
+                "correct": false,
+                "metrics": {
+                  "reasoning_quality": 0.25,
+                  "clinical_accuracy": 1.0,
+                  "diagnostic_process": 0.2,
+                  "knowledge_integration": 0.0,
+                  "overall_score": 0.44000000000000006
+                },
+                "response": " Type 2 Diabetes Mellitus (T2DM) is a metabolic disorder characterized by high blood sugar levels due to insulin resistance and relative insulin deficiency. In T2DM, the body's cells do not respond properly to insulin, and the pancreas cannot produce enough insulin to maintain normal glucose levels.\n\nThe pathophysiology of T2DM is complex and involves several mechanisms:\n\n1. Insulin Resistance: The cells in the body become resistant to insulin, which means they do not respond properly when insulin binds to its receptors. As a result, glucose cannot enter the cells and be used for energy, leading to high blood sugar levels.\n\n2. Beta-cell Dysfunction: The beta cells in the pancreas are responsible for producing insulin. In T2DM, these cells become dysfunctional and fail to produce enough insulin to compensate for insulin resistance. This leads to further increases in blood glucose levels.\n\n3. Glucose Production: The liver continues to produce glucose even when there is enough glucose in the bloodstream, a process known as hepatic gluconeogenesis. This excessive production of glucose contributes to high blood sugar levels in T2DM.\n\n4. Impaired Glucose Utilization: Even when insulin is present, the cells do not utilize glucose efficiently for energy, leading to high levels of glucose in the bloodstream.\n\n5. Genetic and Environmental Factors: T2DM has a strong genetic component, with certain genes increasing the risk of developing the condition. Environmental factors such as obesity, physical inactivity, and an unhealthy diet also play important roles in the development of T2DM.",
+                "expected": "insulin resistance leading to beta-cell dysfunction and hyperglycemia",
+                "reasoning_type": "pathophysiology",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "medreason_005",
+                "score": 41.0,
+                "correct": false,
+                "metrics": {
+                  "reasoning_quality": 0.1,
+                  "clinical_accuracy": 1.0,
+                  "diagnostic_process": 0.2,
+                  "knowledge_integration": 0.3,
+                  "overall_score": 0.41000000000000003
+                },
+                "response": " Based on the pattern recognition of Acute Coronary Syndrome (ACS) and the hypotheses tested, it seems that we do not have any indications of a suspected stroke in this case. However, if there were signs or symptoms suggesting a possible stroke, some investigations that would be appropriate include:\n\n1. CT scan or MRI of the brain to evaluate for ischemic or hemorrhagic stroke.\n2. Blood tests such as complete blood count (CBC), coagulation profile, glucose level, and troponin levels.\n3. Carotid ultrasound to assess for carotid artery stenosis.\n4. Electrocardiogram (ECG) or Holter monitoring to evaluate for arrhythmias that might increase the risk of stroke.\n5. Transesophageal echocardiography (TEE) to visualize the heart chambers and valves, as well as any potential sources of emboli.",
+                "expected": "CT brain, blood glucose, ECG, full blood count, coagulation studies",
+                "reasoning_type": "investigation_planning",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 12.299001,
+          "gpu_stats": {
+            "allocated_gb": 0.26,
+            "reserved_gb": 0.29,
+            "total_gb": 23.64,
+            "utilization_percent": 1.1
+          }
+        }
+      },
+      "end_time": "2025-06-20T04:37:24.789592"
+    },
+    "pubmedqa": {
+      "benchmark_name": "pubmedqa",
+      "start_time": "2025-06-20T04:37:24.793146",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "PubMedQA",
+            "evaluation_time": 11.550169944763184,
+            "total_questions": 5,
+            "successful_evaluations": 5,
+            "metrics": {
+              "total_questions": 5,
+              "average_score": 80.0,
+              "accuracy": 80.0,
+              "correct_answers": 4,
+              "benchmark_name": "PubMedQA"
+            },
+            "individual_results": [
+              {
+                "question_id": "pubmedqa_001",
+                "predicted": "yes",
+                "expected": "yes",
+                "correct": true,
+                "score": 100,
+                "metrics": {
+                  "accuracy": 1.0,
+                  "confidence": 0.7999999999999999,
+                  "evidence_quality": 0.6
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation stages, it can be confidently stated that Metformin is an evidence-based therapy for Type 2 Diabetes Mellitus. The drug reduces hepatic glucose production and improves insulin sensitivity, which are primary therapeutic benefits. The first-line treatment for Type 2 Diabetes Mellitus is Metformin, as supported by numerous clinical studies.\n\nIn particular, the UKPDS study showed that Metformin reduces cardiovascular mortality by 30-40%. Several clinical success stories also demonstrate significant reductions in cardiovascular events and improved glycemic control with Metformin-based therapy and lifestyle modification for Type 2 Diabetes Mellitus patients at high cardiovascular risk.\n\nIn conclusion, the hierarchical diagnostic reasoning confirms that metformin does reduce cardiovascular risk in type 2 diabetes, supporting its use as a first-line treatment for this condition.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_002",
+                "predicted": "yes",
+                "expected": "yes",
+                "correct": true,
+                "score": 100,
+                "metrics": {
+                  "accuracy": 1.0,
+                  "confidence": 0.7499999999999999,
+                  "evidence_quality": 0.39999999999999997
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation stages, it can be concluded that atorvastatin is a highly effective treatment for hyperlipidemia. The primary therapeutic benefits of atorvastatin include reducing LDL cholesterol levels by 30-50%, decreasing the risk of cardiovascular events (25-30%), and potentially providing mortality benefits. This aligns with clinical evidence from studies such as PROVE-IT and TNT trials, which demonstrate significant reductions in LDL levels and a decrease in cardiovascular events when high-intensity statin therapy is used in patients with hyperlipidemia.\n\nIn terms of the question about primary prevention of cardiovascular disease, yes, statins have been shown to be effective in this area as well. In addition to reducing LDL levels and preventing cardiovascular events in patients who already have hyperlipidemia or are at high risk for cardiovascular disease, evidence also supports the use of statins in primary prevention settings for individuals with average risk who could benefit from a further reduction in their LDL levels. However, it is important to consider individual patient factors and specific guidelines before starting any medication regimen.\n\nFor more detailed information and personalized advice, please consult with a healthcare professional.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_003",
+                "predicted": "no",
+                "expected": "no",
+                "correct": true,
+                "score": 100,
+                "metrics": {
+                  "accuracy": 1.0,
+                  "confidence": 0.7999999999999999,
+                  "evidence_quality": 0.8
+                },
+                "response": " Based on the given information, Atorvastatin is primarily used for treating hyperlipidemia and preventing cardiovascular events. The therapeutic benefits of Atorvastatin include reducing LDL cholesterol levels by 40-50%.\n\nIn terms of heart failure with reduced ejection fraction, the preferred first-line therapy is ACE inhibitors + Beta-blockers + Diuretics based on robust clinical trial evidence.\n\nRegarding the question about vitamin E supplementation and prevention of heart disease, it is important to note that while vitamin E has antioxidant properties, its role in primary or secondary prevention of cardiovascular disease remains controversial. Some studies have suggested a potential benefit, but many large-scale clinical trials have not demonstrated significant effects in reducing the risk of coronary heart disease or stroke.\n\nIt is always essential to consider patient safety and evidence-based medicine when making treatment recommendations. In this case, Atorvastatin, when appropriately indicated, should be the primary focus for managing hyperlipidemia and cardiovascular risk reduction. Further discussions with healthcare professionals and individualized patient assessments are necessary to determine the most appropriate course of action for each specific case.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_004",
+                "predicted": "yes",
+                "expected": "maybe",
+                "correct": false,
+                "score": 0,
+                "metrics": {
+                  "accuracy": 0.0,
+                  "confidence": 0.7999999999999999,
+                  "evidence_quality": 0.8
+                },
+                "response": " Based on the pattern recognition, hypothesis testing, and confirmation stages, Atorvastatin is a medication used to treat hyperlipidemia and reduce LDL cholesterol levels significantly. However, the question you have asked pertains to Aspirin, not Atorvastatin.\n\nRegarding your question about aspirin in primary prevention for elderly patients, according to guidelines from both the American Heart Association (AHA) and the American College of Cardiology (ACC), aspirin is recommended for primary prevention in elderly patients who are at increased risk for cardiovascular disease (CVD). The 2019 ACC/AHA Guidelines on the Primary Prevention of CVD state that aspirin can be considered for select individuals aged 70 and older if their estimated 10-year ASCVD risk is 8.5% or greater, or if they have a life expectancy of at least 10 years.\n\nThe recommendation to use aspirin in primary prevention comes from several clinical trials such as the Women's Health Study (WHS), Physicians' Health Study (PHS), and the Heart and Estrogen/Progestin Replacement Study (HERS). These studies demonstrated a modest reduction in the risk of CVD events with aspirin use. However, it is important to note that there are also potential harms associated with long-term aspirin use, such as an increased risk of bleeding, so careful consideration should be given to each individual patient's specific risks and benefits before initiating therapy.\n\nIn conclusion, based on the current evidence, aspirin may be considered for primary prevention in elderly patients who are at increased risk for CVD and have a life expectancy of at least 10 years. However, the decision to prescribe aspirin should take into account each patient's individual risks and benefits.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "pubmedqa_005",
+                "predicted": "yes",
+                "expected": "yes",
+                "correct": true,
+                "score": 100,
+                "metrics": {
+                  "accuracy": 1.0,
+                  "confidence": 0.7999999999999999,
+                  "evidence_quality": 0.6
+                },
+                "response": " Based on the pattern recognition of Lisinopril (an ACE inhibitor) and the hypothesis testing using robust clinical trial evidence, it can be concluded that ACE inhibitors are a preferred first-line therapy for Heart Failure with Reduced Ejection Fraction. This conclusion is further confirmed by the numerous clinical success stories demonstrating significant improvements in survival rates, reduced hospitalizations, and improved quality of life. In response to your question: \"Do ACE inhibitors reduce mortality in heart failure?\", the answer is yes, according to the evidence-based recommendations from guidelines such as SOLVD, MERIT-HF, CIBIS-II, and ACC/AHA. However, it's essential to note that individual responses may vary, and a personalized treatment plan should be developed in consultation with a healthcare professional.",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 11.553707,
+          "gpu_stats": {
+            "allocated_gb": 0.26,
+            "reserved_gb": 0.29,
+            "total_gb": 23.64,
+            "utilization_percent": 1.1
+          }
+        }
+      },
+      "end_time": "2025-06-20T04:37:36.545250"
+    },
+    "msmarco": {
+      "benchmark_name": "msmarco",
+      "start_time": "2025-06-20T04:37:36.547209",
+      "models": {
+        "hierarchical_system": {
+          "results": {
+            "model_name": "unknown_model",
+            "benchmark_name": "MSMARCO",
+            "evaluation_time": 26.250327587127686,
+            "total_questions": 10,
+            "successful_evaluations": 10,
+            "metrics": {
+              "total_questions": 10,
+              "average_score": 58.8825396825397,
+              "accuracy": 70.0,
+              "correct_answers": 7,
+              "benchmark_name": "MSMARCO"
+            },
+            "individual_results": [
+              {
+                "question_id": "msmarco_001",
+                "score": 65.71428571428572,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.14285714285714285,
+                  "answer_score": 1.0,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.6571428571428573,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Based on the pattern recognition and hypothesis testing, the primary condition under consideration is Type 2 Diabetes Mellitus. Here are some common symptoms associated with this condition:\n\n1. Frequent urination (polyuria) - Excessive production of urine due to high levels of glucose in the urine.\n2. Increased thirst (polydipsia) - The body tries to counteract the dehydration caused by frequent urination, leading to increased thirst.\n3. Increased hunger (polyphagia) - The body may not be able to convert food into energy effectively, causing an increase in appetite.\n4. Fatigue and weakness - High levels of glucose in the blood can lead to fatigue and weakness as the cells are unable to get the energy they need.\n5. Blurred vision - High levels of glucose in the blood can affect the functioning of the lens in the eye, causing blurred vision.\n6. Slow-healing wounds or frequent infections - High blood sugar levels can weaken the immune system and slow down the healing process.\n7. Numbness or tingling in hands or feet (neuropathy) - High blood sugar levels can damage the nerves, leading to a loss of feeling in the extremities.\n8. Dark patches on the skin (acanthosis nigricans) - These are areas of thickened, velvety, and darkened skin, usually found around the neck or armpits.\n\nIt's important to note that these symptoms can vary greatly from person to person, and some individuals may not experience all of them. If you or someone else is exhibiting any of these symptoms, it's crucial to seek medical advice promptly for proper diagnosis and treatment.",
+                "expected": "increased thirst, frequent urination, fatigue, blurred vision",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_002",
+                "score": 60.333333333333336,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.375,
+                  "answer_score": 0.6333333333333333,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.6033333333333334,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Hypertension, or high blood pressure, can be diagnosed using the following steps:\n\n1. Pattern Recognition: Identify if the patient's systolic blood pressure (SBP) consistently exceeds 130 mmHg and/or diastolic blood pressure (DBP) consistently exceeds 80 mmHg on at least two separate occasions.\n\n2. Hypothesis Testing: Confirm that there are no secondary causes of hypertension, such as kidney disease, hyperthyroidism, or use of certain medications. Obtain a detailed medical history and perform a physical examination to rule out these possibilities.\n\n3. Confirmation: If the patient does not have any secondary causes of hypertension, and their blood pressure remains consistently high, then a diagnosis of essential (primary) hypertension can be made. Monitor the patient's blood pressure regularly and adjust treatment as needed to achieve optimal control.",
+                "expected": "blood pressure measurements over multiple visits",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_003",
+                "score": 85.00000000000001,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.625,
+                  "answer_score": 1.0,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.8500000000000001,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Based on the pattern recognition and hypothesis testing performed, it appears that Lisinopril (an ACE inhibitor) is a commonly used medication for treating heart failure. The preferred first-line therapy for Heart Failure with Reduced Ejection Fraction is guideline-directed medical therapy which includes an ACE inhibitor like Lisinopril, beta-blockers, and diuretics. This treatment approach has demonstrated significant improvements in patient outcomes, including improved survival rates, reduced hospitalizations, and improved quality of life as shown by multiple clinical trials and guidelines such as SOLVD, MERIT-HF, CIBIS-II, and ACC/AHA guidelines.\n\nAdditionally, numerous clinical success stories have demonstrated the efficacy of this treatment approach in improving survival, reducing hospitalizations, and improving symptoms for patients with heart failure and reduced ejection fraction. For example, a patient may experience improvement from NYHA Class III to I, and an increase in EF from 25% to 40%.\n\nIn summary, Lisinopril (an ACE inhibitor) is a commonly used medication for treating heart failure, particularly in the context of Heart Failure with Reduced Ejection Fraction. The preferred first-line therapy includes an ACE inhibitor like Lisinopril, beta-blockers, and diuretics as supported by robust clinical evidence and guidelines.",
+                "expected": "ACE inhibitors, beta-blockers, diuretics",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_004",
+                "score": 47.66666666666667,
+                "correct": false,
+                "metrics": {
+                  "retrieval_score": 0.3,
+                  "answer_score": 0.4666666666666667,
+                  "medical_relevance": 0.85,
+                  "overall_score": 0.4766666666666667,
+                  "retrieved_docs_count": 10
+                },
+                "response": " The most likely cause of myocardial infarction (heart attack) in the given context is Acute Coronary Syndrome. This diagnosis is based on the repeated pattern of a medication used for its treatment - dual antiplatelet therapy (Aspirin + P2Y12 inhibitor), which inhibits platelet aggregation via COX-1 and P2Y12 pathways, and its proven clinical benefits in reducing recurrent myocardial infarction.\n\nThis diagnosis is further supported by multiple lines of evidence:\n\n1. Clinical Success Story - The presented cases demonstrate successful revascularization, no recurrent events at 1 year, and return to normal activity for patients with Acute Coronary Syndrome treated with dual antiplatelet therapy and primary PCI, which aligns with current ACS guidelines and STEMI management practices.\n2. Evidence-Based Intervention - Dual antiplatelet therapy with primary PCI is the recommended first-line treatment for Acute Coronary Syndrome according to evidence-based guidelines.\n3. Proven Clinical Benefits - The use of dual antiplatelet therapy has been shown to reduce recurrent myocardial infarction by 20% (CURE trial) and decrease cardiovascular events, supporting its role in the treatment of Acute Coronary Syndrome.\n\nIn conclusion, based on the given context and hierarchical diagnostic reasoning, it is highly probable that the patient has Acute Coronary Syndrome as the cause of myocardial infarction. It's essential to consult with a healthcare professional for accurate diagnosis and appropriate treatment.",
+                "expected": "coronary artery blockage from atherosclerotic plaque",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_005",
+                "score": 61.71428571428572,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.14285714285714285,
+                  "answer_score": 0.8999999999999999,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.6171428571428572,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Based on the hierarchical diagnostic reasoning, I would suggest evidence-based treatment for pneumonia.\n\nTIER 1 - PATTERN RECOGNITION:\nIdentified pattern: Clinical Guidelines for Community-Acquired Pneumonia (CAP) and Hospital-acquired Pneumonia (HAP).\n\nClinical Considerations:\n\u2022 Age, comorbidities, and severity of symptoms\n\nTIER 2 - HYPOTHESIS TESTING:\nHypothesis 1: Clinical Condition: Community-Acquired Pneumonia (CAP)\n\nFIRST-LINE EVIDENCE-BASED TREATMENT: Macrolides or fluoroquinolones + Oxygen therapy + Supportive care\n\nMechanism of Action: Antibiotic coverage for common causative bacteria, supplemental oxygen, and symptomatic management.\n\nProven Clinical Benefits:\n\u2022 Decrease mortality rates (CLARICO24, ATTACC)\n\u2022 Improve lung function (ATP3AM)\n\u2022 Reduce time to clinical stability...\nHypothesis 2: Clinical Condition: Hospital-acquired Pneumonia (HAP)\n\nFIRST-LINE EVIDENCE-BASED TREATMENT: Antipseudomonal beta-lactams + Macrolides or fluoroquinolones + Oxygen therapy + Supportive care\n\nMechanism of Action: Broad spectrum antibiotic coverage, supplemental oxygen, and symptomatic management.\n\nProven Clinical Benefits:\n\u2022 Decrease mortality rates (ATN, NHP)\n\u2022 Improve lung function (NAP4)\n\u2022 Reduce time to clinical stability...\n\nTIER 3 - CONFIRMATION:\nConfirm diagnosis with comprehensive clinical evidence.\nIntegrate all available information for final diagnostic confirmation.\nProvide detailed evidence synthesis and confidence assessment.\n\nEvidence 1: Key Learning Points:\n\u2022 Evidence-based therapy translates to improved patient outcomes\n\u2022 Guideline-recommended treatments provide consistent clinical benefits\n\u2022 Proper implementation of proven therapies is essential for optimal care...\nEvidence 2: Key Learning Points:\n\u2022 Evidence-based therapy translates to improved patient outcomes\n\u2022 Guideline-recommended treatments provide consistent clinical benefits\n\u2022 Proper implementation of proven therapies is essential for optimal care...",
+                "expected": "antibiotics, supportive care, oxygen therapy",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_006",
+                "score": 37.66666666666667,
+                "correct": false,
+                "metrics": {
+                  "retrieval_score": 0.25,
+                  "answer_score": 0.5,
+                  "medical_relevance": 0.3833333333333333,
+                  "overall_score": 0.3766666666666667,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Risk factors for stroke can vary, but some common ones include:\n\n1. Hypertension (High Blood Pressure): Chronic high blood pressure is a significant risk factor for both ischemic and hemorrhagic strokes.\n\n2. Dyslipidemia (Abnormal Cholesterol Levels): High levels of low-density lipoprotein (LDL) cholesterol, often referred to as \"bad\" cholesterol, can increase the risk of stroke.\n\n3. Diabetes Mellitus: Both type 1 and type 2 diabetes are associated with an increased risk of stroke.\n\n4. Smoking: Cigarette smoking increases the risk of stroke by damaging blood vessels and increasing the risk of atherosclerosis.\n\n5. Obesity: Excess body weight, particularly abdominal obesity, can increase the risk of stroke due to related conditions such as hypertension and diabetes.\n\n6. Physical Inactivity: Lack of regular physical activity contributes to various risk factors, including obesity and hypertension.\n\n7. Age: The risk of stroke increases with age, particularly after 55 years.\n\n8. Family History: A family history of stroke, especially if it's early-onset (before age 65), can increase an individual's risk.\n\n9. Atrial Fibrillation: An irregular heart rhythm that increases the risk of blood clots forming in the heart and being pumped to the brain, causing a stroke.\n\n10. Previous Stroke or Transient Ischemic Attack (TIA): Individuals who have had a previous stroke or TIA are at increased risk for recurrent events.",
+                "expected": "hypertension, diabetes, smoking, atrial fibrillation",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_007",
+                "score": 56.761904761904766,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.2857142857142857,
+                  "answer_score": 0.6333333333333333,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.5676190476190477,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Asthma diagnosis involves a combination of three steps: pattern recognition, hypothesis testing, and confirmation.\n\n1. Pattern Recognition: Recurrent symptoms (wheezing, shortness of breath, chest tightness, and cough) that vary over time and in response to certain stimuli such as allergens, exercise, or cold air. The patient may also have a personal or family history of atopic diseases like eczema or hay fever.\n\n2. Hypothesis Testing: If the pattern matches with asthma, the next step is hypothesis testing. This involves performing spirometry tests to measure lung function. A decrease in FEV1 (forced expiratory volume in 1 second) and a higher FEV1/FVC (forced vital capacity) ratio suggest airway obstruction, which can be indicative of asthma.\n\n3. Confirmation: If the spirometry test results support the hypothesis, further confirmation tests may include bronchial provocation tests or imaging studies like chest X-ray or CT scan to rule out other lung diseases.\n\nThe diagnosis is then made based on the clinical presentation, history, physical examination, and diagnostic tests. It's important to note that asthma can be difficult to diagnose definitively as it's often a chronic condition with intermittent symptoms. However, following evidence-based guidelines and proper implementation of proven therapies can lead to improved patient outcomes.",
+                "expected": "spirometry, peak flow measurement, clinical history",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_008",
+                "score": 42.00000000000001,
+                "correct": false,
+                "metrics": {
+                  "retrieval_score": 0.125,
+                  "answer_score": 0.5,
+                  "medical_relevance": 0.85,
+                  "overall_score": 0.42000000000000004,
+                  "retrieved_docs_count": 10
+                },
+                "response": " The complications of Type 2 Diabetes Mellitus can include:\n\n1. Cardiovascular disease: This is the most common cause of death among people with type 2 diabetes and includes conditions like coronary artery disease, heart attack, stroke, and peripheral vascular disease.\n\n2. Nephropathy (kidney damage): High blood sugar levels can damage the tiny blood vessels in the kidneys, leading to proteinuria (protein in urine) and eventually kidney failure.\n\n3. Neuropathy (nerve damage): This can cause numbness, tingling, pain, or weakness in the feet or hands. In severe cases, it can lead to foot problems that may require amputation.\n\n4. Retinopathy (eye damage): Diabetes can damage the blood vessels in the retina of the eye, leading to blindness.\n\n5. Periodontal disease: People with diabetes are more susceptible to gum diseases, which can lead to tooth loss.\n\n6. Skin conditions: Diabetics may experience slow healing of skin infections and other skin problems like bacterial and fungal infections.\n\n7. Necrobiosis lipoidica diabeticorum (NLD): A skin condition that causes round, waxy, raised patches on the shins or upper legs.\n\n8. Autonomic neuropathy: This affects the nerves controlling organs like the heart, bladder, stomach, and intestines, which can lead to various symptoms including orthostatic hypotension (low blood pressure upon standing), gastroparesis (slow stomach emptying), urinary incontinence or retention, and sexual dysfunction.\n\n9. Hearing impairment: Diabetes can cause damage to the nerves in the ear leading to hearing loss.\n\n10. Foot problems: Poor circulation and nerve damage in the feet can lead to foot ulcers, infections, and in severe cases, amputations.",
+                "expected": "nephropathy, retinopathy, neuropathy, cardiovascular disease",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_009",
+                "score": 72.63492063492063,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.4444444444444444,
+                  "answer_score": 0.8714285714285714,
+                  "medical_relevance": 1.0,
+                  "overall_score": 0.7263492063492063,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Metformin works by reducing hepatic glucose production and improving insulin sensitivity. This dual mechanism helps in managing Type 2 Diabetes Mellitus, which is a clinical condition you've identified. It reduces the risk of myocardial infarction (heart attack) and other cardiovascular events by 30-40%, as shown in the UKPDS study and supported by multiple clinical success stories where metformin-based therapy with lifestyle modification has led to significant reduction in cardiovascular events and improved glycemic control. This response is based on evidence-based medicine and prioritizes patient safety.",
+                "expected": "reduces hepatic glucose production, improves insulin sensitivity",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              },
+              {
+                "question_id": "msmarco_010",
+                "score": 59.333333333333336,
+                "correct": true,
+                "metrics": {
+                  "retrieval_score": 0.3,
+                  "answer_score": 0.8,
+                  "medical_relevance": 0.7666666666666666,
+                  "overall_score": 0.5933333333333334,
+                  "retrieved_docs_count": 10
+                },
+                "response": " Symptoms of a possible heart attack may include:\n\n1. Chest pain or discomfort: Most heart attacks involve discomfort in the center of the chest that lasts more than a few minutes, or that goes away and comes back. It can feel like pressure, squeezing, fullness, or pain.\n\n2. Discomfort in other areas of the upper body: Symptoms can include pain or discomfort in one or both arms, the back, neck, jaw, or stomach.\n\n3. Shortness of breath: This could be due to trouble breathing or shortness of breath.\n\n4. Cold sweat, nausea, lightheadedness or dizziness: These symptoms may occur before or along with chest pain.\n\n5. Fatigue: Feeling unusually tired for no obvious reason can sometimes be a sign of a heart attack.\n\n6. Other possible signs: Women and people with diabetes may experience different symptoms. Some people have no symptoms at all, or symptoms that are \"silent\" and difficult to recognize.\n\nIf you suspect a heart attack, seek immediate medical attention. Call your local emergency number right away if you experience any of these symptoms. Remember, it's always better to get checked out than risking potential harm from ignoring the signs.",
+                "expected": "chest pain, shortness of breath, nausea, sweating",
+                "model_name": "unknown_model",
+                "retrieved_docs_count": 10
+              }
+            ],
+            "status": "completed"
+          },
+          "evaluation_time_seconds": 26.254751,
+          "gpu_stats": {
+            "allocated_gb": 0.26,
+            "reserved_gb": 0.29,
+            "total_gb": 23.64,
+            "utilization_percent": 1.1
+          }
+        }
+      },
+      "end_time": "2025-06-20T04:38:02.987751"
+    }
+  }
+}
