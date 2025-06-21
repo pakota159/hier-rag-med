@@ -57,6 +57,9 @@ eval_results/                # Any other results variants
 eval_cache/                  # Any other cache variants
 eval_logs/                   # Any other logs variants
 
+evaluation/cache/            # Primary cache location  
+evaluation/logs/             # Primary logs location
+
 # Benchmark data (downloaded automatically, can be large)
 data/benchmarks/             # MIRAGE, MedReason, PubMedQA, MS MARCO
 data/foundation_dataset/     # Foundation reasoning datasets
