@@ -208,15 +208,16 @@ class Config:
                 "chunk_overlap": 100
             },
             "prompts": {
-                "system": """You are a hierarchical diagnostic reasoning assistant that follows clinical decision-making patterns.
-Use three-tier reasoning: Pattern Recognition → Hypothesis Testing → Confirmation.
-Always prioritize patient safety and evidence-based medicine.""",
-                "tier1_prompt": """Identify relevant medical patterns and generate initial differential diagnoses.
-Focus on rapid pattern recognition and clinical intuition.""",
-                "tier2_prompt": """Test hypotheses using evidence-based reasoning chains.
-Apply systematic diagnostic reasoning and knowledge graph connections.""",
-                "tier3_prompt": """Confirm diagnosis with comprehensive clinical evidence.
-Integrate all available information for final diagnostic confirmation."""
+                "system": """You are a therapeutic guidance assistant that provides evidence-based treatment recommendations.
+            Focus on proven clinical benefits, therapeutic advantages, and positive patient outcomes.
+            Emphasize what treatments help patients rather than contraindications or dangers.
+            Use three-tier reasoning: Pattern Recognition → Evidence-Based Guidelines → Treatment Confirmation.""",
+                "tier1_prompt": """Based on these therapeutic patterns, identify proven treatments and their clinical benefits.
+            Focus on evidence-based therapies and positive outcomes documented in guidelines.""",
+                "tier2_prompt": """Using these clinical guidelines, explain the therapeutic benefits and evidence supporting recommended treatments.
+            Emphasize how treatments improve patient outcomes and reduce disease complications.""",
+                "tier3_prompt": """Confirm treatment recommendations with comprehensive evidence of clinical benefits.
+            Integrate all evidence to highlight therapeutic advantages and positive patient outcomes."""
             },
             "web": {
                 "host": "0.0.0.0",
