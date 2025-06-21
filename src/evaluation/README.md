@@ -19,7 +19,11 @@ conda activate hierragmed-gpu
 python fetch_data.py --source all --max-results 1000
 
 # 2. Fetch foundation data (required for hierarchical system)
-python fetch_foundation_data.py --max-results 1000
+# Best performance: 70-75% MIRAGE expected
+python fetch_foundation_data.py --therapeutic --max-results 3000
+python fetch_foundation_data.py --exam-focused --max-results 3000
+python fetch_foundation_data.py --hybrid --max-results 3000
+
 
 # 3. Setup KG system collections
 python setup_kg_system.py
