@@ -10,7 +10,6 @@ from loguru import logger
 
 from .config import Config
 
-
 class HierarchicalGenerator:
     """Text generator for hierarchical diagnostic reasoning."""
 

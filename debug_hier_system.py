@@ -10,6 +10,7 @@ Run this to find exactly where the problem is.
 import sys
 import json
 import traceback
+import inspect
 from pathlib import Path
 
 # Add project to path
@@ -80,8 +81,8 @@ def test_2_collections():
     print("=" * 60)
     
     try:
-        from basic_reasoning.config import Config
-        from basic_reasoning.retrieval import HierarchicalRetriever
+        from src.basic_reasoning.config import Config
+        from src.basic_reasoning.retrieval import HierarchicalRetriever
         
         config = Config()
         retriever = HierarchicalRetriever(config)
@@ -130,8 +131,8 @@ def test_3_generation():
     print("=" * 60)
     
     try:
-        from basic_reasoning.config import Config
-        from basic_reasoning.generation import HierarchicalGenerator
+        from src.basic_reasoning.config import Config
+        from src.basic_reasoning.generation import HierarchicalGenerator
         import inspect
         
         config = Config()
@@ -212,9 +213,9 @@ def test_4_mirage_questions():
         print("\n🧪 Testing system on sample questions:")
         
         try:
-            from basic_reasoning.config import Config
-            from basic_reasoning.retrieval import HierarchicalRetriever
-            from basic_reasoning.generation import HierarchicalGenerator
+            from src.basic_reasoning.config import Config
+            from src.basic_reasoning.retrieval import HierarchicalRetriever
+            from src.basic_reasoning.generation import HierarchicalGenerator
             
             config = Config()
             retriever = HierarchicalRetriever(config)
