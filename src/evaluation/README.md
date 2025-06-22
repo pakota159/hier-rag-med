@@ -36,7 +36,8 @@ python src/evaluation/run_evaluation.py --quick
 
 # Test individual systems
 python src/evaluation/run_evaluation.py --quick --models kg_system
-python src/evaluation/run_evaluation.py --quick --models hierarchical_system
+# After updating the config files
+python src/evaluation/run_evaluation.py --quick --models hierarchical_system --benchmark mirage
 
 # Full test
 python src/evaluation/run_evaluation.py --models hierarchical_system

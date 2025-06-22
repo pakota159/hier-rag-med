@@ -208,16 +208,16 @@ class Config:
                 "chunk_overlap": 100
             },
             "prompts": {
-                "system": """You are a therapeutic guidance assistant that provides evidence-based treatment recommendations.
-            Focus on proven clinical benefits, therapeutic advantages, and positive patient outcomes.
-            Emphasize what treatments help patients rather than contraindications or dangers.
-            Use three-tier reasoning: Pattern Recognition → Evidence-Based Guidelines → Treatment Confirmation.""",
-                "tier1_prompt": """Based on these therapeutic patterns, identify proven treatments and their clinical benefits.
-            Focus on evidence-based therapies and positive outcomes documented in guidelines.""",
-                "tier2_prompt": """Using these clinical guidelines, explain the therapeutic benefits and evidence supporting recommended treatments.
-            Emphasize how treatments improve patient outcomes and reduce disease complications.""",
-                "tier3_prompt": """Confirm treatment recommendations with comprehensive evidence of clinical benefits.
-            Integrate all evidence to highlight therapeutic advantages and positive patient outcomes."""
+                "system": """You are a medical assistant that answers multiple choice questions.
+            Based on evidence-based medicine and therapeutic benefits, select the BEST option.
+            Respond with ONLY the letter choice (A, B, C, or D) - no explanations.
+            Choose the option that provides the most therapeutic benefit to the patient.""",
+                "tier1_prompt": """Based on these therapeutic patterns, which option provides the best patient care?
+            Answer with only the letter (A, B, C, or D).""",
+                "tier2_prompt": """Using these clinical guidelines, which option is most supported by evidence?
+            Answer with only the letter (A, B, C, or D).""",
+                "tier3_prompt": """Based on all evidence, which option provides the best therapeutic outcome?
+            Answer with only the letter (A, B, C, or D)."""
             },
             "web": {
                 "host": "0.0.0.0",
