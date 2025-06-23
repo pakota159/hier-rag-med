@@ -18,6 +18,21 @@ from loguru import logger
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# Try to import official MIRAGE QADataset utility
+MIRAGE_UTILS_AVAILABLE = False
+QADataset = None
+
+try:
+    from mirage.src.utils import QADataset
+    MIRAGE_UTILS_AVAILABLE = True
+    logger.info("✅ Successfully imported QADataset from MIRAGE")
+except ImportError as e:
+    MIRAGE_UTILS_AVAILABLE = False
+    logger.warning(f"⚠️ QADataset from MIRAGE not available: {e} - using local file parsing only")
+except Exception as e:
+    MIRAGE_UTILS_AVAILABLE = False
+    logger.warning(f"⚠️ Failed to import QADataset: {e} - using local file parsing only")
+
 
 class MIRAGEBenchmark(BaseBenchmark):
     """
@@ -50,6 +65,54 @@ class MIRAGEBenchmark(BaseBenchmark):
         """Load MIRAGE dataset from local submodule."""
         logger.info("📊 Loading MIRAGE dataset from local submodule...")
         
+        # Try to use the official QADataset first (only if available)
+        if MIRAGE_UTILS_AVAILABLE and QADataset is not None:
+            try:
+                return self._load_with_qadataset()
+            except Exception as e:
+                logger.warning(f"⚠️ QADataset loading failed: {e}. Trying local file...")
+        
+        # Fallback to local benchmark.json file
+        return self._load_from_local_file()
+
+    def _load_with_qadataset(self) -> List[Dict]:
+        """Load MIRAGE data using official QADataset."""
+        logger.info("🎯 Using official MIRAGE QADataset...")
+        
+        # Available MIRAGE datasets
+        mirage_datasets = ["mmlu", "medqa", "medmcqa", "pubmedqa", "bioasq"]
+        all_questions = []
+        
+        for dataset_name in mirage_datasets:
+            try:
+                logger.info(f"   📖 Loading {dataset_name}...")
+                qa_dataset = QADataset(dataset_name)
+                
+                dataset_size = len(qa_dataset)
+                logger.info(f"   📊 {dataset_name}: {dataset_size} questions")
+                
+                # Load questions from this dataset
+                for idx in range(dataset_size):
+                    try:
+                        item = qa_dataset[idx]
+                        formatted_item = self._format_qadataset_question(item, f"{dataset_name}_{idx}", dataset_name)
+                        if formatted_item:
+                            all_questions.append(formatted_item)
+                    except Exception as e:
+                        logger.debug(f"Skipping question {idx} from {dataset_name}: {e}")
+                        continue
+                        
+            except Exception as e:
+                logger.warning(f"   ⚠️ Failed to load {dataset_name}: {e}")
+                continue
+        
+        logger.info(f"✅ Loaded {len(all_questions)} questions from QADataset")
+        return all_questions
+
+    def _load_from_local_file(self) -> List[Dict]:
+        """Load MIRAGE data from local benchmark.json file."""
+        logger.info("📁 Loading from local benchmark.json file...")
+        
         # Try to find local MIRAGE submodule
         mirage_paths = [
             project_root / "mirage",  # Standard submodule location
@@ -57,13 +120,10 @@ class MIRAGEBenchmark(BaseBenchmark):
             Path("../mirage"),        # Parent directory
         ]
         
-        mirage_dir = None
         benchmark_file = None
-        
         for path in mirage_paths:
             potential_file = path / "benchmark.json"
             if potential_file.exists():
-                mirage_dir = path
                 benchmark_file = potential_file
                 break
         
@@ -82,86 +142,383 @@ class MIRAGEBenchmark(BaseBenchmark):
             with open(benchmark_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
+            # Handle MIRAGE benchmark.json structure
+            all_questions = []
+            
+            # MIRAGE benchmark.json typically has this structure:
+            # {"dataset_name": [questions], "dataset_name2": [questions], ...}
             if isinstance(data, dict):
-                # Handle different JSON structures
-                questions = []
-                if "questions" in data:
-                    questions = data["questions"]
-                elif "data" in data:
-                    questions = data["data"]
-                else:
-                    # Assume it's a flat structure of questions
-                    questions = [data]
+                for dataset_name, questions in data.items():
+                    if isinstance(questions, list):
+                        logger.info(f"   📖 Processing {dataset_name}: {len(questions)} questions")
+                        for i, item in enumerate(questions):
+                            formatted_item = self._format_mirage_question(item, f"{dataset_name}_{i}", dataset_name)
+                            if formatted_item:
+                                all_questions.append(formatted_item)
+                    else:
+                        logger.debug(f"   ⚠️ Skipping {dataset_name}: not a list")
             elif isinstance(data, list):
-                questions = data
+                # If it's just a list of questions
+                logger.info(f"   📖 Processing direct list: {len(data)} questions")
+                for i, item in enumerate(data):
+                    formatted_item = self._format_mirage_question(item, f"mirage_{i}", "mirage")
+                    if formatted_item:
+                        all_questions.append(formatted_item)
             else:
-                logger.error(f"❌ Unexpected data format in {benchmark_file}")
+                logger.error(f"❌ Unexpected data format in {benchmark_file}: {type(data)}")
                 return []
             
-            # Process and format questions
-            formatted_questions = []
-            for i, item in enumerate(questions):
-                formatted_item = self._format_mirage_question(item, i)
-                if formatted_item:
-                    formatted_questions.append(formatted_item)
-            
-            logger.info(f"✅ Loaded {len(formatted_questions)} MIRAGE questions from local file")
-            return formatted_questions
+            logger.info(f"✅ Loaded {len(all_questions)} MIRAGE questions from local file")
+            return all_questions
             
         except Exception as e:
             logger.error(f"❌ Failed to load MIRAGE data: {e}")
+            import traceback
+            logger.debug(f"Full traceback: {traceback.format_exc()}")
             return []
 
     def load_test_data(self) -> List[Dict]:
         """Load test data for evaluation (compatibility method)."""
         return self.get_questions()
 
-    def _format_mirage_question(self, item: Dict, index: int) -> Optional[Dict]:
-        """Format a single MIRAGE question to standard format."""
+    def _format_qadataset_question(self, item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
+        """Format a question from QADataset to standard format."""
         try:
-            # Extract question components with flexible field names
-            question_text = (item.get('question') or 
-                           item.get('query') or 
-                           item.get('text') or '')
+            # Extract question components
+            question_text = item.get('question', item.get('query', ''))
+            options = item.get('options', item.get('choices', []))
+            correct_answer = item.get('answer', item.get('correct_answer', ''))
+            explanation = item.get('explanation', item.get('rationale', ''))
             
-            options = (item.get('options') or 
-                      item.get('choices') or 
-                      item.get('answers') or [])
-            
-            correct_answer = (item.get('answer') or 
-                            item.get('correct_answer') or 
-                            item.get('label') or '')
-            
-            explanation = (item.get('explanation') or 
-                         item.get('rationale') or 
-                         item.get('reasoning') or '')
-            
-            # Skip items without essential fields
             if not question_text:
                 return None
             
-            # Determine medical specialty
+            # Determine medical specialty and question type
             medical_specialty = self._classify_medical_specialty(question_text)
-            
-            # Determine question type
             question_type = self._classify_question_type(question_text, options)
             
-            formatted_question = {
-                'id': item.get('id', f"mirage_{index}"),
+            return {
+                'id': question_id,
                 'question': question_text,
                 'options': options,
                 'correct_answer': correct_answer,
                 'explanation': explanation,
                 'medical_specialty': medical_specialty,
                 'question_type': question_type,
-                'source_dataset': item.get('source', 'mirage'),
+                'source_dataset': dataset_name,
                 'reasoning_type': 'medical_reasoning'
             }
             
-            return formatted_question
+        except Exception as e:
+            logger.debug(f"Failed to format QADataset question: {e}")
+            return None
+
+    def _format_mirage_question(self, item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
+        """Format a single MIRAGE question to standard format."""
+        try:
+            # Handle various MIRAGE question formats
+            # The item might be the question directly or wrapped in metadata
+            
+            if isinstance(item, str):
+                # Sometimes questions are just strings
+                return {
+                    'id': question_id,
+                    'question': item,
+                    'options': [],
+                    'correct_answer': '',
+                    'explanation': '',
+                    'medical_specialty': self._classify_medical_specialty(item),
+                    'question_type': 'knowledge_retrieval',
+                    'source_dataset': dataset_name,
+                    'reasoning_type': 'medical_reasoning'
+                }
+            
+            # Extract question components with flexible field names
+            question_text = (item.get('question') or 
+                           item.get('query') or 
+                           item.get('text') or 
+                           item.get('prompt') or '')
+            
+            # Handle options in various formats
+            options = []
+            if 'options' in item:
+                options = item['options']
+            elif 'choices' in item:
+                options = item['choices']
+            elif 'answers' in item:
+                options = item['answers']
+            else:
+                # Look for A, B, C, D options
+                for key in ['A', 'B', 'C', 'D', 'E']:
+                    if key in item:
+                        options.append(item[key])
+            
+            # Convert options to list if it's a dict
+            if isinstance(options, dict):
+                options = list(options.values())
+            
+            correct_answer = (item.get('answer') or 
+                            item.get('correct_answer') or 
+                            item.get('label') or 
+                            item.get('target') or '')
+            
+            explanation = (item.get('explanation') or 
+                         item.get('rationale') or 
+                         item.get('reasoning') or 
+                         item.get('solution') or '')
+            
+            # Skip items without essential fields
+            if not question_text:
+                return None
+            
+            # Determine medical specialty and question type
+            medical_specialty = self._classify_medical_specialty(question_text)
+            question_type = self._classify_question_type(question_text, options)
+            
+            return {
+                'id': question_id,
+                'question': question_text,
+                'options': options,
+                'correct_answer': correct_answer,
+                'explanation': explanation,
+                'medical_specialty': medical_specialty,
+                'question_type': question_type,
+                'source_dataset': dataset_name,
+                'reasoning_type': 'medical_reasoning'
+            }
             
         except Exception as e:
-            logger.warning(f"⚠️ Failed to format question {index}: {e}")
+            logger.debug(f"Failed to format MIRAGE question {question_id}: {e}")
+            return None
+
+    def load_dataset(self) -> List[Dict]:
+        """Load MIRAGE dataset from local submodule."""
+        logger.info("📊 Loading MIRAGE dataset from local submodule...")
+        
+        # Try to use the official QADataset first
+        if MIRAGE_UTILS_AVAILABLE:
+            try:
+                return self._load_with_qadataset()
+            except Exception as e:
+                logger.warning(f"⚠️ QADataset loading failed: {e}. Trying local file...")
+        
+        # Fallback to local benchmark.json file
+        return self._load_from_local_file()
+
+    def _load_with_qadataset(self) -> List[Dict]:
+        """Load MIRAGE data using official QADataset."""
+        logger.info("🎯 Using official MIRAGE QADataset...")
+        
+        # Available MIRAGE datasets
+        mirage_datasets = ["mmlu", "medqa", "medmcqa", "pubmedqa", "bioasq"]
+        all_questions = []
+        
+        for dataset_name in mirage_datasets:
+            try:
+                logger.info(f"   📖 Loading {dataset_name}...")
+                qa_dataset = QADataset(dataset_name)
+                
+                dataset_size = len(qa_dataset)
+                logger.info(f"   📊 {dataset_name}: {dataset_size} questions")
+                
+                # Load questions from this dataset
+                for idx in range(dataset_size):
+                    try:
+                        item = qa_dataset[idx]
+                        formatted_item = self._format_qadataset_question(item, f"{dataset_name}_{idx}", dataset_name)
+                        if formatted_item:
+                            all_questions.append(formatted_item)
+                    except Exception as e:
+                        logger.debug(f"Skipping question {idx} from {dataset_name}: {e}")
+                        continue
+                        
+            except Exception as e:
+                logger.warning(f"   ⚠️ Failed to load {dataset_name}: {e}")
+                continue
+        
+        logger.info(f"✅ Loaded {len(all_questions)} questions from QADataset")
+        return all_questions
+
+    def _load_from_local_file(self) -> List[Dict]:
+        """Load MIRAGE data from local benchmark.json file."""
+        logger.info("📁 Loading from local benchmark.json file...")
+        
+        # Try to find local MIRAGE submodule
+        mirage_paths = [
+            project_root / "mirage",  # Standard submodule location
+            Path("mirage"),           # Current directory
+            Path("../mirage"),        # Parent directory
+        ]
+        
+        benchmark_file = None
+        for path in mirage_paths:
+            potential_file = path / "benchmark.json"
+            if potential_file.exists():
+                benchmark_file = potential_file
+                break
+        
+        if not benchmark_file:
+            logger.error("❌ MIRAGE benchmark.json not found in local submodule")
+            logger.error("💡 Expected locations:")
+            for path in mirage_paths:
+                logger.error(f"   - {path / 'benchmark.json'}")
+            logger.error("🔧 To fix:")
+            logger.error("   cd mirage && wget https://github.com/Teddy-XiongGZ/MIRAGE/raw/main/benchmark.json")
+            return []
+        
+        try:
+            logger.info(f"📁 Loading from: {benchmark_file}")
+            
+            with open(benchmark_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Handle MIRAGE benchmark.json structure
+            all_questions = []
+            
+            # MIRAGE benchmark.json typically has this structure:
+            # {"dataset_name": [questions], "dataset_name2": [questions], ...}
+            if isinstance(data, dict):
+                for dataset_name, questions in data.items():
+                    if isinstance(questions, list):
+                        logger.info(f"   📖 Processing {dataset_name}: {len(questions)} questions")
+                        for i, item in enumerate(questions):
+                            formatted_item = self._format_mirage_question(item, f"{dataset_name}_{i}", dataset_name)
+                            if formatted_item:
+                                all_questions.append(formatted_item)
+                    else:
+                        logger.debug(f"   ⚠️ Skipping {dataset_name}: not a list")
+            elif isinstance(data, list):
+                # If it's just a list of questions
+                logger.info(f"   📖 Processing direct list: {len(data)} questions")
+                for i, item in enumerate(data):
+                    formatted_item = self._format_mirage_question(item, f"mirage_{i}", "mirage")
+                    if formatted_item:
+                        all_questions.append(formatted_item)
+            else:
+                logger.error(f"❌ Unexpected data format in {benchmark_file}: {type(data)}")
+                return []
+            
+            logger.info(f"✅ Loaded {len(all_questions)} MIRAGE questions from local file")
+            return all_questions
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to load MIRAGE data: {e}")
+            import traceback
+            logger.debug(f"Full traceback: {traceback.format_exc()}")
+            return []
+
+    def load_test_data(self) -> List[Dict]:
+        """Load test data for evaluation (compatibility method)."""
+        return self.get_questions()
+
+    def _format_qadataset_question(self, item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
+        """Format a question from QADataset to standard format."""
+        try:
+            # Extract question components
+            question_text = item.get('question', item.get('query', ''))
+            options = item.get('options', item.get('choices', []))
+            correct_answer = item.get('answer', item.get('correct_answer', ''))
+            explanation = item.get('explanation', item.get('rationale', ''))
+            
+            if not question_text:
+                return None
+            
+            # Determine medical specialty and question type
+            medical_specialty = self._classify_medical_specialty(question_text)
+            question_type = self._classify_question_type(question_text, options)
+            
+            return {
+                'id': question_id,
+                'question': question_text,
+                'options': options,
+                'correct_answer': correct_answer,
+                'explanation': explanation,
+                'medical_specialty': medical_specialty,
+                'question_type': question_type,
+                'source_dataset': dataset_name,
+                'reasoning_type': 'medical_reasoning'
+            }
+            
+        except Exception as e:
+            logger.debug(f"Failed to format QADataset question: {e}")
+            return None
+
+    def _format_mirage_question(self, item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
+        """Format a single MIRAGE question to standard format."""
+        try:
+            # Handle various MIRAGE question formats
+            # The item might be the question directly or wrapped in metadata
+            
+            if isinstance(item, str):
+                # Sometimes questions are just strings
+                return {
+                    'id': question_id,
+                    'question': item,
+                    'options': [],
+                    'correct_answer': '',
+                    'explanation': '',
+                    'medical_specialty': self._classify_medical_specialty(item),
+                    'question_type': 'knowledge_retrieval',
+                    'source_dataset': dataset_name,
+                    'reasoning_type': 'medical_reasoning'
+                }
+            
+            # Extract question components with flexible field names
+            question_text = (item.get('question') or 
+                           item.get('query') or 
+                           item.get('text') or 
+                           item.get('prompt') or '')
+            
+            # Handle options in various formats
+            options = []
+            if 'options' in item:
+                options = item['options']
+            elif 'choices' in item:
+                options = item['choices']
+            elif 'answers' in item:
+                options = item['answers']
+            else:
+                # Look for A, B, C, D options
+                for key in ['A', 'B', 'C', 'D', 'E']:
+                    if key in item:
+                        options.append(item[key])
+            
+            # Convert options to list if it's a dict
+            if isinstance(options, dict):
+                options = list(options.values())
+            
+            correct_answer = (item.get('answer') or 
+                            item.get('correct_answer') or 
+                            item.get('label') or 
+                            item.get('target') or '')
+            
+            explanation = (item.get('explanation') or 
+                         item.get('rationale') or 
+                         item.get('reasoning') or 
+                         item.get('solution') or '')
+            
+            # Skip items without essential fields
+            if not question_text:
+                return None
+            
+            # Determine medical specialty and question type
+            medical_specialty = self._classify_medical_specialty(question_text)
+            question_type = self._classify_question_type(question_text, options)
+            
+            return {
+                'id': question_id,
+                'question': question_text,
+                'options': options,
+                'correct_answer': correct_answer,
+                'explanation': explanation,
+                'medical_specialty': medical_specialty,
+                'question_type': question_type,
+                'source_dataset': dataset_name,
+                'reasoning_type': 'medical_reasoning'
+            }
+            
+        except Exception as e:
+            logger.debug(f"Failed to format MIRAGE question {question_id}: {e}")
             return None
 
     def _classify_medical_specialty(self, question_text: str) -> str:
