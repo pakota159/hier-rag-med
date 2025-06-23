@@ -65,15 +65,24 @@ class MIRAGEBenchmark(BaseBenchmark):
         """Load MIRAGE dataset from local submodule."""
         logger.info("📊 Loading MIRAGE dataset from local submodule...")
         
-        # Try to use the official QADataset first (only if available)
+        # Always try local file parsing first since we have the submodule
+        all_questions = self._load_from_local_file()
+        
+        # If local file loading worked, return that
+        if all_questions:
+            return all_questions
+        
+        # Only try QADataset if local file failed and QADataset is available
         if MIRAGE_UTILS_AVAILABLE and QADataset is not None:
             try:
+                logger.info("⚠️ Local file failed, trying QADataset...")
                 return self._load_with_qadataset()
             except Exception as e:
-                logger.warning(f"⚠️ QADataset loading failed: {e}. Trying local file...")
+                logger.warning(f"⚠️ QADataset loading also failed: {e}")
         
-        # Fallback to local benchmark.json file
-        return self._load_from_local_file()
+        # Return empty list if both methods failed
+        logger.error("❌ Both local file and QADataset loading failed")
+        return []
 
     def _load_with_qadataset(self) -> List[Dict]:
         """Load MIRAGE data using official QADataset."""
