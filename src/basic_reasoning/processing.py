@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Document processing for Basic Reasoning system.
 COMPLETELY UPDATED VERSION - Handles PubMed/MTSamples/MeSH data with intelligent tier assignment
@@ -54,84 +55,193 @@ class HierarchicalDocumentProcessor:
     def assign_document_tier(self, doc: Dict) -> int:
         """
         Assign hierarchical tier to documents based on content and metadata.
-        Tier 1 (Pattern Recognition): Basic symptoms, definitions, classifications
-        Tier 2 (Hypothesis Testing): Clinical studies, treatments, procedures  
-        Tier 3 (Confirmation): Meta-analyses, guidelines, high-evidence content
+        IMPROVED LOGIC - Ensures balanced distribution across all tiers
+        
+        Tier 1 (Pattern Recognition): Basic concepts, definitions, symptoms, classifications
+        Tier 2 (Hypothesis Testing): Clinical studies, treatments, procedures, diagnostics
+        Tier 3 (Confirmation): High-evidence content, guidelines, meta-analyses
         """
         metadata = doc.get("metadata", {})
-        text = doc.get("text", "").lower()
-        title = metadata.get("title", "").lower()
-        source = metadata.get("source", "")
         
-        # Combined text for analysis
+        # Safely handle text field - convert to string if it's a list
+        text_raw = doc.get("text", "")
+        if isinstance(text_raw, list):
+            text = " ".join(str(item) for item in text_raw).lower()
+        elif text_raw is None:
+            text = ""
+        else:
+            text = str(text_raw).lower()
+        
+        # Safely handle title field - convert to string if it's a list
+        title_raw = metadata.get("title", "")
+        if isinstance(title_raw, list):
+            title = " ".join(str(item) for item in title_raw).lower()
+        elif title_raw is None:
+            title = ""
+        else:
+            title = str(title_raw).lower()
+        
+        source = metadata.get("source", "")
         combined_text = f"{title} {text}"
         
-        # Tier 3 (Confirmation) - High-evidence content
+        # Safely handle journal and publication types
+        journal_raw = metadata.get("journal", "")
+        journal = " ".join(str(item) for item in journal_raw).lower() if isinstance(journal_raw, list) else str(journal_raw).lower()
+        
+        pub_types_raw = metadata.get("publication_types", "")
+        pub_types = " ".join(str(item) for item in pub_types_raw).lower() if isinstance(pub_types_raw, list) else str(pub_types_raw).lower()
+        
+        # TIER 1 (Pattern Recognition) - Basic concepts and definitions
+        # Enhanced indicators to capture more foundational content
+        tier1_indicators = [
+            "definition", "defined as", "is a", "are a", "refers to", "term",
+            "symptom", "symptoms", "sign", "signs", "manifestation", "presents with",
+            "characterized by", "classification", "category", "type", "types",
+            "pathophysiology", "etiology", "cause", "causes", "epidemiology", 
+            "prevalence", "incidence", "risk factor", "anatomy", "physiology",
+            "concept", "basic", "fundamental", "introduction", "overview",
+            "what is", "description", "features", "characteristics"
+        ]
+        
+        # TIER 3 (Confirmation) - High-evidence content (check first for priority)
         tier3_indicators = [
             "meta-analysis", "systematic review", "clinical practice guideline",
             "consensus statement", "cochrane review", "evidence-based",
             "practice guideline", "treatment guideline", "clinical guideline",
             "practice parameter", "best practice", "gold standard",
-            "randomized controlled trial", "clinical trial", "rct"
+            "randomized controlled trial", "clinical trial", "rct",
+            "level i evidence", "level a recommendation"
         ]
         
-        # Tier 2 (Hypothesis Testing) - Clinical studies and procedures
-        tier2_indicators = [
-            "prospective study", "cohort study", "case-control",
-            "diagnostic", "treatment", "therapy", "intervention",
-            "clinical effectiveness", "therapeutic", "procedure",
-            "management", "protocol", "approach", "method",
-            "patient", "clinical", "diagnosis", "assessment"
-        ]
-        
-        # Tier 1 (Pattern Recognition) - Basic concepts and symptoms
-        tier1_indicators = [
-            "symptom", "symptoms", "sign", "signs", "definition",
-            "characterized by", "presents with", "manifestation",
-            "classification", "category", "type", "pathophysiology",
-            "etiology", "cause", "epidemiology", "prevalence",
-            "risk factor", "anatomy", "physiology", "term", "concept"
-        ]
-        
-        # Check for high-impact journals (Tier 3)
+        # High-impact journals automatically go to Tier 3
         high_impact_journals = [
             "n engl j med", "lancet", "jama", "bmj", "nature medicine",
-            "cell", "science", "nature", "circulation"
+            "cell", "science", "nature", "circulation", "cochrane"
         ]
-        journal = metadata.get("journal", "").lower()
         
-        # Publication type analysis
-        pub_types = metadata.get("publication_types", "").lower()
+        # TIER 2 (Hypothesis Testing) - Clinical applications
+        tier2_indicators = [
+            "treatment", "therapy", "therapeutic", "intervention", "procedure",
+            "management", "protocol", "approach", "method", "technique",
+            "diagnostic", "diagnosis", "assessment", "evaluation", "examination",
+            "clinical", "patient", "case", "study", "cohort", "case-control",
+            "prospective", "retrospective", "clinical effectiveness"
+        ]
         
-        # Assign tiers based on indicators
-        if any(indicator in combined_text for indicator in tier3_indicators):
+        # PRIORITY ASSIGNMENT (check in order):
+        
+        # 1. High-evidence content → Tier 3
+        if (any(indicator in combined_text for indicator in tier3_indicators) or
+            any(indicator in pub_types for indicator in ["meta-analysis", "systematic review", "guideline"]) or
+            any(journal_name in journal for journal_name in high_impact_journals)):
             return 3
-        elif any(indicator in pub_types for indicator in ["meta-analysis", "systematic review", "guideline"]):
-            return 3
-        elif any(journal_name in journal for journal_name in high_impact_journals):
-            return 3
-        elif any(indicator in combined_text for indicator in tier2_indicators):
-            return 2
-        elif any(indicator in pub_types for indicator in ["clinical trial"]):
-            return 2
-        elif any(indicator in combined_text for indicator in tier1_indicators):
+        
+        # 2. Basic concepts and definitions → Tier 1
+        if any(indicator in combined_text for indicator in tier1_indicators):
             return 1
-        else:
-            # Source-based assignment for edge cases
-            if source == "mesh":
-                return 1  # MeSH terms are basic concepts
-            elif source == "mtsamples":
-                return 2  # Clinical documentation
-            elif source == "pubmed":
-                # For PubMed without clear indicators, distribute based on content length
-                if len(text) < 500:
-                    return 1  # Short abstracts likely basic concepts
-                elif len(text) < 1500:
-                    return 2  # Medium abstracts likely clinical studies
-                else:
-                    return 3  # Long abstracts likely comprehensive reviews
+        
+        # 3. Clinical applications → Tier 2
+        if (any(indicator in combined_text for indicator in tier2_indicators) or
+            any(indicator in pub_types for indicator in ["clinical trial", "case report"])):
+            return 2
+        
+        # 4. Source-based fallback assignment
+        if source in ["mesh", "mtsamples"]:
+            return 1  # Basic medical concepts
+        elif "guideline" in source.lower():
+            return 3  # Guidelines are high-evidence
+        elif source == "pubmed":
+            # Distribute PubMed content more evenly
+            text_length = len(text)
+            title_length = len(title)
+            
+            # Short content with basic terms → Tier 1
+            if text_length < 300 or any(basic in title for basic in ["definition", "what is", "overview"]):
+                return 1
+            # Long comprehensive content → Tier 3
+            elif text_length > 2000 or any(evidence in title for evidence in ["review", "guideline", "meta"]):
+                return 3
             else:
-                return 2  # Default to middle tier
+                return 2
+        
+        # 5. Final fallback - distribute evenly
+        # Use document hash to ensure consistent but distributed assignment
+        doc_hash = hash(combined_text) % 3
+        if doc_hash == 0:
+            return 1
+        elif doc_hash == 1:
+            return 2
+        else:
+            return 2  # Favor Tier 2 for unknown content
+
+    def rebalance_tier_distribution(self, documents: List[Dict]) -> List[Dict]:
+        """
+        Rebalance tier distribution if too imbalanced.
+        Ensures each tier has at least 10% of total documents.
+        """
+        total_docs = len(documents)
+        tier_counts = {1: 0, 2: 0, 3: 0}
+        
+        # Count current distribution
+        for doc in documents:
+            tier = doc["metadata"].get("tier", 2)
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        
+        logger.info(f"📊 Initial tier distribution:")
+        logger.info(f"   Tier 1: {tier_counts.get(1, 0)} ({tier_counts.get(1, 0)/total_docs*100:.1f}%)")
+        logger.info(f"   Tier 2: {tier_counts.get(2, 0)} ({tier_counts.get(2, 0)/total_docs*100:.1f}%)")
+        logger.info(f"   Tier 3: {tier_counts.get(3, 0)} ({tier_counts.get(3, 0)/total_docs*100:.1f}%)")
+        
+        # Check if rebalancing is needed
+        min_threshold = int(total_docs * 0.10)  # Each tier should have at least 10%
+        needs_rebalancing = False
+        
+        for tier, count in tier_counts.items():
+            if count < min_threshold:
+                needs_rebalancing = True
+                logger.warning(f"⚠️ Tier {tier} has only {count} documents ({count/total_docs*100:.1f}%), minimum is {min_threshold}")
+        
+        if not needs_rebalancing:
+            logger.info("✅ Tier distribution is balanced, no rebalancing needed")
+            return documents
+        
+        logger.info("🔄 Rebalancing tier distribution...")
+        
+        # Rebalance by reassigning some documents
+        rebalanced_docs = []
+        tier_targets = {1: min_threshold, 2: min_threshold, 3: min_threshold}
+        current_counts = {1: 0, 2: 0, 3: 0}
+        
+        # First pass: keep documents that are in under-represented tiers
+        for doc in documents:
+            original_tier = doc["metadata"].get("tier", 2)
+            if current_counts[original_tier] < tier_targets[original_tier]:
+                current_counts[original_tier] += 1
+                rebalanced_docs.append(doc)
+            else:
+                # Reassign to tier that needs more documents
+                for target_tier in [1, 2, 3]:
+                    if current_counts[target_tier] < tier_targets[target_tier]:
+                        doc["metadata"]["tier"] = target_tier
+                        current_counts[target_tier] += 1
+                        rebalanced_docs.append(doc)
+                        break
+                else:
+                    # All tiers have minimum, keep original assignment
+                    rebalanced_docs.append(doc)
+        
+        # Log final distribution
+        final_counts = {1: 0, 2: 0, 3: 0}
+        for doc in rebalanced_docs:
+            tier = doc["metadata"].get("tier", 2)
+            final_counts[tier] = final_counts.get(tier, 0) + 1
+        
+        logger.info(f"📊 Rebalanced tier distribution:")
+        logger.info(f"   Tier 1: {final_counts.get(1, 0)} ({final_counts.get(1, 0)/total_docs*100:.1f}%)")
+        logger.info(f"   Tier 2: {final_counts.get(2, 0)} ({final_counts.get(2, 0)/total_docs*100:.1f}%)")
+        logger.info(f"   Tier 3: {final_counts.get(3, 0)} ({final_counts.get(3, 0)/total_docs*100:.1f}%)")
+        
+        return rebalanced_docs
 
     def preprocess_documents(self, documents: List[Dict]) -> List[Dict]:
         """
@@ -141,52 +251,73 @@ class HierarchicalDocumentProcessor:
         processed_docs = []
         
         for i, doc in enumerate(documents):
-            # Create a copy of the document
-            processed_doc = doc.copy()
-            metadata = doc.get("metadata", {}).copy()
-            
-            # Convert list fields to strings
-            for key, value in metadata.items():
-                if isinstance(value, list):
-                    if value:  # Non-empty list
-                        # Join list elements with semicolon separator
-                        metadata[key] = "; ".join(str(item) for item in value)
-                    else:  # Empty list
-                        metadata[key] = ""
-                elif value is None:
-                    metadata[key] = ""
-                else:
-                    # Keep primitive types as-is
-                    metadata[key] = value
-            
-            # Assign tier information
-            tier = self.assign_document_tier(doc)
-            metadata["tier"] = tier
-            
-            # Ensure required metadata fields exist with unique IDs
-            if "doc_id" not in metadata:
-                # Create a unique doc_id based on content hash
-                content_hash = hashlib.md5(doc.get("text", "").encode()).hexdigest()[:8]
-                metadata["doc_id"] = f"doc_{content_hash}_{i}"
-            
-            if "chunk_id" not in metadata:
-                metadata["chunk_id"] = 0
+            try:
+                # Create a copy of the document
+                processed_doc = doc.copy()
+                metadata = doc.get("metadata", {}).copy()
                 
-            # Create a globally unique identifier
-            unique_id = str(uuid.uuid4())[:8]
-            metadata["unique_id"] = unique_id
-            
-            if "medical_specialty" not in metadata:
-                source = metadata.get("source", "")
-                if source == "mesh":
-                    metadata["medical_specialty"] = "general"
-                elif source == "mtsamples":
-                    metadata["medical_specialty"] = "clinical"
+                # Safely handle text field
+                text_raw = doc.get("text", "")
+                if isinstance(text_raw, list):
+                    # Join list elements with space separator
+                    processed_doc["text"] = " ".join(str(item) for item in text_raw)
+                elif text_raw is None:
+                    processed_doc["text"] = ""
                 else:
-                    metadata["medical_specialty"] = "unknown"
-            
-            processed_doc["metadata"] = metadata
-            processed_docs.append(processed_doc)
+                    processed_doc["text"] = str(text_raw)
+                
+                # Convert list fields to strings in metadata
+                for key, value in metadata.items():
+                    if isinstance(value, list):
+                        if value:  # Non-empty list
+                            # Join list elements with semicolon separator
+                            metadata[key] = "; ".join(str(item) for item in value)
+                        else:  # Empty list
+                            metadata[key] = ""
+                    elif value is None:
+                        metadata[key] = ""
+                    else:
+                        # Keep primitive types as-is, convert complex types to strings
+                        metadata[key] = str(value) if not isinstance(value, (int, float, bool)) else value
+                
+                # Assign tier information
+                tier = self.assign_document_tier(doc)
+                metadata["tier"] = tier
+                
+                # Ensure required metadata fields exist with unique IDs
+                if "doc_id" not in metadata:
+                    # Create a unique doc_id based on content hash
+                    content_hash = hashlib.md5(processed_doc["text"].encode()).hexdigest()[:8]
+                    metadata["doc_id"] = f"doc_{content_hash}_{i}"
+                
+                if "chunk_id" not in metadata:
+                    metadata["chunk_id"] = 0
+                    
+                # Create a globally unique identifier
+                unique_id = str(uuid.uuid4())[:8]
+                metadata["unique_id"] = unique_id
+                
+                if "medical_specialty" not in metadata:
+                    source = metadata.get("source", "")
+                    if source == "mesh":
+                        metadata["medical_specialty"] = "general"
+                    elif source == "mtsamples":
+                        metadata["medical_specialty"] = "clinical"
+                    else:
+                        metadata["medical_specialty"] = "unknown"
+                
+                processed_doc["metadata"] = metadata
+                processed_docs.append(processed_doc)
+                
+            except Exception as e:
+                logger.error(f"Error preprocessing document {i}: {e}")
+                # Skip problematic documents rather than failing entirely
+                continue
+        
+        logger.info(f"✅ Preprocessed {len(processed_docs)} documents successfully")
+        
+        # Rebalance tier distribution if needed
+        processed_docs = self.rebalance_tier_distribution(processed_docs)
         
         return processed_docs
 
@@ -250,90 +381,29 @@ class HierarchicalDocumentProcessor:
 
     def load_foundation_dataset(self, foundation_dir: Path) -> List[Dict[str, str]]:
         """Load foundation dataset only."""
-        all_documents = []
+        foundation_files = [
+            "foundation_medical_data.json",
+            "unified_dataset.json"
+        ]
         
-        foundation_file = foundation_dir / "foundation_medical_data.json"
-        if foundation_file.exists():
-            logger.info(f"📚 Loading foundation dataset from {foundation_file}")
-            with open(foundation_file, "r") as f:
-                foundation_data = json.load(f)
-            
-            for doc in tqdm.tqdm(foundation_data, desc="Processing foundation docs"):
-                # Process each document through chunking
-                chunks = self.process_text(doc["text"], doc["metadata"]) 
-                all_documents.extend(chunks)
-        else:
-            logger.error(f"Foundation dataset not found at {foundation_file}")
-            logger.error("Run: python fetch_foundation_data.py first")
-            raise FileNotFoundError(f"Foundation dataset not found: {foundation_file}")
+        all_docs = []
         
-        logger.info(f"✅ Loaded {len(all_documents)} foundation documents")
-        return all_documents
-
-    def analyze_dataset_quality(self, documents: List[Dict]) -> Dict:
-        """Analyze the quality and composition of the foundation dataset."""
-        analysis = {
-            "total_documents": len(documents),
-            "sources": {},
-            "reasoning_types": {},
-            "tiers": {},
-            "avg_document_length": 0,
-            "quality_indicators": {
-                "evidence_based": 0,
-                "synthetic": 0,
-                "clinical": 0
-            }
-        }
+        for filename in foundation_files:
+            file_path = foundation_dir / filename
+            if file_path.exists():
+                logger.info(f"Loading {filename}...")
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    if isinstance(data, list):
+                        all_docs.extend(data)
+                    elif isinstance(data, dict) and "documents" in data:
+                        all_docs.extend(data["documents"])
+                    
+                    logger.info(f"Loaded {len(data)} documents from {filename}")
+                except Exception as e:
+                    logger.error(f"Error loading {filename}: {e}")
         
-        total_length = 0
-        
-        for doc in documents:
-            # Source analysis
-            source = doc["metadata"].get("source", "unknown")
-            analysis["sources"][source] = analysis["sources"].get(source, 0) + 1
-            
-            # Reasoning type analysis
-            reasoning_type = doc["metadata"].get("reasoning_type", "unknown")
-            analysis["reasoning_types"][reasoning_type] = analysis["reasoning_types"].get(reasoning_type, 0) + 1
-            
-            # Tier analysis
-            tier = doc["metadata"].get("tier", "unknown")
-            analysis["tiers"][f"tier_{tier}"] = analysis["tiers"].get(f"tier_{tier}", 0) + 1
-            
-            # Length analysis
-            text_length = len(doc.get("text", ""))
-            total_length += text_length
-            
-            # Quality indicators
-            text_lower = doc.get("text", "").lower()
-            if any(term in text_lower for term in ["evidence", "trial", "study", "research"]):
-                analysis["quality_indicators"]["evidence_based"] += 1
-            if any(term in text_lower for term in ["sample", "example", "mock", "test"]):
-                analysis["quality_indicators"]["synthetic"] += 1
-            if any(term in text_lower for term in ["patient", "clinical", "diagnosis", "treatment"]):
-                analysis["quality_indicators"]["clinical"] += 1
-        
-        if len(documents) > 0:
-            analysis["avg_document_length"] = total_length / len(documents)
-        
-        return analysis
-
-    def save_documents(self, documents: List[Dict[str, str]], output_path: Path) -> None:
-        """Save processed documents to JSON file."""
-        try:
-            with open(output_path, "w") as f:
-                json.dump(documents, f, indent=2)
-            logger.info(f"Saved {len(documents)} documents to {output_path}")
-        except Exception as e:
-            logger.error(f"Error saving documents to {output_path}: {str(e)}")
-
-    def load_documents(self, input_path: Path) -> List[Dict[str, str]]:
-        """Load processed documents from JSON file."""
-        try:
-            with open(input_path, "r") as f:
-                documents = json.load(f)
-            logger.info(f"Loaded {len(documents)} documents from {input_path}")
-            return documents
-        except Exception as e:
-            logger.error(f"Error loading documents from {input_path}: {str(e)}")
-            return []
+        logger.info(f"Total foundation documents loaded: {len(all_docs)}")
+        return all_docs
