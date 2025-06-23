@@ -53,12 +53,21 @@ class MIRAGEBenchmark(BaseBenchmark):
         """Load MIRAGE dataset from local submodule ONLY."""
         logger.info("📊 Loading MIRAGE dataset from local submodule...")
         
+        # Temporarily enable debug logging
+        import logging
+        logging.getLogger().setLevel(logging.DEBUG)
+        
         # DIAGNOSTIC: Check what files actually exist
         self._diagnostic_check()
         
         # ONLY try local file parsing
         logger.info("🔍 Loading from local benchmark.json file...")
-        return self._load_from_local_file()
+        result = self._load_from_local_file()
+        
+        # Reset logging level
+        logging.getLogger().setLevel(logging.INFO)
+        
+        return result
 
     def _diagnostic_check(self):
         """Diagnostic check to see what files exist."""
@@ -165,14 +174,30 @@ class MIRAGEBenchmark(BaseBenchmark):
                                 all_questions.append(formatted_item)
                     elif isinstance(questions, dict):
                         # Sometimes questions are nested deeper
-                        logger.info(f"   📖 {dataset_name} is a dict with keys: {list(questions.keys())}")
-                        for sub_key, sub_questions in questions.items():
-                            if isinstance(sub_questions, list):
-                                logger.info(f"   📖 Processing {dataset_name}.{sub_key}: {len(sub_questions)} questions")
-                                for i, item in enumerate(sub_questions):
+                        logger.info(f"   📖 {dataset_name} is a dict with keys: {list(questions.keys())[:10]}...")
+                        
+                        # Process each individual question
+                        for sub_key, question_data in questions.items():
+                            # Each sub_key is like 'anatomy-000', 'anatomy-001', etc.
+                            # and question_data is the actual question object
+                            logger.debug(f"   🔍 Processing {dataset_name}.{sub_key}: type={type(question_data)}")
+                            
+                            if isinstance(question_data, dict):
+                                # This is a single question object
+                                formatted_item = self._format_mirage_question(question_data, f"{dataset_name}_{sub_key}", dataset_name)
+                                if formatted_item:
+                                    all_questions.append(formatted_item)
+                                else:
+                                    logger.debug(f"   ⚠️ Failed to format {dataset_name}.{sub_key}")
+                            elif isinstance(question_data, list):
+                                # Sometimes it might be a list of questions
+                                logger.info(f"   📖 Processing {dataset_name}.{sub_key}: {len(question_data)} questions")
+                                for i, item in enumerate(question_data):
                                     formatted_item = self._format_mirage_question(item, f"{dataset_name}_{sub_key}_{i}", f"{dataset_name}_{sub_key}")
                                     if formatted_item:
                                         all_questions.append(formatted_item)
+                            else:
+                                logger.debug(f"   ⚠️ Skipping {dataset_name}.{sub_key}: unexpected type {type(question_data)}")
                     else:
                         logger.debug(f"   ⚠️ Skipping {dataset_name}: not a list or dict (type: {type(questions)})")
                         
@@ -203,6 +228,8 @@ class MIRAGEBenchmark(BaseBenchmark):
     def _format_mirage_question(self, item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
         """Format a single MIRAGE question to standard format."""
         try:
+            logger.debug(f"🔍 Formatting question {question_id}: {type(item)}")
+            
             # Handle various MIRAGE question formats
             if isinstance(item, str):
                 # Sometimes questions are just strings
@@ -219,8 +246,10 @@ class MIRAGEBenchmark(BaseBenchmark):
                 }
             
             if not isinstance(item, dict):
-                logger.debug(f"Skipping non-dict item: {type(item)}")
+                logger.debug(f"⚠️ Skipping non-dict item: {type(item)}")
                 return None
+            
+            logger.debug(f"🔍 Question {question_id} keys: {list(item.keys())}")
             
             # Extract question components with flexible field names
             question_text = (item.get('question') or 
@@ -258,16 +287,18 @@ class MIRAGEBenchmark(BaseBenchmark):
                          item.get('reasoning') or 
                          item.get('solution') or '')
             
+            logger.debug(f"🔍 Question {question_id}: question_text='{question_text[:50]}...', options={len(options)}, answer='{correct_answer}'")
+            
             # Skip items without essential fields
             if not question_text:
-                logger.debug(f"Skipping item without question text: {item}")
+                logger.debug(f"⚠️ Skipping item without question text: {list(item.keys())}")
                 return None
             
             # Determine medical specialty and question type
             medical_specialty = self._classify_medical_specialty(question_text)
             question_type = self._classify_question_type(question_text, options)
             
-            return {
+            formatted_question = {
                 'id': question_id,
                 'question': question_text,
                 'options': options,
@@ -279,8 +310,12 @@ class MIRAGEBenchmark(BaseBenchmark):
                 'reasoning_type': 'medical_reasoning'
             }
             
+            logger.debug(f"✅ Successfully formatted question {question_id}")
+            return formatted_question
+            
         except Exception as e:
-            logger.debug(f"Failed to format MIRAGE question {question_id}: {e}")
+            logger.warning(f"❌ Failed to format MIRAGE question {question_id}: {e}")
+            logger.debug(f"   Item: {item}")
             return None
 
     def _classify_medical_specialty(self, question_text: str) -> str:
