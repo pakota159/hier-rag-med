@@ -1,10 +1,11 @@
 """
 Hierarchical retrieval system for basic reasoning.
-Implements three-tier architecture using foundation datasets.
+Updated to handle unique ID generation and prevent ChromaDB collisions.
 """
 
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+import hashlib
 
 import chromadb
 from chromadb.config import Settings
@@ -85,8 +86,33 @@ class HierarchicalRetriever:
             logger.error(f"Collections not found: {e}")
             raise ValueError("Hierarchical collections do not exist. Create them first.")
 
+    def generate_unique_id(self, tier_name: str, doc_metadata: Dict, index: int) -> str:
+        """
+        Generate a truly unique ID for ChromaDB to prevent collisions.
+        Uses multiple fallback strategies to ensure uniqueness.
+        """
+        # Strategy 1: Use unique_id if available
+        if "unique_id" in doc_metadata:
+            return f"{tier_name}_{doc_metadata['unique_id']}"
+        
+        # Strategy 2: Use tier_chunk_id if available
+        if "tier_chunk_id" in doc_metadata:
+            doc_id = doc_metadata.get("doc_id", "doc")
+            return f"{tier_name}_{doc_id}_{doc_metadata['tier_chunk_id']}"
+        
+        # Strategy 3: Create hash-based ID from content and metadata
+        doc_id = doc_metadata.get("doc_id", "doc")
+        chunk_id = doc_metadata.get("chunk_id", 0)
+        source = doc_metadata.get("source", "unknown")
+        
+        # Create a unique string to hash
+        unique_string = f"{tier_name}_{doc_id}_{chunk_id}_{source}_{index}"
+        hash_suffix = hashlib.md5(unique_string.encode()).hexdigest()[:8]
+        
+        return f"{tier_name}_{doc_id}_{chunk_id}_{hash_suffix}"
+
     def add_documents_to_tiers(self, organized_docs: Dict[str, List[Dict]]) -> None:
-        """Add documents to appropriate tier collections."""
+        """Add documents to appropriate tier collections with unique ID generation."""
         if not all([self.tier1_collection, self.tier2_collection, self.tier3_collection]):
             raise ValueError("Collections not initialized. Call create_hierarchical_collections first.")
 
@@ -98,6 +124,7 @@ class HierarchicalRetriever:
 
         for tier_name, documents in organized_docs.items():
             if not documents:
+                logger.warning(f"⚠️ No documents found for tier: {tier_name}")
                 continue
                 
             collection = tier_collections[tier_name]
@@ -106,11 +133,34 @@ class HierarchicalRetriever:
             texts = []
             metadatas = []
             ids = []
+            used_ids = set()  # Track used IDs to prevent duplicates
 
-            for doc in tqdm(documents, desc=f"Preparing {tier_name} documents"):
+            for i, doc in enumerate(tqdm(documents, desc=f"Preparing {tier_name} documents")):
                 texts.append(doc["text"])
-                metadatas.append(doc["metadata"])
-                ids.append(f"{tier_name}_{doc['metadata']['doc_id']}_{doc['metadata']['chunk_id']}")
+                
+                # Clean metadata for ChromaDB compatibility
+                cleaned_metadata = self.clean_metadata(doc["metadata"])
+                metadatas.append(cleaned_metadata)
+                
+                # Generate unique ID
+                unique_id = self.generate_unique_id(tier_name, doc["metadata"], i)
+                
+                # Ensure ID is truly unique within this batch
+                counter = 0
+                original_id = unique_id
+                while unique_id in used_ids:
+                    counter += 1
+                    unique_id = f"{original_id}_{counter}"
+                
+                used_ids.add(unique_id)
+                ids.append(unique_id)
+
+            logger.info(f"📝 Generated {len(ids)} unique IDs for {tier_name}")
+            
+            # Verify no duplicates
+            if len(set(ids)) != len(ids):
+                duplicates = len(ids) - len(set(ids))
+                raise ValueError(f"❌ Found {duplicates} duplicate IDs in {tier_name} - this should not happen!")
 
             # Generate embeddings in batches
             batch_size = self.config.config["models"]["embedding"]["batch_size"]
@@ -129,14 +179,38 @@ class HierarchicalRetriever:
             chroma_batch_size = 5000  # ChromaDB safe batch size
             for i in tqdm(range(0, len(texts), chroma_batch_size), desc=f"Adding {tier_name} to ChromaDB"):
                 batch_end = min(i + chroma_batch_size, len(texts))
-                collection.add(
-                    embeddings=embeddings[i:batch_end],
-                    documents=texts[i:batch_end],
-                    metadatas=metadatas[i:batch_end],
-                    ids=ids[i:batch_end]
-                )
+                
+                try:
+                    collection.add(
+                        embeddings=embeddings[i:batch_end],
+                        documents=texts[i:batch_end],
+                        metadatas=metadatas[i:batch_end],
+                        ids=ids[i:batch_end]
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Error adding batch {i//chroma_batch_size + 1} to {tier_name}: {e}")
+                    # Log the problematic IDs for debugging
+                    batch_ids = ids[i:batch_end]
+                    duplicate_ids = [id for id in batch_ids if batch_ids.count(id) > 1]
+                    if duplicate_ids:
+                        logger.error(f"Duplicate IDs in batch: {duplicate_ids[:10]}")
+                    raise
             
             logger.info(f"✅ Added {len(documents)} documents to {tier_name}")
+
+    def clean_metadata(self, metadata: Dict) -> Dict:
+        """Clean metadata to ensure ChromaDB compatibility."""
+        cleaned = {}
+        for key, value in metadata.items():
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                cleaned[key] = value
+            elif isinstance(value, list):
+                # Convert lists to semicolon-separated strings
+                cleaned[key] = "; ".join(str(item) for item in value) if value else ""
+            else:
+                # Convert other types to strings
+                cleaned[key] = str(value)
+        return cleaned
 
     def hierarchical_search(self, query: str) -> Dict[str, List[Dict]]:
         """Perform three-tier hierarchical search."""
@@ -201,3 +275,14 @@ class HierarchicalRetriever:
         # Sort by score and return top results
         all_results.sort(key=lambda x: x["score"], reverse=True)
         return all_results[:n_results]
+
+    def get_collection_stats(self) -> Dict[str, int]:
+        """Get statistics for all collections."""
+        stats = {}
+        if self.tier1_collection:
+            stats["tier1_pattern_recognition"] = self.tier1_collection.count()
+        if self.tier2_collection:
+            stats["tier2_hypothesis_testing"] = self.tier2_collection.count()
+        if self.tier3_collection:
+            stats["tier3_confirmation"] = self.tier3_collection.count()
+        return stats

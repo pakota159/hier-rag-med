@@ -1,117 +1,135 @@
 #!/usr/bin/env python3
 """
-Setup script to create Hierarchical system collections.
-UPDATED VERSION - Compatible with new therapeutic foundation datasets
-
-Supports:
-- New therapeutic guidelines (WHO, ESC, AHA/ACC, USPSTF, UpToDate)
-- Old exam-focused datasets (MedReason, MSDiagnosis, PMC, DrugBank)
-- Hybrid datasets (mix of both)
-- Automatic tier mapping and validation
+Setup script for Hierarchical Reasoning System.
+Completely updated version that handles PubMed/MTSamples/MeSH data properly.
 """
 
 import sys
-import os
-from pathlib import Path
-from typing import List, Dict, Any
-import json
 import time
-from loguru import logger
+import json
+from pathlib import Path
+from typing import Dict, List, Any
 
-# Add project root to path
+# Add src to path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root / "src"))
 
-try:
-    from src.basic_reasoning.config import Config
-    from src.basic_reasoning.processing import HierarchicalDocumentProcessor
-    from src.basic_reasoning.retrieval import HierarchicalRetriever
-except ImportError as e:
-    logger.error(f"Import error: {e}")
-    logger.error("Make sure you're running from the project root directory.")
-    sys.exit(1)
+from loguru import logger
+from src.basic_reasoning.config import Config
+from src.basic_reasoning.processing import HierarchicalDocumentProcessor
+from src.basic_reasoning.retrieval import HierarchicalRetriever
 
 
-def check_foundation_data():
-    """Check if foundation dataset exists and analyze its type."""
-    foundation_dir = Path("data/foundation_dataset")
+def load_foundation_dataset() -> tuple[List[Dict], Dict[str, Any]]:
+    """Load foundation dataset with enhanced validation."""
+    logger.info("📖 Loading foundation dataset...")
     
-    # Check for new unified foundation file
-    foundation_files = [
-        foundation_dir / "foundation_medical_data.json",
-        foundation_dir / "therapeutic_foundation_data.json",
-        Path("data/foundation") / "foundation_medical_data.json"
+    # Try to load from multiple possible locations
+    possible_paths = [
+        Path("data/foundation_dataset.json"),
+        Path("data/foundation_dataset/unified_dataset.json"),
+        Path("data/kg_raw/combined/all_medical_data.json"),
+        Path("foundation_dataset.json")
     ]
     
-    for foundation_file in foundation_files:
-        if foundation_file.exists():
-            try:
-                with open(foundation_file, 'r') as f:
-                    data = json.load(f)
-                
-                if not data:
-                    continue
-                
-                # Analyze dataset type
-                dataset_info = analyze_foundation_type(data)
-                
-                return {
-                    "exists": True,
-                    "path": foundation_file,
-                    "count": len(data) if isinstance(data, list) else 1,
-                    "type": dataset_info["type"],
-                    "therapeutic_focus": dataset_info["therapeutic_focus"],
-                    "sources": dataset_info["sources"],
-                    "error": None
-                }
-            except Exception as e:
-                continue
+    dataset_path = None
+    for path in possible_paths:
+        if path.exists():
+            dataset_path = path
+            break
     
-    return {
-        "exists": False,
-        "path": foundation_files[0],
-        "count": 0,
-        "type": "unknown",
-        "therapeutic_focus": False,
-        "sources": [],
-        "error": "Foundation directory or file doesn't exist"
-    }
+    if not dataset_path:
+        raise FileNotFoundError(
+            "❌ Foundation dataset not found!\n"
+            "Available paths checked:\n" + 
+            "\n".join(f"   - {p}" for p in possible_paths) + 
+            "\n\n🔧 Solutions:\n"
+            "   1. Run: python fetch_foundation_data.py\n"
+            "   2. Or: python fetch_data.py --source all\n"
+            "   3. Check if file exists in any of the above locations"
+        )
+    
+    logger.info(f"📂 Loading from: {dataset_path}")
+    
+    try:
+        with open(dataset_path) as f:
+            data = json.load(f)
+        
+        # Handle different data formats
+        if isinstance(data, dict):
+            if "documents" in data:
+                all_docs = data["documents"]
+            elif "data" in data:
+                all_docs = data["data"]
+            else:
+                # Assume the dict values are the documents
+                all_docs = []
+                for value in data.values():
+                    if isinstance(value, list):
+                        all_docs.extend(value)
+        elif isinstance(data, list):
+            all_docs = data
+        else:
+            raise ValueError(f"Unexpected data format: {type(data)}")
+        
+        # Analyze dataset
+        analysis = analyze_foundation_dataset(all_docs)
+        
+        logger.info(f"✅ Loaded {len(all_docs)} documents from {dataset_path.name}")
+        
+        return all_docs, analysis
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to load foundation dataset: {e}")
+        raise
 
 
-def analyze_foundation_type(data: List[Dict]) -> Dict[str, Any]:
-    """Analyze the type and composition of foundation dataset."""
+def analyze_foundation_dataset(data: List[Dict]) -> Dict[str, Any]:
+    """Analyze foundation dataset characteristics."""
     if not data:
-        return {"type": "empty", "therapeutic_focus": False, "sources": []}
+        return {"type": "empty", "therapeutic_focus": False, "sources": {}}
     
-    sources = set()
-    therapeutic_sources = 0
-    exam_sources = 0
-    
-    # Known source categories
-    therapeutic_source_types = {
-        "who_clinical_guidelines", "esc_cardiovascular_guidelines", 
-        "aha_acc_guidelines", "uspstf_preventive_guidelines", 
-        "uptodate_clinical_recommendations"
-    }
-    
-    exam_source_types = {
-        "medreason", "msdiagnosis", "therapeutic_guidelines", 
-        "therapeutic_pharmacology", "clinical_outcomes", "evidence_based_pharmacology"
+    sources = {}
+    quality_indicators = {
+        "evidence_based": 0,
+        "clinical": 0,
+        "synthetic": 0
     }
     
     for doc in data:
         metadata = doc.get("metadata", {})
         source = metadata.get("source", "unknown")
-        sources.add(source)
         
-        if source in therapeutic_source_types:
-            therapeutic_sources += 1
-        elif source in exam_source_types:
-            exam_sources += 1
+        # Count source occurrences
+        sources[source] = sources.get(source, 0) + 1
+        
+        # Analyze quality indicators
+        text = doc.get("text", "").lower()
+        title = metadata.get("title", "").lower()
+        
+        # Evidence-based indicators
+        if any(term in text + title for term in 
+               ["evidence", "meta-analysis", "systematic review", "clinical trial", "rct"]):
+            quality_indicators["evidence_based"] += 1
+        
+        # Clinical indicators
+        if any(term in text + title for term in 
+               ["clinical", "patient", "treatment", "diagnosis", "therapy"]):
+            quality_indicators["clinical"] += 1
+        
+        # Synthetic indicators (exam-focused)
+        if any(term in text + title for term in 
+               ["case study", "reasoning", "differential", "multiple choice"]):
+            quality_indicators["synthetic"] += 1
     
-    # Determine dataset type
+    # Determine dataset characteristics
     total_docs = len(data)
-    therapeutic_ratio = therapeutic_sources / total_docs if total_docs > 0 else 0
+    therapeutic_sources = {"who_clinical_guidelines", "esc_cardiovascular_guidelines", 
+                          "aha_acc_guidelines", "uspstf_preventive_guidelines", 
+                          "uptodate_clinical_recommendations"}
+    
+    therapeutic_count = sum(sources.get(src, 0) for src in therapeutic_sources)
+    therapeutic_ratio = therapeutic_count / total_docs if total_docs > 0 else 0
     
     if therapeutic_ratio > 0.7:
         dataset_type = "therapeutic"
@@ -123,66 +141,15 @@ def analyze_foundation_type(data: List[Dict]) -> Dict[str, Any]:
     return {
         "type": dataset_type,
         "therapeutic_focus": therapeutic_ratio > 0.5,
-        "sources": list(sources),
+        "sources": sources,
+        "quality_indicators": quality_indicators,
         "therapeutic_ratio": therapeutic_ratio,
-        "total_docs": total_docs
+        "total_documents": total_docs
     }
 
 
-def validate_tier_distribution(organized_docs: Dict[str, List[Dict]]) -> bool:
-    """Validate that tier distribution is reasonable for hierarchical retrieval."""
-    
-    total_docs = sum(len(docs) for docs in organized_docs.values())
-    
-    if total_docs == 0:
-        logger.error("❌ No documents found in any tier")
-        return False
-    
-    tier1_count = len(organized_docs.get("pattern_recognition", []))
-    tier2_count = len(organized_docs.get("hypothesis_testing", []))
-    tier3_count = len(organized_docs.get("confirmation", []))
-    
-    # Check for empty tiers
-    empty_tiers = []
-    if tier1_count == 0:
-        empty_tiers.append("Tier 1 (Pattern Recognition)")
-    if tier2_count == 0:
-        empty_tiers.append("Tier 2 (Hypothesis Testing)")
-    if tier3_count == 0:
-        empty_tiers.append("Tier 3 (Confirmation)")
-    
-    if empty_tiers:
-        logger.error(f"❌ Empty tiers detected: {', '.join(empty_tiers)}")
-        logger.error("This will cause hierarchical retrieval to fail!")
-        logger.error("🔧 Solutions:")
-        logger.error("   1. Fetch more diverse foundation data")
-        logger.error("   2. Use hybrid dataset: python fetch_foundation_data.py --hybrid")
-        logger.error("   3. Check tier assignments in your foundation data")
-        return False
-    
-    # Check for severely imbalanced distribution
-    min_tier_count = min(tier1_count, tier2_count, tier3_count)
-    max_tier_count = max(tier1_count, tier2_count, tier3_count)
-    
-    if min_tier_count / max_tier_count < 0.1:  # Less than 10% in smallest tier
-        logger.warning("⚠️ Severely imbalanced tier distribution detected")
-        logger.warning("This may reduce hierarchical system effectiveness")
-    
-    # Log distribution percentages
-    tier1_pct = (tier1_count / total_docs) * 100
-    tier2_pct = (tier2_count / total_docs) * 100
-    tier3_pct = (tier3_count / total_docs) * 100
-    
-    logger.info(f"📊 Tier distribution validation:")
-    logger.info(f"   Tier 1 (Pattern Recognition): {tier1_count} docs ({tier1_pct:.1f}%)")
-    logger.info(f"   Tier 2 (Hypothesis Testing): {tier2_count} docs ({tier2_pct:.1f}%)")
-    logger.info(f"   Tier 3 (Confirmation): {tier3_count} docs ({tier3_pct:.1f}%)")
-    
-    logger.info(f"✅ Tier distribution validation passed")
-    return True
-
-
-def enhance_tier_mapping(organized_docs: Dict[str, List[Dict]], foundation_type: str) -> Dict[str, List[Dict]]:
+def enhance_tier_mapping(organized_docs: Dict[str, List[Dict]], 
+                        foundation_type: str) -> Dict[str, List[Dict]]:
     """Enhance tier mapping based on foundation dataset type."""
     
     if foundation_type == "therapeutic":
@@ -219,6 +186,53 @@ def enhance_tier_mapping(organized_docs: Dict[str, List[Dict]], foundation_type:
     return organized_docs
 
 
+def validate_tier_distribution(organized_docs: Dict[str, List[Dict]]) -> bool:
+    """Validate that tier distribution is reasonable for hierarchical retrieval."""
+    
+    total_docs = sum(len(docs) for docs in organized_docs.values())
+    
+    if total_docs == 0:
+        logger.error("❌ No documents found in any tier")
+        return False
+    
+    tier1_count = len(organized_docs.get("pattern_recognition", []))
+    tier2_count = len(organized_docs.get("hypothesis_testing", []))
+    tier3_count = len(organized_docs.get("confirmation", []))
+    
+    # Check for empty tiers
+    empty_tiers = []
+    if tier1_count == 0:
+        empty_tiers.append("Tier 1 (Pattern Recognition)")
+    if tier2_count == 0:
+        empty_tiers.append("Tier 2 (Hypothesis Testing)")
+    if tier3_count == 0:
+        empty_tiers.append("Tier 3 (Confirmation)")
+    
+    if empty_tiers:
+        logger.error(f"❌ Empty tiers detected: {', '.join(empty_tiers)}")
+        logger.error("This will cause hierarchical retrieval to fail!")
+        logger.error("🔧 Solutions:")
+        logger.error("   1. Fetch more diverse foundation data")
+        logger.error("   2. Use hybrid dataset: python fetch_foundation_data.py --hybrid")
+        logger.error("   3. Check your data sources and tier assignment logic")
+        return False
+    
+    # Check for severely imbalanced tiers (one tier having >80% of documents)
+    max_tier_ratio = max(tier1_count, tier2_count, tier3_count) / total_docs
+    if max_tier_ratio > 0.8:
+        logger.warning(f"⚠️ Tier distribution is severely imbalanced (max ratio: {max_tier_ratio:.1%})")
+        logger.warning("This may reduce hierarchical retrieval effectiveness")
+    
+    # Log distribution
+    logger.info("📊 Tier distribution validation:")
+    logger.info(f"   Tier 1 (Pattern Recognition): {tier1_count} ({tier1_count/total_docs:.1%})")
+    logger.info(f"   Tier 2 (Hypothesis Testing): {tier2_count} ({tier2_count/total_docs:.1%})")
+    logger.info(f"   Tier 3 (Confirmation): {tier3_count} ({tier3_count/total_docs:.1%})")
+    logger.info(f"   Total: {total_docs} documents")
+    
+    return True
+
+
 def setup_hierarchical_system():
     """Main setup function for Hierarchical system."""
     start_time = time.time()
@@ -250,59 +264,46 @@ def setup_hierarchical_system():
         logger.info("✅ Hierarchical collections already exist")
         
         # Check if we should recreate
-        response = input("\n🔄 Hierarchical collections already exist. Recreate? (y/N): ").strip().lower()
-        if response not in ['y', 'yes']:
-            logger.info("✅ Using existing collections")
+        response = input("\n🔄 Hierarchical collections already exist. Recreate? (y/N): ")
+        if response.lower() != 'y':
+            logger.info("✅ Using existing hierarchical collections")
+            elapsed_time = time.time() - start_time
+            logger.info(f"⏱️ Setup completed in {elapsed_time:.1f} seconds")
             return True
             
-    except ValueError:
-        logger.info("📝 Hierarchical collections don't exist, will create new ones")
+    except Exception:
+        logger.info("📝 No existing collections found, creating new ones...")
     
-    # Check foundation data
-    foundation_info = check_foundation_data()
-    
-    if not foundation_info["exists"]:
-        logger.error("❌ NO FOUNDATION DATASET FOUND!")
-        logger.error(f"📋 Error: {foundation_info['error']}")
-        logger.error(f"📁 Expected location: {foundation_info['path']}")
-        logger.error("")
-        logger.error("🔧 To create foundation dataset, choose one:")
-        logger.error("   # NEW: Therapeutic approach (recommended, 70-75% MIRAGE)")
-        logger.error("   python fetch_foundation_data.py --therapeutic --max-results 3000")
-        logger.error("")
-        logger.error("   # OLD: Exam-focused approach (current, 54% MIRAGE)")
-        logger.error("   python fetch_foundation_data.py --exam-focused --max-results 3000")
-        logger.error("")
-        logger.error("   # HYBRID: Mix approach (balanced, 65-70% MIRAGE)")
-        logger.error("   python fetch_foundation_data.py --hybrid --max-results 3000")
-        return False
-    
-    # Load and process foundation data
+    # Load and process foundation dataset
     try:
-        logger.info(f"📂 Found foundation data: {foundation_info['count']} documents")
-        logger.info(f"📊 Dataset type: {foundation_info['type'].upper()}")
-        if foundation_info["therapeutic_focus"]:
-            logger.info("🎯 Therapeutic-focused dataset detected (expected better performance)")
-        else:
-            logger.info("📚 Exam-focused dataset detected")
-        logger.info(f"🔬 Sources: {', '.join(foundation_info['sources'][:5])}{'...' if len(foundation_info['sources']) > 5 else ''}")
+        all_docs, analysis = load_foundation_dataset()
+        foundation_info = {
+            "type": analysis["type"],
+            "therapeutic_focus": analysis["therapeutic_focus"]
+        }
         
-        # Load foundation dataset
-        all_docs = processor.load_foundation_dataset(foundation_info["path"].parent)
-        
-        if not all_docs:
-            logger.error("❌ Foundation dataset loaded but contains no documents")
-            return False
-        
-        # Analyze dataset quality
-        analysis = processor.analyze_dataset_quality(all_docs)
-        logger.info(f"📊 Dataset analysis:")
+        logger.info("📊 Foundation dataset analysis:")
         logger.info(f"   Total documents: {analysis['total_documents']}")
         logger.info(f"   Sources: {list(analysis['sources'].keys())}")
         logger.info(f"   Quality indicators:")
         logger.info(f"     - Evidence-based: {analysis['quality_indicators']['evidence_based']}")
         logger.info(f"     - Clinical: {analysis['quality_indicators']['clinical']}")
         logger.info(f"     - Synthetic: {analysis['quality_indicators']['synthetic']}")
+        
+        # Preprocess documents (fix metadata, assign tiers)
+        logger.info("🔧 Preprocessing documents for ChromaDB compatibility...")
+        all_docs = processor.preprocess_documents(all_docs)
+        
+        # Log tier assignment results
+        tier_counts = {1: 0, 2: 0, 3: 0}
+        for doc in all_docs:
+            tier = doc["metadata"].get("tier", 2)
+            tier_counts[tier] = tier_counts.get(tier, 0) + 1
+        
+        logger.info("📊 Tier assignment results:")
+        logger.info(f"   Tier 1 (Pattern Recognition): {tier_counts.get(1, 0)} documents")
+        logger.info(f"   Tier 2 (Hypothesis Testing): {tier_counts.get(2, 0)} documents") 
+        logger.info(f"   Tier 3 (Confirmation): {tier_counts.get(3, 0)} documents")
         
         # Organize by reasoning type
         organized_docs = processor.organize_by_reasoning_type(all_docs)
@@ -336,97 +337,59 @@ def setup_hierarchical_system():
     # Create collections and add documents
     try:
         logger.info("🔧 Creating hierarchical collections...")
-        
-        # Create collections
         retriever.create_hierarchical_collections()
         
-        # Add documents to tiers
+        logger.info("📝 Adding documents to hierarchical tiers...")
         retriever.add_documents_to_tiers(organized_docs)
         
-        # Verify collections
-        retriever.load_hierarchical_collections()
+        # Verify collections were created successfully
+        stats = retriever.get_collection_stats()
+        logger.info("📊 Collection statistics:")
+        for collection_name, count in stats.items():
+            logger.info(f"   {collection_name}: {count} documents")
         
-        # Test hierarchical search with appropriate query for dataset type
-        if foundation_info["therapeutic_focus"]:
-            test_query = "metformin diabetes cardiovascular benefits"
-        else:
-            test_query = "diabetes treatment metformin"
-            
-        test_results = retriever.hierarchical_search(test_query)
-        total_test_results = sum(len(test_results.get(tier, [])) for tier in ["tier1_patterns", "tier2_hypotheses", "tier3_confirmation"])
-        
-        if total_test_results > 0:
-            logger.info("✅ Collections created successfully")
-            logger.info(f"🔍 Test search '{test_query}' returned {total_test_results} results")
-            
-            # Show test results breakdown
-            for tier_name, results in test_results.items():
-                if results:
-                    logger.info(f"   {tier_name}: {len(results)} results")
-                    
-        else:
-            logger.warning("⚠️ Collections created but test search returned no results")
-            logger.warning("This may indicate an issue with the embedding model or data")
-        
-        setup_time = time.time() - start_time
-        logger.info(f"⏱️ Hierarchical setup completed in {setup_time:.1f} seconds")
-        
-        return True
+        logger.info("✅ Hierarchical system setup completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Failed to create collections: {e}")
         import traceback
         traceback.print_exc()
         return False
-
-
-def main():
-    """Main entry point."""
-    logger.remove()
-    logger.add(
-        sys.stdout,
-        level="INFO",
-        format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | Hierarchical | {message}"
-    )
     
-    success = setup_hierarchical_system()
+    # Final summary
+    elapsed_time = time.time() - start_time
+    logger.info("=" * 70)
+    logger.info("🎉 HIERARCHICAL SYSTEM SETUP COMPLETE")
+    logger.info(f"⏱️ Total time: {elapsed_time:.1f} seconds")
+    logger.info(f"📊 Total documents processed: {total_docs}")
+    logger.info(f"🎯 Foundation type: {foundation_info['type']}")
+    logger.info("=" * 70)
     
-    if success:
-        print("\n" + "=" * 70)
-        print("🎉 HIERARCHICAL SYSTEM SETUP COMPLETED SUCCESSFULLY!")
-        print("=" * 70)
-        print("✅ Collections created with optimized tier distribution:")
-        print("   - tier1_pattern_recognition (Fast hypothesis generation)")
-        print("   - tier2_hypothesis_testing (Systematic evidence collection)")
-        print("   - tier3_confirmation (Comprehensive verification)")
-        print("")
-        print("🔬 Ready for evaluation!")
-        print("   # Quick test")
-        print("   python src/evaluation/run_evaluation.py --quick --models hierarchical_system")
-        print("")
-        print("   # Full evaluation")
-        print("   python src/evaluation/run_evaluation.py --models hierarchical_system")
-        print("=" * 70)
-    else:
-        print("\n" + "=" * 70)
-        print("❌ HIERARCHICAL SYSTEM SETUP FAILED!")
-        print("=" * 70)
-        print("🔧 Common fixes:")
-        print("   1. Create foundation dataset:")
-        print("      # Therapeutic (recommended)")
-        print("      python fetch_foundation_data.py --therapeutic --max-results 3000")
-        print("")
-        print("      # Exam-focused (current)")
-        print("      python fetch_foundation_data.py --exam-focused --max-results 3000")
-        print("")
-        print("      # Hybrid (balanced)")
-        print("      python fetch_foundation_data.py --hybrid --max-results 3000")
-        print("")
-        print("   2. Ensure Ollama is running: ollama serve")
-        print("   3. Check Ollama model: ollama pull mistral:7b-instruct")
-        print("=" * 70)
-        sys.exit(1)
+    # Next steps
+    print("\n🎯 Next Steps:")
+    print("1. Test hierarchical retrieval:")
+    print("   python -c \"from src.basic_reasoning.retrieval import HierarchicalRetriever; from src.basic_reasoning.config import Config; r = HierarchicalRetriever(Config()); r.load_hierarchical_collections(); print(r.hierarchical_search('diabetes symptoms'))\"")
+    print("2. Run the Streamlit app:")
+    print("   streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503")
+    print("3. Run MIRAGE evaluation:")
+    print("   python src/evaluation/run_evaluation.py --benchmark mirage")
+    
+    return True
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        success = setup_hierarchical_system()
+        if not success:
+            logger.error("❌ Hierarchical system setup failed")
+            sys.exit(1)
+            
+    except KeyboardInterrupt:
+        logger.info("⏹️ Setup interrupted by user")
+        sys.exit(1)
+        
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
