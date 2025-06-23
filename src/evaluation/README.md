@@ -28,12 +28,17 @@ python setup_kg_system.py
 # 4. Setup Hierarchical system collections
 python setup_hierarchical_system.py
 
-# Quick test with mock systems
-python src/evaluation/run_evaluation.py --quick
+# Quick evaluation of hierarchical system on MIRAGE only
+python src/evaluation/run_evaluation.py --quick --models hierarchical_system --benchmark mirage
 
-# Test individual systems
-python src/evaluation/run_evaluation.py --quick --models kg_system
+# Full evaluation of hierarchical system on MIRAGE only
+python src/evaluation/run_evaluation.py --full --models hierarchical_system --benchmark mirage
+
+# Quick evaluation on all benchmarks
 python src/evaluation/run_evaluation.py --quick --models hierarchical_system
 
-# Full test
+# Full evaluation on all benchmarks
+python src/evaluation/run_evaluation.py --full --models hierarchical_system
+
+# Standard mode (config defaults)
 python src/evaluation/run_evaluation.py --models hierarchical_system

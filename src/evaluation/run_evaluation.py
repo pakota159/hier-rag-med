@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Updated HierRAGMed Evaluation Runner with --models parameter support
-Includes fixes for JSON serialization and comprehensive error handling
+HierRAGMed Evaluation Runner
+Updated with simplified --quick and --full modes and --benchmark filtering
 """
 
-import argparse
 import sys
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
+import argparse
 import json
+import yaml
+from pathlib import Path
 from datetime import datetime
+from typing import Dict, List, Optional, Set
 
 from loguru import logger
 
@@ -19,17 +20,22 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import evaluation components
-from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
-from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark
-from src.evaluation.benchmarks.msmarco_benchmark import MSMARCOBenchmark
-from src.evaluation.benchmarks.pubmedqa_benchmark import PubMedQABenchmark
-
-from src.evaluation.evaluators.kg_evaluator import KGEvaluator
-from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
-
-from src.evaluation.utils.config_loader import ConfigLoader
-from src.evaluation.utils.result_processor import ResultProcessor
-from src.evaluation.utils.device_manager import DeviceManager
+try:
+    from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
+    from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark
+    from src.evaluation.benchmarks.msmarco_benchmark import MSMARCOBenchmark
+    from src.evaluation.benchmarks.pubmedqa_benchmark import PubMedQABenchmark
+    
+    from src.evaluation.evaluators.kg_evaluator import KGEvaluator
+    from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
+    
+    # Import utility functions directly from the files that exist
+    from src.evaluation.utils.config_loader import ConfigLoader
+    
+except ImportError as e:
+    logger.error(f"❌ Import error: {e}")
+    logger.error("Make sure you're running from the project root directory")
+    sys.exit(1)
 
 
 def setup_logging(log_dir: str) -> None:
@@ -49,15 +55,29 @@ def setup_logging(log_dir: str) -> None:
 def validate_gpu_environment() -> Dict:
     """Validate GPU environment and return system info."""
     try:
-        device_manager = DeviceManager()
-        gpu_info = device_manager.get_gpu_info()
-        
-        logger.info(f"🔥 GPU: {gpu_info.name}")
-        logger.info(f"   Memory: {gpu_info.memory_total:.1f}GB total")
-        logger.info(f"   CUDA: {gpu_info.cuda_version}")
-        
-        return {"gpu_available": True, "gpu_info": gpu_info}
-        
+        import torch
+        if torch.cuda.is_available():
+            gpu_count = torch.cuda.device_count()
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            
+            logger.info(f"🔥 GPU: {gpu_name}")
+            logger.info(f"   Memory: {gpu_memory:.1f}GB total")
+            logger.info(f"   CUDA: {torch.version.cuda}")
+            
+            return {
+                "gpu_available": True, 
+                "gpu_count": gpu_count,
+                "gpu_name": gpu_name,
+                "gpu_memory_gb": gpu_memory
+            }
+        else:
+            logger.warning("⚠️ CUDA not available")
+            return {"gpu_available": False}
+            
+    except ImportError:
+        logger.warning("⚠️ PyTorch not available")
+        return {"gpu_available": False}
     except Exception as e:
         logger.warning(f"⚠️ GPU validation failed: {e}")
         return {"gpu_available": False, "error": str(e)}
@@ -66,9 +86,17 @@ def validate_gpu_environment() -> Dict:
 def setup_gpu_optimization() -> None:
     """Setup GPU optimizations."""
     try:
-        device_manager = DeviceManager()
-        device_manager.setup_gpu_optimization()
-        logger.info("✅ GPU optimizations configured")
+        import torch
+        if torch.cuda.is_available():
+            # Set memory fraction
+            torch.cuda.set_per_process_memory_fraction(0.85)
+            # Enable cudNN benchmark
+            torch.backends.cudnn.benchmark = True
+            logger.info("✅ GPU optimizations configured")
+        else:
+            logger.info("ℹ️ No GPU available, skipping optimizations")
+    except ImportError:
+        logger.warning("⚠️ PyTorch not available for GPU optimization")
     except Exception as e:
         logger.warning(f"⚠️ GPU optimization setup failed: {e}")
 
@@ -77,33 +105,32 @@ def load_evaluation_config(config_path: Optional[Path] = None) -> Dict:
     """Load evaluation configuration."""
     try:
         config_loader = ConfigLoader()
-        
-        if config_path and config_path.exists():
-            logger.info(f"📁 Loading config from: {config_path}")
-            config = config_loader.load_config(config_path)
-        else:
-            logger.info("📁 Loading default configuration")
-            config = config_loader.load_config()
-        
+        config = config_loader.load_config(config_path)
         return config.to_dict()
-        
     except Exception as e:
-        logger.error(f"❌ Failed to load configuration: {e}")
-        # Return minimal default config
+        logger.warning(f"⚠️ Failed to load config with ConfigLoader: {e}")
+        logger.info("📄 Using fallback configuration")
+        
+        # Fallback configuration
         return {
             "benchmarks": {
-                "mirage": {"enabled": True},
-                "medreason": {"enabled": True},
-                "msmarco": {"enabled": True}
+                "mirage": {"enabled": True, "sample_size": 1000},
+                "medreason": {"enabled": True, "sample_size": 500},
+                "msmarco": {"enabled": True, "sample_size": 1000},
+                "pubmedqa": {"enabled": True, "sample_size": 500}
             },
             "systems": {
                 "kg_system": {"enabled": True},
                 "hierarchical_system": {"enabled": True}
+            },
+            "performance": {
+                "max_workers": 4,
+                "batch_size": 32
             }
         }
 
 
-def initialize_benchmarks(config: Dict, benchmark_filter: Optional[str] = None) -> Dict:
+def initialize_benchmarks(config: Dict, benchmark_filter: Optional[str] = None) -> Dict[str, object]:
     """Initialize benchmark objects with optional filtering."""
     benchmarks = {}
     benchmark_config = config.get("benchmarks", {})
@@ -122,6 +149,7 @@ def initialize_benchmarks(config: Dict, benchmark_filter: Optional[str] = None) 
             logger.error(f"❌ Unknown benchmark: {benchmark_filter}")
             return {}
         available_benchmarks = {benchmark_filter: available_benchmarks[benchmark_filter]}
+        logger.info(f"🎯 Running single benchmark: {benchmark_filter}")
     
     # Initialize selected benchmarks
     for benchmark_name, (benchmark_class, init_msg) in available_benchmarks.items():
@@ -165,6 +193,7 @@ def initialize_evaluators(config: Dict, models_filter: Optional[Set[str]] = None
             else:
                 logger.warning(f"⚠️ Unknown model: {model_name}")
         available_evaluators = filtered_evaluators
+        logger.info(f"🤖 Running specific models: {', '.join(models_filter)}")
     
     # Initialize selected evaluators
     for evaluator_name, (evaluator_class, init_msg) in available_evaluators.items():
@@ -189,201 +218,110 @@ def initialize_evaluators(config: Dict, models_filter: Optional[Set[str]] = None
 
 def run_single_benchmark(benchmark_name: str, benchmark: object, evaluators: Dict, config: Dict) -> Dict:
     """Run evaluation on a single benchmark."""
-    logger.info(f"🏁 Starting {benchmark_name.upper()} evaluation")
-    start_time = time.time()
+    logger.info(f"🚀 Starting {benchmark_name.upper()} evaluation")
     
     benchmark_results = {
-        "benchmark_name": benchmark_name,
-        "start_time": datetime.now().isoformat(),
         "status": "running",
+        "start_time": datetime.now().isoformat(),
         "results": {},
-        "timing": {
-            "start": start_time
-        }
+        "timing": {}
     }
     
+    benchmark_start = time.time()
+    
     try:
-        # Get benchmark questions
-        questions = benchmark.get_questions()
-        if not questions:
-            logger.warning(f"⚠️ No questions available for {benchmark_name}")
-            benchmark_results["status"] = "skipped"
-            benchmark_results["error"] = "No questions available"
-            return benchmark_results
+        # Load benchmark data
+        test_data = benchmark.load_test_data()
+        logger.info(f"📊 Loaded {len(test_data)} test cases for {benchmark_name}")
         
-        logger.info(f"   📊 Processing {len(questions)} questions")
-        
-        # Evaluate each system
-        for system_name, evaluator in evaluators.items():
-            if not evaluator.enabled:
-                logger.info(f"   🚫 Skipping disabled system: {system_name}")
-                continue
+        # Run each evaluator
+        for evaluator_name, evaluator in evaluators.items():
+            logger.info(f"🔄 Running {evaluator_name} on {benchmark_name}")
             
-            logger.info(f"   🔧 Setting up {system_name}...")
-            system_start = time.time()
-            
+            evaluator_start = time.time()
             try:
-                # Setup system
-                evaluator.setup_model()
-                
                 # Run evaluation
-                system_results = []
-                for i, question in enumerate(questions):
-                    try:
-                        # Retrieve documents
-                        retrieved_docs = evaluator.retrieve_documents(
-                            question.get("question", "")
-                        )
-                        
-                        # Generate response
-                        response = evaluator.generate_response(
-                            question.get("question", "")
-                        )
-                        
-                        # Evaluate response
-                        evaluation = benchmark.evaluate_response(
-                            question, response, retrieved_docs
-                        )
-                        
-                        evaluation.update({
-                            "question_id": question.get("question_id", f"q_{i}"),
-                            "system_name": system_name,
-                            "response": response,
-                            "retrieved_docs_count": len(retrieved_docs)
-                        })
-                        
-                        system_results.append(evaluation)
-                        
-                        # Progress logging
-                        if (i + 1) % 100 == 0:
-                            logger.info(f"     Progress: {i + 1}/{len(questions)} questions")
-                    
-                    except Exception as e:
-                        logger.error(f"Error processing question {i}: {e}")
-                        system_results.append({
-                            "question_id": question.get("question_id", f"q_{i}"),
-                            "system_name": system_name,
-                            "error": str(e),
-                            "status": "failed"
-                        })
-                        continue
+                evaluation_results = evaluator.evaluate(test_data, benchmark)
                 
-                system_time = time.time() - system_start
+                evaluator_time = time.time() - evaluator_start
                 
-                # Calculate system metrics
-                metrics = benchmark.calculate_metrics(system_results)
-                
-                benchmark_results["results"][system_name] = {
-                    "individual_results": system_results,
-                    "metrics": metrics,
-                    "processing_time": system_time,
-                    "questions_processed": len(system_results)
+                benchmark_results["results"][evaluator_name] = {
+                    "status": "completed",
+                    "metrics": evaluation_results["metrics"],
+                    "processing_time": evaluator_time,
+                    "questions_processed": len(test_data),
+                    "details": evaluation_results.get("details", {})
                 }
                 
-                logger.info(f"   ✅ {system_name} completed in {system_time:.2f}s")
-                logger.info(f"     Overall Score: {metrics.get('accuracy', 0.0):.1f}%")
+                logger.info(f"   ✅ {evaluator_name}: {evaluation_results['metrics'].get('accuracy', 0):.1f}% accuracy in {evaluator_time:.1f}s")
                 
             except Exception as e:
-                logger.error(f"❌ {system_name} evaluation failed: {e}")
-                benchmark_results["results"][system_name] = {
+                evaluator_time = time.time() - evaluator_start
+                logger.error(f"   ❌ {evaluator_name} failed: {e}")
+                
+                benchmark_results["results"][evaluator_name] = {
+                    "status": "failed",
                     "error": str(e),
-                    "status": "failed"
+                    "processing_time": evaluator_time
                 }
-                continue
         
         benchmark_results["status"] = "completed"
-        total_time = time.time() - start_time
-        benchmark_results["timing"]["total"] = total_time
-        
-        logger.info(f"🏁 {benchmark_name.upper()} evaluation completed in {total_time:.2f}s")
+        benchmark_results["timing"]["total"] = time.time() - benchmark_start
         
     except Exception as e:
-        logger.error(f"❌ {benchmark_name} evaluation failed: {e}")
+        logger.error(f"❌ Benchmark {benchmark_name} failed: {e}")
         benchmark_results["status"] = "failed"
         benchmark_results["error"] = str(e)
+        benchmark_results["timing"]["total"] = time.time() - benchmark_start
     
+    benchmark_results["end_time"] = datetime.now().isoformat()
     return benchmark_results
 
 
-def convert_gpu_info_to_dict(gpu_info) -> Dict[str, Any]:
-    """Convert GPUInfo object to JSON-serializable dictionary."""
-    if hasattr(gpu_info, 'name'):  # Check if it's a GPUInfo object
-        return {
-            "name": gpu_info.name,
-            "memory_total": gpu_info.memory_total,
-            "memory_free": gpu_info.memory_free,
-            "memory_used": gpu_info.memory_used,
-            "cuda_version": gpu_info.cuda_version,
-            "device_id": gpu_info.device_id,
-            "compute_capability": gpu_info.compute_capability
-        }
-    return gpu_info  # Already a dict or other serializable type
-
-
-def save_evaluation_results(all_results: Dict, results_dir: Path, models_filter: Optional[Set[str]]) -> Path:
-    """Save evaluation results with proper JSON serialization."""
-    
-    # Convert GPUInfo to serializable dict
-    if "environment" in all_results and "gpu_info" in all_results["environment"]:
-        all_results["environment"]["gpu_info"] = convert_gpu_info_to_dict(
-            all_results["environment"]["gpu_info"]
-        )
-    
-    # Ensure all numpy types are converted to Python types
-    def convert_numpy_types(obj):
-        """Convert numpy types to Python native types for JSON serialization."""
-        if hasattr(obj, 'item'):  # numpy scalar
-            return obj.item()
-        elif hasattr(obj, 'tolist'):  # numpy array
-            return obj.tolist()
-        elif isinstance(obj, dict):
-            return {k: convert_numpy_types(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [convert_numpy_types(v) for v in obj]
-        else:
-            return obj
-    
-    # Convert numpy types in results
-    all_results = convert_numpy_types(all_results)
-    
-    # Save results
+def save_evaluation_results(results: Dict, results_dir: Path, models_filter: Optional[Set[str]] = None) -> Path:
+    """Save evaluation results to JSON file."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create filename based on models and timestamp
     if models_filter:
-        model_suffix = "_".join(sorted(models_filter))
-        results_file = results_dir / f"evaluation_results_{model_suffix}_{timestamp}.json"
+        models_str = "_".join(sorted(models_filter))
+        filename = f"evaluation_{models_str}_{timestamp}.json"
     else:
-        results_file = results_dir / f"evaluation_results_{timestamp}.json"
+        filename = f"evaluation_all_models_{timestamp}.json"
+    
+    results_file = results_dir / filename
     
     try:
+        # Convert any non-serializable objects to strings
+        serializable_results = json.loads(json.dumps(results, default=str))
+        
         with open(results_file, 'w') as f:
-            json.dump(all_results, f, indent=2, default=str)
+            json.dump(serializable_results, f, indent=2)
+        
         logger.info(f"💾 Results saved to: {results_file}")
+        return results_file
+        
     except Exception as e:
         logger.error(f"❌ Failed to save results: {e}")
-        # Try to save with basic serialization
-        backup_file = results_dir / f"evaluation_results_backup_{timestamp}.json"
-        with open(backup_file, 'w') as f:
-            json.dump(all_results, f, indent=2, default=str)
-        logger.info(f"💾 Backup results saved to: {backup_file}")
-        return backup_file
-    
-    return results_file
+        raise
 
 
 def run_evaluation(
     config_path: Optional[Path] = None,
     results_dir: Optional[Path] = None,
     quick_mode: bool = False,
+    full_mode: bool = False,
     benchmark_filter: Optional[str] = None,
     models_filter: Optional[Set[str]] = None
 ) -> Dict:
     """
-    Run complete evaluation across benchmarks and models.
+    Run HierRAGMed evaluation with multiple systems and benchmarks.
     
     Args:
         config_path: Path to evaluation configuration file
         results_dir: Directory to save results
-        quick_mode: Whether to run quick evaluation with limited samples
+        quick_mode: Whether to run quick evaluation with 200 samples
+        full_mode: Whether to run on full dataset
         benchmark_filter: Run only specific benchmark
         models_filter: Run only specific models
         
@@ -400,6 +338,14 @@ def run_evaluation(
     logger.info("🚀 Starting HierRAGMed Evaluation")
     logger.info("=" * 60)
     
+    # Log mode information
+    if quick_mode:
+        logger.info("⚡ Quick mode enabled - limiting to 200 samples per benchmark")
+    elif full_mode:
+        logger.info("🔥 Full mode enabled - using complete datasets")
+    else:
+        logger.info("📊 Standard mode - using default sample sizes from config")
+    
     # Log filtering information
     if benchmark_filter:
         logger.info(f"🎯 Running single benchmark: {benchmark_filter}")
@@ -413,12 +359,20 @@ def run_evaluation(
     # Load configuration
     config = load_evaluation_config(config_path)
     
-    # Override with quick mode settings
+    # Apply mode-specific settings
     if quick_mode:
-        logger.info("⚡ Quick mode enabled - limiting sample sizes")
+        logger.info("⚡ Applying quick mode settings...")
         for benchmark_name in config.get("benchmarks", {}):
             if config["benchmarks"][benchmark_name].get("enabled", True):
                 config["benchmarks"][benchmark_name]["sample_size"] = 200
+                logger.info(f"   {benchmark_name}: limited to 200 samples")
+    elif full_mode:
+        logger.info("🔥 Applying full mode settings...")
+        for benchmark_name in config.get("benchmarks", {}):
+            if config["benchmarks"][benchmark_name].get("enabled", True):
+                # Remove sample size limit or set to very high number
+                config["benchmarks"][benchmark_name]["sample_size"] = None
+                logger.info(f"   {benchmark_name}: using full dataset")
     
     # Initialize components
     benchmarks = initialize_benchmarks(config, benchmark_filter)
@@ -438,6 +392,7 @@ def run_evaluation(
         "start_time": datetime.now().isoformat(),
         "config": {
             "quick_mode": quick_mode,
+            "full_mode": full_mode,
             "benchmark_filter": benchmark_filter,
             "models_filter": list(models_filter) if models_filter else None
         },
@@ -529,11 +484,18 @@ def main():
     parser = argparse.ArgumentParser(description="HierRAGMed Evaluation Runner")
     parser.add_argument("--config", type=Path, help="Path to configuration file")
     parser.add_argument("--results-dir", type=Path, help="Directory to save results")
-    parser.add_argument("--quick", action="store_true", help="Run quick evaluation with limited samples")
-    parser.add_argument("--benchmark", type=str, choices=["mirage", "medreason", "msmarco", "pubmedqa"], 
-                       help="Run specific benchmark only")
     
-    # --models parameter
+    # Mode arguments - mutually exclusive
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--quick", action="store_true", 
+                           help="Run quick evaluation with 200 samples per benchmark")
+    mode_group.add_argument("--full", action="store_true", 
+                           help="Run evaluation on full datasets (no sample limit)")
+    
+    # Filtering arguments
+    parser.add_argument("--benchmark", type=str, 
+                       choices=["mirage", "medreason", "msmarco", "pubmedqa"], 
+                       help="Run specific benchmark only")
     parser.add_argument("--models", type=str, 
                        help="Comma-separated list of models to evaluate (e.g., 'hierarchical_system' or 'kg_system,hierarchical_system')")
     
@@ -556,6 +518,7 @@ def main():
             config_path=args.config,
             results_dir=args.results_dir,
             quick_mode=args.quick,
+            full_mode=args.full,
             benchmark_filter=args.benchmark,
             models_filter=models_filter
         )
