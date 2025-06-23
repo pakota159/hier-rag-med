@@ -20,7 +20,7 @@ python fetch_data.py --source all --max-results 1000
 
 # 2. Fetch foundation data (required for hierarchical system)
 # Best performance: 70-75% MIRAGE expected
-python fetch_foundation_data.py --max-results 5000
+python fetch_foundation_data.py --max-results 50000
 
 # 3. Setup KG system collections
 python setup_kg_system.py
