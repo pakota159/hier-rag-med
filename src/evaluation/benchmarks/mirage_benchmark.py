@@ -65,11 +65,16 @@ class MIRAGEBenchmark(BaseBenchmark):
         """Load MIRAGE dataset from local submodule."""
         logger.info("📊 Loading MIRAGE dataset from local submodule...")
         
+        # DIAGNOSTIC: Check what files actually exist
+        self._diagnostic_check()
+        
         # Always try local file parsing first since we have the submodule
+        logger.info("🔍 Trying local file parsing first...")
         all_questions = self._load_from_local_file()
         
         # If local file loading worked, return that
         if all_questions:
+            logger.info(f"✅ Local file parsing succeeded with {len(all_questions)} questions")
             return all_questions
         
         # Only try QADataset if local file failed and QADataset is available
@@ -83,6 +88,49 @@ class MIRAGEBenchmark(BaseBenchmark):
         # Return empty list if both methods failed
         logger.error("❌ Both local file and QADataset loading failed")
         return []
+
+    def _diagnostic_check(self):
+        """Diagnostic check to see what files exist."""
+        logger.info("🔍 DIAGNOSTIC: Checking MIRAGE submodule structure...")
+        
+        # Check current working directory
+        import os
+        logger.info(f"   Current working directory: {os.getcwd()}")
+        
+        # Check for mirage directory and files
+        mirage_paths = [
+            project_root / "mirage",
+            Path("mirage"),
+            Path("../mirage"),
+        ]
+        
+        for path in mirage_paths:
+            logger.info(f"   Checking path: {path}")
+            if path.exists():
+                logger.info(f"   ✅ Directory exists: {path}")
+                # List files in the directory
+                try:
+                    files = list(path.iterdir())
+                    logger.info(f"   📁 Files in {path}:")
+                    for file in files[:10]:  # Show first 10 files
+                        logger.info(f"      - {file.name}")
+                    if len(files) > 10:
+                        logger.info(f"      ... and {len(files) - 10} more files")
+                    
+                    # Specifically check for benchmark.json
+                    benchmark_file = path / "benchmark.json"
+                    if benchmark_file.exists():
+                        logger.info(f"   ✅ benchmark.json found: {benchmark_file}")
+                        logger.info(f"   📏 File size: {benchmark_file.stat().st_size} bytes")
+                    else:
+                        logger.info(f"   ❌ benchmark.json NOT found at: {benchmark_file}")
+                        
+                except Exception as e:
+                    logger.info(f"   ⚠️ Error listing directory: {e}")
+            else:
+                logger.info(f"   ❌ Directory does not exist: {path}")
+        
+        logger.info("🔍 DIAGNOSTIC: End of structure check")
 
     def _load_with_qadataset(self) -> List[Dict]:
         """Load MIRAGE data using official QADataset."""
