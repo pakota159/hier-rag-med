@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-CORRECTED MIRAGE Benchmark with Official QADataset Integration
-Uses src.utils.QADataset from the official MIRAGE repository
+MIRAGE Benchmark with Local Submodule Support
+Uses local MIRAGE submodule instead of downloading online
 """
 
 import re
 import json
 import sys
 import numpy as np
-import requests
 from pathlib import Path
 from typing import Dict, List, Any, Set, Optional
 
@@ -19,28 +18,16 @@ from loguru import logger
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Import official MIRAGE QADataset utility
-try:
-    from mirage.src.utils import QADataset
-    MIRAGE_UTILS_AVAILABLE = True
-    logger.info("✅ Successfully imported QADataset from MIRAGE")
-except ImportError as e:
-    MIRAGE_UTILS_AVAILABLE = False
-    logger.warning(f"⚠️ QADataset from MIRAGE not available: {e} - using fallback data loader")
-
-from src.evaluation.data.data_loader import BenchmarkDataLoader
-
 
 class MIRAGEBenchmark(BaseBenchmark):
     """
-    MIRAGE benchmark with official QADataset integration.
-    Uses the official QADataset from MIRAGE repository when available.
+    MIRAGE benchmark using local submodule data.
+    Loads from local mirage/benchmark.json instead of downloading.
     """
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.name = "MIRAGE"
-        self.data_loader = BenchmarkDataLoader(config)
         
         # Initialize evaluation models
         self._init_evaluation_models()
@@ -58,89 +45,100 @@ class MIRAGEBenchmark(BaseBenchmark):
             'dermatology': ['skin', 'dermal', 'dermatological', 'rash'],
             'orthopedics': ['bone', 'joint', 'orthopedic', 'fracture']
         }
-        
-        # Question type patterns
-        self.question_patterns = {
-            'multiple_choice': ['A)', 'B)', 'C)', 'D)', 'E)'],
-            'diagnostic': ['diagnosis', 'most likely', 'what is the'],
-            'treatment': ['treatment', 'therapy', 'management'],
-            'pathophysiology': ['mechanism', 'pathophysiology', 'how does'],
-            'pharmacology': ['drug', 'medication', 'pharmacology']
-        }
 
     def load_dataset(self) -> List[Dict]:
-        """Load MIRAGE dataset using official QADataset when available."""
-        logger.info("📊 Loading MIRAGE dataset...")
+        """Load MIRAGE dataset from local submodule."""
+        logger.info("📊 Loading MIRAGE dataset from local submodule...")
         
-        # Try official QADataset first
-        if MIRAGE_UTILS_AVAILABLE:
-            try:
-                return self._load_with_official_qadataset()
-            except Exception as e:
-                logger.warning(f"⚠️ Official QADataset failed: {e}. Using fallback method.")
+        # Try to find local MIRAGE submodule
+        mirage_paths = [
+            project_root / "mirage",  # Standard submodule location
+            Path("mirage"),           # Current directory
+            Path("../mirage"),        # Parent directory
+        ]
         
-        # Fallback to data loader
-        return self._load_with_data_loader()
+        mirage_dir = None
+        benchmark_file = None
+        
+        for path in mirage_paths:
+            potential_file = path / "benchmark.json"
+            if potential_file.exists():
+                mirage_dir = path
+                benchmark_file = potential_file
+                break
+        
+        if not benchmark_file:
+            logger.error("❌ MIRAGE benchmark.json not found in local submodule")
+            logger.error("💡 Expected locations:")
+            for path in mirage_paths:
+                logger.error(f"   - {path / 'benchmark.json'}")
+            logger.error("🔧 To fix:")
+            logger.error("   cd mirage && wget https://github.com/Teddy-XiongGZ/MIRAGE/raw/main/benchmark.json")
+            return []
+        
+        try:
+            logger.info(f"📁 Loading from: {benchmark_file}")
+            
+            with open(benchmark_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if isinstance(data, dict):
+                # Handle different JSON structures
+                questions = []
+                if "questions" in data:
+                    questions = data["questions"]
+                elif "data" in data:
+                    questions = data["data"]
+                else:
+                    # Assume it's a flat structure of questions
+                    questions = [data]
+            elif isinstance(data, list):
+                questions = data
+            else:
+                logger.error(f"❌ Unexpected data format in {benchmark_file}")
+                return []
+            
+            # Process and format questions
+            formatted_questions = []
+            for i, item in enumerate(questions):
+                formatted_item = self._format_mirage_question(item, i)
+                if formatted_item:
+                    formatted_questions.append(formatted_item)
+            
+            logger.info(f"✅ Loaded {len(formatted_questions)} MIRAGE questions from local file")
+            return formatted_questions
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to load MIRAGE data: {e}")
+            return []
 
     def load_test_data(self) -> List[Dict]:
         """Load test data for evaluation (compatibility method)."""
         return self.get_questions()
 
-    def _load_with_official_qadataset(self) -> List[Dict]:
-        """Load MIRAGE data using official QADataset."""
-        logger.info("📊 Using official MIRAGE QADataset...")
-        
-        # Detect MIRAGE directory
-        mirage_paths = [
-            Path("mirage"),
-            Path("../mirage"),
-            Path("../../mirage"),
-            project_root / "mirage"
-        ]
-        
-        mirage_dir = None
-        for path in mirage_paths:
-            if path.exists() and (path / "src" / "utils.py").exists():
-                mirage_dir = path
-                break
-        
-        if not mirage_dir:
-            raise FileNotFoundError("MIRAGE directory not found")
-        
-        # Initialize QADataset
-        qa_dataset = QADataset()
-        
-        # Load all MIRAGE datasets
-        all_questions = []
-        datasets = ['mmlu', 'medqa', 'medmcqa', 'pubmedqa', 'bioasq']
-        
-        for dataset_name in datasets:
-            try:
-                data = qa_dataset.load_data(dataset_name)
-                formatted_data = self._format_qadataset_questions(data, dataset_name)
-                all_questions.extend(formatted_data)
-                logger.info(f"   ✅ Loaded {len(formatted_data)} questions from {dataset_name}")
-            except Exception as e:
-                logger.warning(f"   ⚠️ Failed to load {dataset_name}: {e}")
-        
-        logger.info(f"📊 Total MIRAGE questions loaded: {len(all_questions)}")
-        return all_questions
-
-    def _load_with_data_loader(self) -> List[Dict]:
-        """Load MIRAGE data using fallback data loader."""
-        logger.info("📊 Using fallback MIRAGE data loader...")
-        return self.data_loader.load_benchmark_data("mirage", max_samples=self.sample_size)
-
-    def _format_qadataset_questions(self, data: List[Dict], source_dataset: str) -> List[Dict]:
-        """Format questions from QADataset to standard format."""
-        formatted_questions = []
-        
-        for i, item in enumerate(data):
-            # Extract question components
-            question_text = item.get('question', item.get('query', ''))
-            options = item.get('options', item.get('choices', []))
-            correct_answer = item.get('answer', item.get('correct_answer', ''))
-            explanation = item.get('explanation', item.get('rationale', ''))
+    def _format_mirage_question(self, item: Dict, index: int) -> Optional[Dict]:
+        """Format a single MIRAGE question to standard format."""
+        try:
+            # Extract question components with flexible field names
+            question_text = (item.get('question') or 
+                           item.get('query') or 
+                           item.get('text') or '')
+            
+            options = (item.get('options') or 
+                      item.get('choices') or 
+                      item.get('answers') or [])
+            
+            correct_answer = (item.get('answer') or 
+                            item.get('correct_answer') or 
+                            item.get('label') or '')
+            
+            explanation = (item.get('explanation') or 
+                         item.get('rationale') or 
+                         item.get('reasoning') or '')
+            
+            # Skip items without essential fields
+            if not question_text:
+                return None
             
             # Determine medical specialty
             medical_specialty = self._classify_medical_specialty(question_text)
@@ -149,20 +147,22 @@ class MIRAGEBenchmark(BaseBenchmark):
             question_type = self._classify_question_type(question_text, options)
             
             formatted_question = {
-                'id': f"{source_dataset}_{i}",
+                'id': item.get('id', f"mirage_{index}"),
                 'question': question_text,
                 'options': options,
                 'correct_answer': correct_answer,
                 'explanation': explanation,
                 'medical_specialty': medical_specialty,
                 'question_type': question_type,
-                'source_dataset': source_dataset,
+                'source_dataset': item.get('source', 'mirage'),
                 'reasoning_type': 'medical_reasoning'
             }
             
-            formatted_questions.append(formatted_question)
-        
-        return formatted_questions
+            return formatted_question
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to format question {index}: {e}")
+            return None
 
     def _classify_medical_specialty(self, question_text: str) -> str:
         """Classify question into medical specialty based on content."""
@@ -183,9 +183,14 @@ class MIRAGEBenchmark(BaseBenchmark):
             return 'multiple_choice'
         
         # Check for specific question patterns
-        for q_type, patterns in self.question_patterns.items():
-            if any(pattern in question_lower for pattern in patterns):
-                return q_type
+        if any(pattern in question_lower for pattern in ['diagnosis', 'most likely', 'what is the']):
+            return 'diagnostic'
+        elif any(pattern in question_lower for pattern in ['treatment', 'therapy', 'management']):
+            return 'treatment'
+        elif any(pattern in question_lower for pattern in ['mechanism', 'pathophysiology', 'how does']):
+            return 'pathophysiology'
+        elif any(pattern in question_lower for pattern in ['drug', 'medication', 'pharmacology']):
+            return 'pharmacology'
         
         return 'knowledge_retrieval'
 
@@ -334,17 +339,6 @@ class MIRAGEBenchmark(BaseBenchmark):
         overlap = len(response_words.intersection(explanation_words))
         return min(1.0, overlap / len(explanation_words))
 
-    def _normalize_text(self, text: str) -> str:
-        """Normalize text for comparison."""
-        if not text:
-            return ""
-        
-        import re
-        # Remove extra whitespace and punctuation, convert to lowercase
-        text = re.sub(r'[^\w\s]', ' ', text.lower())
-        text = re.sub(r'\s+', ' ', text.strip())
-        return text
-    
     def _init_evaluation_models(self) -> None:
         """Initialize models needed for evaluation."""
         try:

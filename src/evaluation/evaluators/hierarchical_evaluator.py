@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Complete Hierarchical Evaluator implementation
 src/evaluation/evaluators/hierarchical_evaluator.py
@@ -14,12 +15,14 @@ from .base_evaluator import BaseEvaluator
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+
 class HierarchicalEvaluator(BaseEvaluator):
     """Evaluator for Hierarchical Diagnostic RAG system."""
     
     def __init__(self, config: Dict):
         """Initialize Hierarchical system evaluator."""
         super().__init__(config)
+        self.model_name = "hierarchical_system"
         self.config_path = config.get("config_path", "src/basic_reasoning/config.yaml")
         
         # Hierarchical system components
@@ -128,3 +131,45 @@ class HierarchicalEvaluator(BaseEvaluator):
         except Exception as e:
             logger.error(f"Hierarchical system validation failed: {e}")
             return False
+
+    def evaluate(self, test_data: List[Dict], benchmark) -> Dict:
+        """
+        Evaluate hierarchical system on test data.
+        This method provides compatibility with the evaluation script.
+        """
+        return self.evaluate_benchmark(benchmark)
+
+    def _evaluate_single_question(self, question: Dict, benchmark) -> Dict:
+        """Evaluate model on a single question."""
+        try:
+            question_text = question.get('question', '')
+            question_id = question.get('id', 'unknown')
+            
+            # Retrieve relevant documents
+            retrieved_docs = self.retrieve_documents(question_text, top_k=10)
+            
+            # Generate response
+            response = self.generate_response(question_text)
+            
+            # Evaluate using benchmark's evaluation method
+            evaluation_result = benchmark.evaluate_response(question, response, retrieved_docs)
+            
+            # Add additional metadata
+            evaluation_result.update({
+                'question_id': question_id,
+                'model_name': self.model_name,
+                'retrieved_docs_count': len(retrieved_docs),
+                'response_length': len(response)
+            })
+            
+            return evaluation_result
+            
+        except Exception as e:
+            logger.error(f"Error evaluating question {question.get('id', 'unknown')}: {e}")
+            return {
+                'question_id': question.get('id', 'unknown'),
+                'error': str(e),
+                'accuracy': 0.0,
+                'overall_score': 0.0,
+                'status': 'failed'
+            }
