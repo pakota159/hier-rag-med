@@ -1,5 +1,5 @@
 # ==========================================
-# HierRAGMed Requirements - Fixed Version
+# HierRAGMed Requirements - Working Version
 # ==========================================
 
 # ==========================================
@@ -12,10 +12,11 @@ sentence-transformers>=2.2.2,<5.0.0
 ollama>=0.1.6
 
 # ==========================================
-# MACHINE LEARNING & AI
+# MACHINE LEARNING & AI - EXACT VERSIONS
 # ==========================================
 torch==2.6.0
 torchvision==0.21.0
+torchaudio==2.6.0
 transformers>=4.35.0,<5.0.0
 accelerate>=0.26.0
 scikit-learn>=1.4.0
@@ -27,12 +28,9 @@ safetensors>=0.4.0
 # ==========================================
 # WEB INTERFACES
 # ==========================================
-# FastAPI (main web interface)
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
-
-# Streamlit (evaluation interface)
 streamlit>=1.28.0
 
 # ==========================================
@@ -41,8 +39,6 @@ streamlit>=1.28.0
 pandas>=2.2.0
 numpy>=1.26.0
 scipy>=1.9.0
-
-# Document processing
 PyPDF2>=3.0.0
 python-docx>=1.1.0
 beautifulsoup4>=4.12.0
@@ -50,13 +46,9 @@ beautifulsoup4>=4.12.0
 # ==========================================
 # EVALUATION & METRICS
 # ==========================================
-# NLP Evaluation
 rouge-score>=0.1.2
 nltk>=3.8.0
 bert-score>=0.3.13
-
-# Statistical Analysis
-scipy>=1.9.0
 
 # ==========================================
 # VISUALIZATION
@@ -76,22 +68,17 @@ gpustat>=1.1.1
 # ==========================================
 # UTILITIES & CORE LIBS
 # ==========================================
-# Configuration & Data
 pydantic>=2.6.0
 pyyaml>=6.0.1
 python-dotenv>=1.0.0
-
-# HTTP & Networking
 requests>=2.31.0
 aiofiles>=23.2.0
 httpx>=0.23.0
 aiohttp>=3.8.0
-
-# CLI & Terminal
 loguru>=0.6.0
-rich>=13.0.0
-typer>=0.9.0
-tqdm>=4.65.0
-
-# System
+rich>=13.7.0
+typer>=0.7.0
+tqdm>=4.66.0
 psutil>=5.9.0
+memory-profiler>=0.60.0
+faiss-cpu>=1.7.0
