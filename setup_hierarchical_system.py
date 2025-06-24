@@ -503,17 +503,25 @@ def setup_enhanced_hierarchical_system():
     # Create hierarchical collections
     try:
         logger.info("🏗️ Creating hierarchical collections with medical embedding...")
-        creation_stats = processor.create_hierarchical_collections(
-            all_documents, 
-            retriever,
-            medical_optimized=medical_validation_success
-        )
+        
+        # Create collections using retriever (not processor)
+        retriever.create_hierarchical_collections()
+        
+        # Process documents into tiers using processor
+        organized_docs = processor.organize_by_reasoning_type(all_documents)
+        
+        # Add documents to tiers using retriever
+        retriever.add_documents_to_tiers(organized_docs)
+        
+        # Get creation statistics
+        stats = retriever.get_collection_stats()
         
         logger.info("✅ Hierarchical collections created successfully")
         logger.info("📊 Creation Statistics:")
-        for tier, stats in creation_stats.items():
-            if isinstance(stats, dict) and "processed" in stats:
-                logger.info(f"   {tier}: {stats['processed']:,} documents")
+        logger.info(f"   Tier 1: {stats['tier1']['count']:,} documents")
+        logger.info(f"   Tier 2: {stats['tier2']['count']:,} documents")
+        logger.info(f"   Tier 3: {stats['tier3']['count']:,} documents")
+        logger.info(f"   Total: {stats['total']:,} documents")
         
     except Exception as e:
         logger.error(f"❌ Collection creation failed: {e}")
