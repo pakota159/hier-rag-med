@@ -16,9 +16,6 @@ source /opt/miniconda/etc/profile.d/conda.sh
 conda activate hierragmed-gpu
 ```
 
-# 1. Fetch KG enhanced data for better performance
-python fetch_data.py --source all --max-results 1000
-
 # 2. Fetch foundation data (required for hierarchical system)
 # Best performance: 70-75% MIRAGE expected
 python fetch_foundation_data.py --max-results 50000

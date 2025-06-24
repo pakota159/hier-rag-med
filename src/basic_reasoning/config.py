@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional
 import yaml
+import torch
 from loguru import logger
 
 
@@ -26,6 +27,9 @@ class Config:
         
         # Load configuration
         self.config = self._load_config()
+        
+        # Apply environment-specific device configuration
+        self._apply_environment_config()
 
         # Create data directories
         self._create_directories()
@@ -34,18 +38,91 @@ class Config:
         self._setup_logging()
 
     def _detect_environment(self) -> str:
-        """Auto-detect the current environment."""
-        if "RUNPOD_POD_ID" in os.environ or "RUNPOD_POD_HOSTNAME" in os.environ:
+        """Auto-detect the current environment with correct device priority."""
+        # Check for RunPod environment first (highest priority for GPU)
+        if (os.path.exists("/workspace") or 
+            "RUNPOD_POD_ID" in os.environ or 
+            "RUNPOD_POD_HOSTNAME" in os.environ or
+            "runpod" in os.environ.get("HOSTNAME", "").lower()):
             return "runpod_gpu"
-        elif "CUDA_VISIBLE_DEVICES" in os.environ and os.environ.get("CUDA_VISIBLE_DEVICES") != "":
+        
+        # Check for general CUDA availability
+        elif torch.cuda.is_available():
             return "cuda_gpu"
-        elif sys.platform == "darwin" and "arm64" in os.uname().machine.lower():
+        
+        # Check for MPS (Apple Silicon) - only if not in RunPod and CUDA not available
+        elif (sys.platform == "darwin" and 
+              hasattr(torch.backends, 'mps') and 
+              torch.backends.mps.is_available()):
             return "mps_local"
+        
+        # Default to CPU
         else:
             return "cpu_local"
 
+    def _apply_environment_config(self) -> None:
+        """Apply environment-specific configuration settings."""
+        models_config = self.config.get("models", {})
+        
+        if self.environment in ["runpod_gpu", "cuda_gpu"]:
+            # GPU environments - use CUDA
+            self._set_device_config(models_config, "cuda", batch_size_multiplier=2.0)
+            logger.info("🚀 Applied CUDA GPU optimizations")
+            
+        elif self.environment == "mps_local":
+            # Apple Silicon - use MPS
+            self._set_device_config(models_config, "mps", batch_size_multiplier=1.0)
+            logger.info("🍎 Applied MPS (Apple Silicon) optimizations")
+            
+        else:
+            # CPU fallback
+            self._set_device_config(models_config, "cpu", batch_size_multiplier=0.5)
+            logger.info("💻 Applied CPU configuration")
+
+    def _set_device_config(self, models_config: Dict, device: str, batch_size_multiplier: float) -> None:
+        """Set device configuration for all model components."""
+        # Configure embedding model
+        if "embedding" not in models_config:
+            models_config["embedding"] = {}
+        
+        embedding_config = models_config["embedding"]
+        embedding_config["device"] = device
+        
+        # Adjust batch size based on device capability
+        base_batch_size = embedding_config.get("batch_size", 16)
+        new_batch_size = int(base_batch_size * batch_size_multiplier)
+        embedding_config["batch_size"] = max(1, new_batch_size)  # Ensure at least 1
+        
+        # Configure LLM if present
+        if "llm" in models_config:
+            models_config["llm"]["device"] = device
+            if "batch_size" in models_config["llm"]:
+                llm_base_batch = models_config["llm"]["batch_size"]
+                models_config["llm"]["batch_size"] = max(1, int(llm_base_batch * batch_size_multiplier))
+        
+        # Configure system-level models
+        for system_name in ["kg_system", "hierarchical_system"]:
+            if system_name in models_config:
+                models_config[system_name]["device"] = device
+                if "embedding" in models_config[system_name]:
+                    models_config[system_name]["embedding"]["device"] = device
+
     def _load_config(self) -> Dict:
         """Load configuration from file with fallback to enhanced defaults."""
+        # Try to load GPU config first for RunPod environments
+        if self.environment == "runpod_gpu":
+            gpu_config_path = Path(__file__).parent.parent / "evaluation" / "configs" / "gpu_runpod_config.yaml"
+            if gpu_config_path.exists():
+                try:
+                    with open(gpu_config_path, "r") as f:
+                        config = yaml.safe_load(f)
+                    logger.info(f"✅ Loaded GPU config from {gpu_config_path}")
+                    self._validate_medical_config(config)
+                    return config
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to load GPU config: {e}")
+        
+        # Try main config file
         if self.config_path.exists():
             with open(self.config_path, "r") as f:
                 config = yaml.safe_load(f)
@@ -73,107 +150,38 @@ class Config:
 
     def _get_enhanced_default_config(self) -> Dict:
         """Enhanced default configuration optimized for medical Q&A."""
-        # Auto-detect optimal settings based on environment
-        if self.environment in ["runpod_gpu", "cuda_gpu"]:
-            device = "cuda"
-            batch_size = 32
-            tier1_top_k = 8
-            temperature = 0.2  # Lower for more consistent answers
-            chunk_size = 384
-        elif self.environment == "mps_local":
-            device = "mps"
-            batch_size = 8
-            tier1_top_k = 5
-            temperature = 0.3
-            chunk_size = 384
-        else:
-            device = "cpu"
-            batch_size = 4
-            tier1_top_k = 3
-            temperature = 0.4
-            chunk_size = 256  # Smaller for CPU
-        
         return {
-            "data_dir": "data/foundation",
+            "data_dir": "data",
             "models": {
                 "embedding": {
                     "name": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
                     "fallback_name": "sentence-transformers/all-MiniLM-L6-v2",
-                    "device": device,
-                    "batch_size": batch_size,
+                    "device": "auto",  # Will be set by _apply_environment_config
+                    "batch_size": 16,
                     "max_length": 512,
                     "normalize_embeddings": True,
-                    "trust_remote_code": False,
-                    "use_medical_embedding": True,
-                    "model_kwargs": {
-                        "torch_dtype": "float16" if device != "cpu" else "float32",
-                        "attn_implementation": "eager"
-                    },
-                    "device_settings": {
-                        "cuda": {"batch_size": 32, "mixed_precision": True},
-                        "mps": {"batch_size": 8, "mixed_precision": False},
-                        "cpu": {"batch_size": 4, "mixed_precision": False}
-                    }
+                    "use_medical_embedding": True
                 },
                 "llm": {
                     "name": "mistral:7b-instruct",
-                    "temperature": temperature,
+                    "device": "auto",  # Will be set by _apply_environment_config
+                    "batch_size": 16,
+                    "temperature": 0.7,
                     "context_window": 4096,
-                    "device": device
+                    "max_new_tokens": 512
                 }
             },
-            "hierarchical_retrieval": {
-                "tier1_top_k": tier1_top_k,
-                "tier2_top_k": max(4, tier1_top_k - 1),
-                "tier3_top_k": max(3, tier1_top_k - 2),
-                "enable_evidence_stratification": True,
-                "enable_temporal_weighting": True,
-                "medical_specialty_boost": True,
-                "balanced_tier_distribution": True,
-                "medical_entity_boost": 1.2,
-                "clinical_context_window": 3
+            "retrieval": {
+                "tier1_top_k": 5,
+                "tier2_top_k": 4,
+                "tier3_top_k": 3,
+                "similarity_threshold": 0.7,
+                "enable_reranking": True
             },
-            "processing": {
-                "chunk_size": chunk_size,
-                "chunk_overlap": chunk_size // 4,  # 25% overlap
-                "min_content_length": 50,
-                "enable_medical_entity_recognition": True,
-                "preserve_medical_terminology": True,
-                "target_tier_distribution": {
-                    "tier1": 0.30,  # 30% Pattern Recognition
-                    "tier2": 0.40,  # 40% Clinical Reasoning
-                    "tier3": 0.30   # 30% Evidence Confirmation
-                }
-            },
-            "prompts": {
-                "system": """You are a medical knowledge expert answering multiple choice questions.
-Analyze each question systematically using hierarchical medical reasoning.
-
-CRITICAL REQUIREMENTS:
-- Select ONLY ONE answer: A, B, C, D, or E
-- Format your final answer as: "Answer: [LETTER]"
-- Base your answer on medical evidence and established knowledge
-- Be precise, accurate, and evidence-based
-
-RESPONSE FORMAT:
-1. Brief analysis of the question topic
-2. Systematic evaluation of key options
-3. Selection of the best answer
-4. Final answer: "Answer: [LETTER]" """,
-                "tier1_prompt": """TIER 1 - MEDICAL PATTERN RECOGNITION:
-Analyze the basic medical concepts, definitions, anatomy, and fundamental knowledge patterns.
-Focus on established medical facts, terminology, and basic pathophysiology.""",
-                "tier2_prompt": """TIER 2 - CLINICAL REASONING:
-Apply clinical reasoning and diagnostic thinking to the medical scenario.
-Consider differential diagnosis, clinical presentations, and diagnostic approaches.""",
-                "tier3_prompt": """TIER 3 - EVIDENCE CONFIRMATION:
-Evaluate evidence-based medicine, treatment guidelines, and research findings.
-Consider latest clinical guidelines, treatment protocols, and research evidence."""
-            },
-            "evaluation": {
-                "enable_medical_validation": True,
-                "check_medical_terminology": True,
-                "validate_clinical_accuracy": True
+            "generation": {
+                "system_prompt": "You are a medical knowledge assistant specialized in clinical reasoning and evidence-based medicine.",
+                "enable_answer_extraction": True,
+                "force_answer_format": True
             }
         }
 
@@ -215,7 +223,9 @@ Consider latest clinical guidelines, treatment protocols, and research evidence.
             "batch_size": embedding_config["batch_size"],
             "embedding_model": embedding_config["name"],
             "use_medical_embedding": embedding_config.get("use_medical_embedding", True),
-            "medical_optimized": "BiomedNLP" in embedding_config["name"]
+            "medical_optimized": "BiomedNLP" in embedding_config["name"],
+            "cuda_available": torch.cuda.is_available(),
+            "mps_available": hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
         }
 
     def get_embedding_config(self) -> Dict:
@@ -246,19 +256,19 @@ Consider latest clinical guidelines, treatment protocols, and research evidence.
         checks = {
             "medical_model": "BiomedNLP" in embedding_config.get("name", ""),
             "medical_flag": embedding_config.get("use_medical_embedding", False),
-            "fallback_configured": "fallback_name" in embedding_config,
-            "device_configured": "device" in embedding_config
+            "device_set": embedding_config.get("device") is not None,
+            "valid_device": embedding_config.get("device") in ["cuda", "mps", "cpu"]
         }
         
-        all_passed = all(checks.values())
+        all_valid = all(checks.values())
         
-        if all_passed:
-            logger.info("✅ Medical embedding configuration validated successfully")
+        if all_valid:
+            logger.info("✅ Medical embedding setup validated successfully")
         else:
             failed_checks = [k for k, v in checks.items() if not v]
-            logger.warning(f"⚠️ Medical config validation failed: {failed_checks}")
+            logger.warning(f"⚠️ Medical setup validation failed: {failed_checks}")
         
-        return all_passed
+        return all_valid
 
     def __getitem__(self, key: str):
         """Get configuration value."""
@@ -267,3 +277,7 @@ Consider latest clinical guidelines, treatment protocols, and research evidence.
     def __setitem__(self, key: str, value):
         """Set configuration value."""
         self.config[key] = value
+
+    def get(self, key: str, default=None):
+        """Get configuration value with default."""
+        return self.config.get(key, default)
