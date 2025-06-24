@@ -1,6 +1,7 @@
 ```
 cd /workspace
 git clone https://github.com/pakota159/hier-rag-med.git hierragmed
+git submodule update --init --recursive
 ```
 
 ```
