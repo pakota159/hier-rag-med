@@ -35,7 +35,7 @@ models:
 
   llm:
     name: mistral:7b-instruct
-    temperature: 0.3  # Lower for more consistent answers
+    temperature: 0.1  # Lower for more consistent answers
     context_window: 4096
     device: auto  # Auto-detect device
 
@@ -50,7 +50,7 @@ hierarchical_retrieval:
   balanced_tier_distribution: true  # Force balanced distribution
   
   # Medical-specific retrieval parameters
-  medical_entity_boost: 1.2  # Boost documents with medical entities
+  medical_entity_boost: 1.3  # Boost documents with medical entities
   clinical_context_window: 3  # Consider surrounding context for clinical relevance
 
 # Processing configurations optimized for medical content
@@ -70,42 +70,44 @@ processing:
 prompts:
   system: |
     You are a medical knowledge expert answering multiple choice questions.
-    Analyze each question systematically using hierarchical medical reasoning.
+    Analyze each question systematically using medical knowledge and evidence.
     
     CRITICAL REQUIREMENTS:
-    - Select ONLY ONE answer: A, B, C, D, or E
-    - Format your final answer as: "Answer: [LETTER]"
-    - Base your answer on medical evidence and established knowledge
+    - You MUST select exactly ONE answer from the given options (A, B, C, D, or E)
+    - Format your final answer EXACTLY as: "Answer: [LETTER]"
+    - Base your analysis on established medical knowledge
     - Be precise, accurate, and evidence-based
     
     RESPONSE FORMAT:
-    1. Brief analysis of the question topic
-    2. Systematic evaluation of key options
-    3. Selection of the best answer
-    4. Final answer: "Answer: [LETTER]"
+    1. Identify the medical condition/scenario
+    2. Determine the most likely treatment/intervention
+    3. Analyze how this affects the specific physiological mechanism asked
+    4. Evaluate each option systematically
+    5. Select the correct answer
+    6. End with: "Answer: [LETTER]"
     
     EXAMPLE:
-    Question: What is the most common cause of community-acquired pneumonia?
-    Options: A) Mycoplasma B) Streptococcus pneumoniae C) Haemophilus influenzae D) Staphylococcus aureus
+    Question: A patient with anaphylaxis receives epinephrine. What effect does epinephrine have on cardiac pacemaker cells?
+    Options: A) Increased Ca2+ influx B) Decreased Na+ influx C) No effect D) Increased K+ efflux
     
-    Analysis: Community-acquired pneumonia etiology varies by population and setting. S. pneumoniae remains the leading bacterial cause in most populations, particularly in adults without comorbidities.
+    Analysis: Anaphylaxis requires epinephrine as first-line treatment. Epinephrine is a beta-adrenergic agonist that increases cardiac chronotropy by enhancing calcium influx during phase 4 of pacemaker cell action potentials, leading to faster heart rate.
     
-    Answer: B
+    Answer: A
     
   tier1_prompt: |
-    TIER 1 - MEDICAL PATTERN RECOGNITION:
-    Analyze the basic medical concepts, definitions, anatomy, and fundamental knowledge patterns.
-    Focus on established medical facts, terminology, and basic pathophysiology.
+    TIER 1 - MEDICAL FOUNDATION:
+    Focus on basic medical concepts, anatomy, physiology, and fundamental mechanisms.
+    Identify core medical knowledge relevant to the question.
     
   tier2_prompt: |
-    TIER 2 - CLINICAL REASONING:
-    Apply clinical reasoning and diagnostic thinking to the medical scenario.
-    Consider differential diagnosis, clinical presentations, and diagnostic approaches.
+    TIER 2 - CLINICAL APPLICATION:
+    Apply clinical reasoning and diagnostic thinking.
+    Consider pathophysiology, treatment protocols, and clinical presentations.
     
   tier3_prompt: |
-    TIER 3 - EVIDENCE CONFIRMATION:
-    Evaluate evidence-based medicine, treatment guidelines, and research findings.
-    Consider latest clinical guidelines, treatment protocols, and research evidence.
+    TIER 3 - EVIDENCE-BASED MEDICINE:
+    Reference clinical guidelines, research evidence, and established protocols.
+    Validate answers against current medical standards.
 
 # Evaluation and validation settings
 evaluation:

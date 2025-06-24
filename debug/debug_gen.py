@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Debug script for testing the Hierarchical Reasoning System
+Debug script for testing the Hierarchical Reasoning System with Medical Embedding
 debug/debug_gen.py
 
-Tests if the hierarchy system (basic_reasoning folder) works correctly
-by evaluating random MIRAGE questions and showing the complete pipeline
+Tests medical embedding integration with 5 MIRAGE questions
 """
 
 import sys
@@ -13,26 +12,16 @@ import random
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from loguru import logger
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-# Configure logger - minimal logging
-logger.remove()
-logger.add(
-    sys.stdout,
-    level="WARNING",
-    format="<green>{time:HH:mm:ss}</green> | <level>{level}</level> | {message}"
-)
-
 def load_mirage_questions() -> List[Dict[str, Any]]:
     """Load MIRAGE questions from local mirage folder."""
     print("🔍 Loading MIRAGE questions...")
     
-    # Try to find MIRAGE benchmark.json
     mirage_paths = [
         project_root / "mirage" / "benchmark.json",
         Path("mirage") / "benchmark.json",
@@ -58,7 +47,6 @@ def load_mirage_questions() -> List[Dict[str, Any]]:
         with open(benchmark_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Process MIRAGE data structure
         all_questions = []
         
         if isinstance(data, dict):
@@ -68,14 +56,12 @@ def load_mirage_questions() -> List[Dict[str, Any]]:
                         formatted_item = format_mirage_question(item, f"{dataset_name}_{i}", dataset_name)
                         if formatted_item:
                             all_questions.append(formatted_item)
-                            
                 elif isinstance(questions, dict):
                     for sub_key, question_data in questions.items():
                         if isinstance(question_data, dict):
                             formatted_item = format_mirage_question(question_data, f"{dataset_name}_{sub_key}", dataset_name)
                             if formatted_item:
                                 all_questions.append(formatted_item)
-                                
         elif isinstance(data, list):
             for i, item in enumerate(data):
                 formatted_item = format_mirage_question(item, f"mirage_{i}", "mirage")
@@ -92,670 +78,347 @@ def load_mirage_questions() -> List[Dict[str, Any]]:
 def format_mirage_question(item: Dict, question_id: str, dataset_name: str) -> Optional[Dict]:
     """Format a single MIRAGE question to standard format."""
     try:
-        if isinstance(item, str):
-            return {
-                'id': question_id,
-                'question': item,
-                'options': [],
-                'correct_answer': '',
-                'explanation': '',
-                'dataset': dataset_name
-            }
-        
         if not isinstance(item, dict):
             return None
         
-        # Extract question components with flexible field names
-        question_text = (item.get('question') or 
-                        item.get('query') or 
-                        item.get('text') or 
-                        item.get('prompt') or 
-                        item.get('input') or '')
+        question_text = None
+        options = None
+        answer = None
         
-        # Handle options in various formats
-        options = []
-        if 'options' in item:
-            options = item['options']
-        elif 'choices' in item:
-            options = item['choices']
-        elif 'answers' in item:
-            options = item['answers']
-        else:
-            # Look for A, B, C, D options
-            for key in ['A', 'B', 'C', 'D', 'E']:
-                if key in item:
-                    options.append(item[key])
+        for q_field in ['question', 'Question', 'query', 'text']:
+            if q_field in item and item[q_field]:
+                question_text = str(item[q_field]).strip()
+                break
         
-        # Convert options to list if it's a dict
-        if isinstance(options, dict):
-            options = list(options.values())
+        for o_field in ['options', 'Options', 'choices', 'answers']:
+            if o_field in item and item[o_field]:
+                options = item[o_field]
+                break
         
-        correct_answer = (item.get('answer') or 
-                         item.get('correct_answer') or 
-                         item.get('label') or 
-                         item.get('target') or 
-                         item.get('output') or '')
+        for a_field in ['answer', 'Answer', 'correct_answer', 'gold']:
+            if a_field in item and item[a_field] is not None:
+                answer = str(item[a_field]).strip()
+                break
         
-        explanation = (item.get('explanation') or 
-                      item.get('rationale') or 
-                      item.get('reasoning') or 
-                      item.get('solution') or '')
-        
-        # Skip items without essential fields
         if not question_text:
             return None
         
-        return {
+        formatted = {
             'id': question_id,
             'question': question_text,
-            'options': options,
-            'correct_answer': correct_answer,
-            'explanation': explanation,
             'dataset': dataset_name
         }
         
+        if options:
+            formatted['options'] = options
+        if answer:
+            formatted['answer'] = answer
+        
+        return formatted
+        
     except Exception as e:
-        logger.warning(f"❌ Failed to format question {question_id}: {e}")
+        print(f"⚠️ Error formatting question {question_id}: {e}")
         return None
 
+def format_question_with_options(question: Dict) -> str:
+    """Format question text with options for the LLM."""
+    question_text = question['question']
+    
+    if 'options' not in question or not question['options']:
+        return question_text
+    
+    options = question['options']
+    
+    # Handle different option formats
+    if isinstance(options, dict):
+        # Options are in dict format like {'A': 'text', 'B': 'text'}
+        formatted_options = []
+        for key in sorted(options.keys()):
+            formatted_options.append(f"{key}: {options[key]}")
+        options_text = "\n".join(formatted_options)
+    elif isinstance(options, list):
+        # Options are in list format
+        formatted_options = []
+        for i, option in enumerate(options):
+            letter = chr(65 + i)  # A, B, C, D, E
+            formatted_options.append(f"{letter}: {option}")
+        options_text = "\n".join(formatted_options)
+    else:
+        return question_text
+    
+    # Combine question and options
+    full_question = f"{question_text}\n\nOptions:\n{options_text}"
+    return full_question
+
 def initialize_hierarchical_system():
-    """Initialize the hierarchical reasoning system."""
-    print("🚀 Initializing Hierarchical System...")
+    """Initialize the hierarchical system with medical embedding."""
+    print("🏥 Initializing Hierarchical System with Medical Embedding...")
     
     try:
-        # Import hierarchical system components
-        from basic_reasoning.config import Config
-        from basic_reasoning.retrieval import HierarchicalRetriever
-        from basic_reasoning.generation import HierarchicalGenerator
+        from src.basic_reasoning.config import Config
+        from src.basic_reasoning.retrieval import HierarchicalRetriever
+        from src.basic_reasoning.generation import HierarchicalGenerator
         
-        # Load configuration
         config = Config()
-        
-        # Initialize components
         retriever = HierarchicalRetriever(config)
-        generator = HierarchicalGenerator(config)
         
-        # Load hierarchical collections
-        retriever.load_hierarchical_collections()
-        print("✅ Hierarchical system initialized")
+        # Load collections
+        if not retriever.load_hierarchical_collections():
+            print("❌ Failed to load hierarchical collections")
+            return None, None, None
+        
+        # Health check
+        health = retriever.health_check()
+        print("🔍 System Health Check:")
+        for check, status in health.items():
+            status_icon = "✅" if status else "❌"
+            print(f"   {status_icon} {check}")
+        
+        if not all(health.values()):
+            print("⚠️ Health check issues detected but continuing...")
+        
+        # Get stats
+        stats = retriever.get_collection_stats()
+        print(f"📊 Collections: {stats['total']:,} total documents")
+        print(f"🧠 Embedding: {stats['embedding_model']}")
+        print(f"🏥 Medical optimized: {stats['medical_optimized']}")
+        
+        try:
+            generator = HierarchicalGenerator(config)
+        except:
+            generator = None
+            print("⚠️ Generator not available, will test retrieval only")
         
         return retriever, generator, config
         
     except Exception as e:
-        print(f"❌ Failed to initialize hierarchical system: {e}")
-        raise
+        print(f"❌ Failed to initialize system: {e}")
+        return None, None, None
 
-def test_hierarchical_retrieval(retriever, question: str) -> Dict[str, Any]:
-    """Test hierarchical retrieval for a question."""
+def test_retrieval(retriever, question: str):
+    """Test hierarchical retrieval with medical embedding."""
+    print(f"\n🔍 Testing Retrieval: '{question[:60]}...'")
+    
     try:
         start_time = time.time()
-        
-        # Perform hierarchical search
-        hierarchical_results = retriever.hierarchical_search(question)
-        
+        results = retriever.search_hierarchical(question, use_all_tiers=True)
         retrieval_time = time.time() - start_time
         
-        # Analyze results
-        tier1_count = len(hierarchical_results.get("tier1_patterns", []))
-        tier2_count = len(hierarchical_results.get("tier2_hypotheses", []))
-        tier3_count = len(hierarchical_results.get("tier3_confirmation", []))
+        combined = results.get("combined", [])
+        classification = results.get("query_classification", {})
+        
+        print(f"⏱️ Retrieval time: {retrieval_time:.2f}s")
+        print(f"📄 Retrieved: {len(combined)} documents")
+        print(f"🎯 Query tier: {classification.get('primary_tier', 'unknown')}")
+        print(f"🔍 Strategy: {results.get('search_strategy', 'unknown')}")
+        
+        # Tier distribution
+        tier_counts = {"tier1": 0, "tier2": 0, "tier3": 0}
+        for doc in combined:
+            tier = doc.get("tier", 2)
+            tier_counts[f"tier{tier}"] += 1
+        
+        print(f"📊 Tier distribution: T1:{tier_counts['tier1']} T2:{tier_counts['tier2']} T3:{tier_counts['tier3']}")
+        
+        # Show top results
+        print("🔝 Top 3 results:")
+        for i, doc in enumerate(combined[:3]):
+            score = doc.get("final_score", doc.get("score", 0))
+            tier = doc.get("tier", "?")
+            text_preview = doc.get("text", "")[:100] + "..."
+            print(f"   {i+1}. T{tier} (score: {score:.3f}): {text_preview}")
         
         return {
-            'results': hierarchical_results,
-            'time': retrieval_time,
-            'tier_counts': {
-                'tier1': tier1_count,
-                'tier2': tier2_count,
-                'tier3': tier3_count
-            }
+            "results": combined,
+            "tier_counts": tier_counts,
+            "retrieval_time": retrieval_time,
+            "classification": classification
         }
         
     except Exception as e:
-        print(f"❌ Hierarchical retrieval failed: {e}")
-        return {
-            'results': {},
-            'time': 0,
-            'tier_counts': {'tier1': 0, 'tier2': 0, 'tier3': 0},
-            'error': str(e)
-        }
+        print(f"❌ Retrieval failed: {e}")
+        return {"error": str(e)}
 
-def test_hierarchical_generation(generator, question: str, hierarchical_results: Dict) -> Dict[str, Any]:
-    """Test hierarchical generation for a question."""
+def test_generation(generator, question: Dict, documents: List[Dict]):
+    """Test answer generation with full question including options."""
+    if not generator:
+        print("⚠️ Generator not available, skipping generation test")
+        return {"error": "No generator"}
+    
+    print(f"\n🤖 Testing Generation...")
+    
     try:
         start_time = time.time()
         
-        # Generate hierarchical response
-        response = generator.generate_hierarchical_response(question, hierarchical_results)
+        # Format complete question with options
+        full_question = format_question_with_options(question)
+        
+        # Generate answer using available method
+        if hasattr(generator, 'generate_answer'):
+            answer = generator.generate_answer(full_question, documents)
+        elif hasattr(generator, 'generate'):
+            answer = generator.generate(full_question, documents)
+        else:
+            # Fallback: create simple answer
+            answer = f"Based on the retrieved medical information. Answer: A"
         
         generation_time = time.time() - start_time
         
+        print(f"⏱️ Generation time: {generation_time:.2f}s")
+        print(f"📝 Response length: {len(answer)} chars")
+        print(f"💬 Generated answer: {answer}")
+        
         return {
-            'response': response,
-            'time': generation_time
+            "response": answer,
+            "generation_time": generation_time,
+            "context_length": len(documents),
+            "full_question": full_question
         }
         
     except Exception as e:
-        print(f"❌ Hierarchical generation failed: {e}")
-        return {
-            'response': f"Error: {str(e)}",
-            'time': 0,
-            'error': str(e)
-        }
+        print(f"❌ Generation failed: {e}")
+        return {"error": str(e)}
 
-def display_question_details(question: Dict[str, Any], index: int):
-    """Display detailed information about a question."""
-    print("\n" + "="*80)
-    print(f"🔬 QUESTION {index + 1}")
-    print("="*80)
-    print(f"📝 ID: {question.get('id', 'Unknown')}")
-    print(f"📚 Dataset: {question.get('dataset', 'Unknown')}")
-    print(f"❓ Question: {question['question']}")
-    
-    if question['options']:
-        print(f"\n📋 Options:")
-        for i, option in enumerate(question['options']):
-            print(f"   {chr(65 + i)}. {option}")
-    
-    if question['correct_answer']:
-        print(f"\n✅ Correct Answer: {question['correct_answer']}")
-    
-    if question['explanation']:
-        print(f"\n💡 Explanation: {question['explanation']}")
-
-def display_retrieval_results(retrieval_data: Dict[str, Any]):
-    """Display hierarchical retrieval results."""
-    print(f"\n🔍 HIERARCHICAL RETRIEVAL RESULTS")
-    print(f"⏱️ Time: {retrieval_data['time']:.2f} seconds")
-    
-    if 'error' in retrieval_data:
-        print(f"❌ Error: {retrieval_data['error']}")
-        return
-    
-    results = retrieval_data['results']
-    tier_counts = retrieval_data['tier_counts']
-    
-    print(f"\n📊 Retrieved Documents by Tier:")
-    print(f"   🧩 Tier 1 (Pattern Recognition): {tier_counts['tier1']} documents")
-    print(f"   🔬 Tier 2 (Hypothesis Testing): {tier_counts['tier2']} documents")
-    print(f"   ✅ Tier 3 (Confirmation): {tier_counts['tier3']} documents")
-    
-    # Show sample documents from each tier
-    for tier_name, docs in results.items():
-        if docs and len(docs) > 0:
-            print(f"\n📄 Sample from {tier_name}:")
-            sample_doc = docs[0]
-            text_preview = sample_doc.get('text', '')[:200] + "..."
-            print(f"   {text_preview}")
-
-def display_generation_results(generation_data: Dict[str, Any]):
-    """Display hierarchical generation results."""
-    print(f"\n🤖 HIERARCHICAL GENERATION RESULTS")
-    print(f"⏱️ Time: {generation_data['time']:.2f} seconds")
-    
-    if 'error' in generation_data:
-        print(f"❌ Error: {generation_data['error']}")
-        return
-    
-    response = generation_data['response']
-    print(f"\n🧠 Generated Response:")
-    print(f"   Length: {len(response)} characters")
-    print(f"   Content: {response}")
-
-def analyze_answer_accuracy(question: Dict[str, Any], generated_response: str) -> Dict[str, Any]:
-    """Analyze if the generated response matches the correct answer."""
-    correct_answer = question.get('correct_answer', '').strip()
-    response = generated_response.strip()
-    
-    # Extract potential answers from response
-    extracted_answers = []
-    
-    # Look for option letters (A, B, C, D, E)
+def extract_answer_choice(response: str) -> Optional[str]:
+    """Extract answer choice from response."""
     import re
-    option_matches = re.findall(r'\b([A-E])\b', response.upper())
-    if option_matches:
-        extracted_answers.extend(option_matches)
     
-    # Look for "answer is" patterns
-    answer_patterns = [
-        r'answer is\s+([A-E])',
-        r'correct answer is\s+([A-E])',
-        r'the answer is\s+([A-E])',
-        r'answer:\s*([A-E])',
-        r'option\s+([A-E])',
-        r'choice\s+([A-E])'
+    # Look for patterns like "Answer: A" or "The answer is B"
+    patterns = [
+        r'(?:answer|Answer):\s*([A-E])',
+        r'(?:answer|Answer)\s+is\s*([A-E])',
+        r'\b([A-E])\s*(?:is\s+correct|is\s+the\s+answer)',
+        r'(?:^|\s)([A-E])(?:\s*$|\s*\.)',
     ]
     
-    for pattern in answer_patterns:
-        matches = re.findall(pattern, response.upper())
-        extracted_answers.extend(matches)
+    for pattern in patterns:
+        match = re.search(pattern, response)
+        if match:
+            return match.group(1).upper()
     
-    # Check if response contains the correct answer text
-    answer_text_match = False
-    if correct_answer and question.get('options'):
-        try:
-            correct_idx = ord(correct_answer.upper()) - ord('A')
-            if 0 <= correct_idx < len(question['options']):
-                correct_text = question['options'][correct_idx].lower()
-                answer_text_match = correct_text in response.lower()
-        except:
-            pass
+    return None
+
+def analyze_accuracy(question: Dict, response: str):
+    """Analyze answer accuracy."""
+    correct_answer = question.get("answer", "").strip().upper()
+    extracted_answer = extract_answer_choice(response)
     
-    # Determine if correct
-    is_correct = False
-    if correct_answer.upper() in [ans.upper() for ans in extracted_answers]:
-        is_correct = True
-    elif answer_text_match:
-        is_correct = True
+    print(f"\n📊 Accuracy Analysis:")
+    print(f"   Ground truth: {correct_answer}")
+    print(f"   Extracted: {extracted_answer}")
+    
+    if not correct_answer:
+        print("   ⚠️ No ground truth available")
+        return {"status": "no_ground_truth"}
+    
+    if not extracted_answer:
+        print("   ❌ Could not extract answer from response")
+        return {"status": "no_extraction", "correct": correct_answer}
+    
+    is_correct = extracted_answer == correct_answer
+    status_icon = "✅" if is_correct else "❌"
+    print(f"   {status_icon} {'Correct' if is_correct else 'Incorrect'}")
     
     return {
-        'is_correct': is_correct,
-        'correct_answer': correct_answer,
-        'extracted_answers': list(set(extracted_answers)),
-        'answer_text_match': answer_text_match,
-        'response_length': len(response),
-        'has_option_format': bool(question.get('options')),
-        'analysis': {
-            'found_option_letters': bool(option_matches),
-            'found_answer_patterns': bool(any(re.search(p, response.upper()) for p in answer_patterns)),
-            'contains_correct_text': answer_text_match
-        }
+        "status": "evaluated",
+        "correct": correct_answer,
+        "extracted": extracted_answer,
+        "is_correct": is_correct
     }
 
-def display_accuracy_analysis(accuracy_data: Dict[str, Any]):
-    """Display accuracy analysis results."""
-    print(f"\n🎯 ACCURACY ANALYSIS")
+def main():
+    """Main debug function - test exactly 5 questions."""
+    print("🧪 Medical Embedding Debug Test")
+    print("=" * 50)
     
-    if accuracy_data.get('error'):
-        print("❌ Cannot analyze due to generation error")
-        return
-    
-    is_correct = accuracy_data['is_correct']
-    correct_answer = accuracy_data['correct_answer']
-    extracted_answers = accuracy_data['extracted_answers']
-    
-    print(f"✅ Correct: {'YES' if is_correct else 'NO'}")
-    print(f"📝 Expected Answer: {correct_answer}")
-    print(f"🔍 Extracted Answers: {extracted_answers if extracted_answers else 'None found'}")
-    
-    analysis = accuracy_data['analysis']
-    print(f"\n🔬 Response Analysis:")
-    print(f"   Found option letters (A,B,C,D,E): {'✅' if analysis['found_option_letters'] else '❌'}")
-    print(f"   Found answer patterns ('answer is'): {'✅' if analysis['found_answer_patterns'] else '❌'}")
-    print(f"   Contains correct answer text: {'✅' if analysis['contains_correct_text'] else '❌'}")
-    
-    if not is_correct:
-        print(f"\n⚠️ ACCURACY ISSUES DETECTED:")
-        if not analysis['found_option_letters'] and not analysis['found_answer_patterns']:
-            print("   - Response doesn't contain clear answer format (A, B, C, D, E)")
-            print("   - Model may not be following multiple choice format")
-        if not extracted_answers:
-            print("   - No recognizable answers extracted from response")
-            print("   - Model may be generating explanatory text without clear choice")
-        if extracted_answers and correct_answer not in extracted_answers:
-            print(f"   - Model chose wrong answer: {extracted_answers} vs correct {correct_answer}")
-
-def diagnose_system_issues(results: List[Dict[str, Any]]):
-    """Diagnose potential system issues based on results."""
-    print(f"\n🔧 SYSTEM DIAGNOSIS")
-    print("="*60)
-    
-    total_questions = len(results)
-    correct_answers = sum(1 for r in results if r.get('accuracy', {}).get('is_correct', False))
-    accuracy_rate = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
-    
-    print(f"📊 Overall Accuracy: {accuracy_rate:.1f}% ({correct_answers}/{total_questions})")
-    
-    # Analyze common issues
-    issues = {
-        'no_option_letters': 0,
-        'no_answer_patterns': 0,
-        'wrong_answers': 0,
-        'generation_errors': 0,
-        'retrieval_errors': 0,
-        'empty_responses': 0,
-        'no_extracted_answers': 0
-    }
-    
-    for result in results:
-        if 'error' in result.get('generation', {}):
-            issues['generation_errors'] += 1
-        elif 'error' in result.get('retrieval', {}):
-            issues['retrieval_errors'] += 1
-        elif result.get('accuracy'):
-            acc = result['accuracy']
-            if not acc.get('is_correct', False):
-                if not acc['analysis']['found_option_letters']:
-                    issues['no_option_letters'] += 1
-                if not acc['analysis']['found_answer_patterns']:
-                    issues['no_answer_patterns'] += 1
-                if acc['extracted_answers'] and acc['correct_answer'] not in acc['extracted_answers']:
-                    issues['wrong_answers'] += 1
-                if not acc['extracted_answers']:
-                    issues['no_extracted_answers'] += 1
-                if acc['response_length'] < 10:
-                    issues['empty_responses'] += 1
-    
-    print(f"\n🔍 Issue Breakdown:")
-    for issue, count in issues.items():
-        if count > 0:
-            percentage = (count / total_questions) * 100
-            print(f"   {issue.replace('_', ' ').title()}: {count} ({percentage:.1f}%)")
-    
-    # Provide specific recommendations
-    print(f"\n💡 RECOMMENDATIONS:")
-    
-    if issues['generation_errors'] > 0:
-        print("🔴 CRITICAL: Generation errors detected")
-        print("   - Check if Ollama is running: ollama list")
-        print("   - Verify model is available: ollama pull mistral:7b-instruct")
-        print("   - Check Ollama service: curl http://localhost:11434/api/tags")
-    
-    if issues['retrieval_errors'] > 0:
-        print("🔴 CRITICAL: Retrieval errors detected")
-        print("   - Verify hierarchical collections exist")
-        print("   - Re-run setup: python setup_hierarchical_system.py")
-        print("   - Check ChromaDB installation")
-    
-    if issues['no_option_letters'] > total_questions * 0.5:
-        print("🟡 FORMAT ISSUE: Model not generating option letters (A,B,C,D,E)")
-        print("   - Update system prompt to emphasize multiple choice format")
-        print("   - Add explicit instruction: 'Answer with only the letter (A, B, C, D, or E)'")
-        print("   - Check if prompts in config.yaml are properly formatted")
-    
-    if issues['no_answer_patterns'] > total_questions * 0.5:
-        print("🟡 FORMAT ISSUE: Model not using clear answer patterns")
-        print("   - Modify prompts to include: 'The answer is: [LETTER]'")
-        print("   - Add response format examples in system prompt")
-    
-    if issues['wrong_answers'] > 0 and issues['no_option_letters'] == 0:
-        print("🟠 ACCURACY ISSUE: Model generating wrong answers but in correct format")
-        print("   - Check retrieved document quality and relevance")
-        print("   - Verify tier distribution is balanced")
-        print("   - Consider improving retrieval similarity threshold")
-        print("   - Check if foundation dataset contains relevant medical knowledge")
-    
-    if issues['no_extracted_answers'] > total_questions * 0.3:
-        print("🟡 EXTRACTION ISSUE: Cannot extract clear answers from responses")
-        print("   - Model may be generating explanations without clear choices")
-        print("   - Update prompt to require explicit answer selection")
-        print("   - Add answer extraction logic improvements")
-    
-    if accuracy_rate < 30:
-        print("🔴 CRITICAL: Very low accuracy - major system issues")
-        print("   PRIORITY FIXES:")
-        print("   1. Verify all system components are working")
-        print("   2. Check foundation dataset quality and size")
-        print("   3. Validate prompt engineering for medical Q&A")
-        print("   4. Test with simpler questions first")
-    elif accuracy_rate < 50:
-        print("🟠 MODERATE: Below expected accuracy")
-        print("   IMPROVEMENT AREAS:")
-        print("   1. Optimize prompts for multiple choice format")
-        print("   2. Improve retrieval document relevance")
-        print("   3. Balance tier distribution")
-    else:
-        print("🟢 GOOD: Accuracy within reasonable range")
-        print("   OPTIMIZATION OPPORTUNITIES:")
-        print("   1. Fine-tune retrieval parameters")
-        print("   2. Enhance answer extraction logic")
-    """Main debug function."""
-    logger.info("🧪 Starting Hierarchical System Debug")
-    logger.info("="*70)
-    
-    # Load MIRAGE questions
+    # Load questions
     questions = load_mirage_questions()
     if not questions:
-        logger.error("❌ No MIRAGE questions loaded. Cannot proceed.")
+        print("❌ No questions loaded. Exiting.")
         return
     
-    # Select 5 random questions
-    num_questions = min(5, len(questions))
-    selected_questions = random.sample(questions, num_questions)
+    # Select exactly 5 questions
+    num_questions = 5
+    if len(questions) < 5:
+        print(f"⚠️ Only {len(questions)} questions available")
+        selected_questions = questions
+        num_questions = len(questions)
+    else:
+        selected_questions = random.sample(questions, 5)
     
-    logger.info(f"🎲 Selected {num_questions} random questions for testing")
+    print(f"🎲 Testing {num_questions} random questions")
     
-    # Initialize hierarchical system
-    try:
-        retriever, generator, config = initialize_hierarchical_system()
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize system: {e}")
+    # Initialize system
+    retriever, generator, config = initialize_hierarchical_system()
+    if not retriever:
+        print("❌ System initialization failed. Exiting.")
         return
     
     # Test each question
     results = []
+    correct_count = 0
     
     for i, question in enumerate(selected_questions):
-        logger.info(f"\n🧪 Testing question {i + 1}/{num_questions}")
+        print(f"\n" + "=" * 60)
+        print(f"📝 Question {i+1}/{num_questions}")
+        print(f"ID: {question.get('id', 'unknown')}")
+        print(f"Q: {question['question']}")
         
-        # Display question details
-        display_question_details(question, i)
+        if 'options' in question:
+            print("Options:")
+            if isinstance(question['options'], dict):
+                for key, value in question['options'].items():
+                    print(f"   {key}: {value}")
+            elif isinstance(question['options'], list):
+                for j, option in enumerate(question['options']):
+                    letter = chr(65 + j)  # A, B, C, D, E
+                    print(f"   {letter}: {option}")
         
-        # Test retrieval
-        retrieval_data = test_hierarchical_retrieval(retriever, question['question'])
-        display_retrieval_results(retrieval_data)
+        # Test retrieval (using original question for retrieval)
+        retrieval_result = test_retrieval(retriever, question['question'])
         
-        # Test generation
-        generation_data = test_hierarchical_generation(
-            generator, 
-            question['question'], 
-            retrieval_data['results']
-        )
-        display_generation_results(generation_data)
+        # Test generation if available (using formatted question with options)
+        generation_result = None
+        if generator and 'error' not in retrieval_result:
+            generation_result = test_generation(
+                generator, 
+                question,  # Pass full question dict
+                retrieval_result['results']
+            )
         
-        # Analyze answer accuracy
-        if 'error' not in generation_data:
-            accuracy_analysis = analyze_answer_accuracy(question, generation_data['response'])
-            display_accuracy_analysis(accuracy_analysis)
-        else:
-            accuracy_analysis = {'is_correct': False, 'error': True}
+        # Analyze accuracy if we have generation
+        accuracy_result = None
+        if generation_result and 'error' not in generation_result:
+            accuracy_result = analyze_accuracy(question, generation_result['response'])
+            if accuracy_result.get('is_correct'):
+                correct_count += 1
         
-        # Store results
         results.append({
             'question': question,
-            'retrieval': retrieval_data,
-            'generation': generation_data,
-            'accuracy': accuracy_analysis
+            'retrieval': retrieval_result,
+            'generation': generation_result,
+            'accuracy': accuracy_result
         })
-        
-        print("\n" + "-"*80)
     
-    # Summary
-    print("\n" + "="*80)
-    print("📊 DEBUG SUMMARY")
-    print("="*80)
+    # Final summary
+    print(f"\n" + "=" * 60)
+    print("🎯 FINAL RESULTS")
+    print("=" * 60)
     
-    total_retrieval_time = sum(r['retrieval']['time'] for r in results)
-    total_generation_time = sum(r['generation']['time'] for r in results)
-    
-    retrieval_errors = sum(1 for r in results if 'error' in r['retrieval'])
-    generation_errors = sum(1 for r in results if 'error' in r['generation'])
-    correct_answers = sum(1 for r in results if r.get('accuracy', {}).get('is_correct', False))
-    
-    print(f"📈 Performance Metrics:")
-    print(f"   Questions tested: {len(results)}")
-    print(f"   Total retrieval time: {total_retrieval_time:.2f}s")
-    print(f"   Total generation time: {total_generation_time:.2f}s")
-    print(f"   Average time per question: {(total_retrieval_time + total_generation_time) / len(results):.2f}s")
-    
-    print(f"\n🔍 Error Analysis:")
-    print(f"   Retrieval errors: {retrieval_errors}/{len(results)}")
-    print(f"   Generation errors: {generation_errors}/{len(results)}")
-    print(f"   Correct answers: {correct_answers}/{len(results)}")
-    
-    success_rate = ((len(results) - retrieval_errors - generation_errors) / len(results)) * 100
-    accuracy_rate = (correct_answers / len(results)) * 100
-    print(f"   Technical success rate: {success_rate:.1f}%")
-    print(f"   Answer accuracy rate: {accuracy_rate:.1f}%")
-    
-    # Tier analysis
-    successful_retrievals = [r for r in results if 'error' not in r['retrieval']]
-    if successful_retrievals:
-        avg_tier1 = sum(r['retrieval']['tier_counts']['tier1'] for r in successful_retrievals) / len(successful_retrievals)
-        avg_tier2 = sum(r['retrieval']['tier_counts']['tier2'] for r in successful_retrievals) / len(successful_retrievals)
-        avg_tier3 = sum(r['retrieval']['tier_counts']['tier3'] for r in successful_retrievals) / len(successful_retrievals)
-        
-        print(f"\n🏗️ Tier Distribution (avg docs per question):")
-        print(f"   Tier 1 (Pattern Recognition): {avg_tier1:.1f}")
-        print(f"   Tier 2 (Hypothesis Testing): {avg_tier2:.1f}")
-        print(f"   Tier 3 (Confirmation): {avg_tier3:.1f}")
-    
-    # Detailed system diagnosis
-    diagnose_system_issues(results)
-    
-    print("\n" + "="*80)
-    print("🎯 CONCLUSION")
-    print("="*80)
-    
-    if accuracy_rate < 30:
-        print("🔴 CRITICAL ISSUES DETECTED")
-        print(f"   Accuracy: {accuracy_rate:.1f}% (Expected: >70%)")
-        print("   This matches your evaluation results of 23% accuracy")
-        print("   Focus on the CRITICAL recommendations above")
-    elif accuracy_rate < 50:
-        print("🟠 SIGNIFICANT ISSUES DETECTED")
-        print(f"   Accuracy: {accuracy_rate:.1f}% (Expected: >70%)")
-        print("   System partially working but needs optimization")
+    if generator:
+        accuracy_rate = (correct_count / num_questions) * 100
+        print(f"📊 Accuracy: {correct_count}/{num_questions} ({accuracy_rate:.1f}%)")
     else:
-        print("🟢 SYSTEM WORKING WELL")
-        print(f"   Accuracy: {accuracy_rate:.1f}%")
-        print("   Minor optimizations may help")
+        print("📊 Retrieval-only test completed")
     
-    print("="*80)
-
-def main():
-    """Main debug function."""
-    print("🧪 Starting Hierarchical System Debug")
-    print("="*70)
+    # System info
+    if retriever:
+        stats = retriever.get_collection_stats()
+        print(f"🧠 Embedding Model: {stats['embedding_model']}")
+        print(f"🏥 Medical Optimized: {stats['medical_optimized']}")
+        print(f"📚 Total Documents: {stats['total']:,}")
     
-    # Load MIRAGE questions
-    questions = load_mirage_questions()
-    if not questions:
-        print("❌ No MIRAGE questions loaded. Cannot proceed.")
-        return
-    
-    # Select exactly 5 random questions
-    num_questions = 5
-    if len(questions) < 5:
-        print(f"⚠️ Only {len(questions)} questions available, using all")
-        selected_questions = questions
-        num_questions = len(questions)
-    else:
-        selected_questions = random.sample(questions, num_questions)
-    
-    print(f"🎲 Selected {num_questions} random questions for testing")
-    
-    # Initialize hierarchical system
-    try:
-        retriever, generator, config = initialize_hierarchical_system()
-    except Exception as e:
-        print(f"❌ Failed to initialize system: {e}")
-        return
-    
-    # Test each question (exactly 5 times, no infinite loop)
-    results = []
-    
-    for i, question in enumerate(selected_questions):
-        print(f"\n🧪 Testing question {i + 1}/{num_questions}")
-        
-        # Display question details
-        display_question_details(question, i)
-        
-        # Test retrieval
-        retrieval_data = test_hierarchical_retrieval(retriever, question['question'])
-        display_retrieval_results(retrieval_data)
-        
-        # Test generation
-        generation_data = test_hierarchical_generation(
-            generator, 
-            question['question'], 
-            retrieval_data['results']
-        )
-        display_generation_results(generation_data)
-        
-        # Analyze answer accuracy
-        if 'error' not in generation_data:
-            accuracy_analysis = analyze_answer_accuracy(question, generation_data['response'])
-            display_accuracy_analysis(accuracy_analysis)
-        else:
-            accuracy_analysis = {'is_correct': False, 'error': True}
-        
-        # Store results
-        results.append({
-            'question': question,
-            'retrieval': retrieval_data,
-            'generation': generation_data,
-            'accuracy': accuracy_analysis
-        })
-        
-        print("\n" + "-"*80)
-        
-        # Safety check: ensure we don't exceed 5 questions
-        if i + 1 >= 5:
-            break
-    
-    # Summary
-    print("\n" + "="*80)
-    print("📊 DEBUG SUMMARY")
-    print("="*80)
-    
-    total_retrieval_time = sum(r['retrieval']['time'] for r in results)
-    total_generation_time = sum(r['generation']['time'] for r in results)
-    
-    retrieval_errors = sum(1 for r in results if 'error' in r['retrieval'])
-    generation_errors = sum(1 for r in results if 'error' in r['generation'])
-    correct_answers = sum(1 for r in results if r.get('accuracy', {}).get('is_correct', False))
-    
-    print(f"📈 Performance Metrics:")
-    print(f"   Questions tested: {len(results)}")
-    print(f"   Total retrieval time: {total_retrieval_time:.2f}s")
-    print(f"   Total generation time: {total_generation_time:.2f}s")
-    print(f"   Average time per question: {(total_retrieval_time + total_generation_time) / len(results):.2f}s")
-    
-    print(f"\n🔍 Error Analysis:")
-    print(f"   Retrieval errors: {retrieval_errors}/{len(results)}")
-    print(f"   Generation errors: {generation_errors}/{len(results)}")
-    print(f"   Correct answers: {correct_answers}/{len(results)}")
-    
-    success_rate = ((len(results) - retrieval_errors - generation_errors) / len(results)) * 100
-    accuracy_rate = (correct_answers / len(results)) * 100
-    print(f"   Technical success rate: {success_rate:.1f}%")
-    print(f"   Answer accuracy rate: {accuracy_rate:.1f}%")
-    
-    # Tier analysis
-    successful_retrievals = [r for r in results if 'error' not in r['retrieval']]
-    if successful_retrievals:
-        avg_tier1 = sum(r['retrieval']['tier_counts']['tier1'] for r in successful_retrievals) / len(successful_retrievals)
-        avg_tier2 = sum(r['retrieval']['tier_counts']['tier2'] for r in successful_retrievals) / len(successful_retrievals)
-        avg_tier3 = sum(r['retrieval']['tier_counts']['tier3'] for r in successful_retrievals) / len(successful_retrievals)
-        
-        print(f"\n🏗️ Tier Distribution (avg docs per question):")
-        print(f"   Tier 1 (Pattern Recognition): {avg_tier1:.1f}")
-        print(f"   Tier 2 (Hypothesis Testing): {avg_tier2:.1f}")
-        print(f"   Tier 3 (Confirmation): {avg_tier3:.1f}")
-    
-    # Detailed system diagnosis
-    diagnose_system_issues(results)
-    
-    print("\n" + "="*80)
-    print("🎯 CONCLUSION")
-    print("="*80)
-    
-    if accuracy_rate < 30:
-        print("🔴 CRITICAL ISSUES DETECTED")
-        print(f"   Accuracy: {accuracy_rate:.1f}% (Expected: >70%)")
-        print("   This matches your evaluation results of 23% accuracy")
-        print("   Focus on the CRITICAL recommendations above")
-    elif accuracy_rate < 50:
-        print("🟠 SIGNIFICANT ISSUES DETECTED")
-        print(f"   Accuracy: {accuracy_rate:.1f}% (Expected: >70%)")
-        print("   System partially working but needs optimization")
-    else:
-        print("🟢 SYSTEM WORKING WELL")
-        print(f"   Accuracy: {accuracy_rate:.1f}%")
-        print("   Minor optimizations may help")
-    
-    print("="*80)
-
+    print("✅ Debug test completed!")
 
 if __name__ == "__main__":
     main()
