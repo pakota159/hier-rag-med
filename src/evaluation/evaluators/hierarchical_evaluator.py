@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
 Enhanced Hierarchical Evaluator implementation with Medical Embedding Support
-Updated for Microsoft BiomedNLP-PubMedBERT integration
-
 File: src/evaluation/evaluators/hierarchical_evaluator.py
 """
 
@@ -157,15 +155,11 @@ class HierarchicalEvaluator(BaseEvaluator):
         inference_start = time.time()
         
         try:
-            # Prepare context with hierarchical information
-            context = self._prepare_hierarchical_context(documents)
+            # Format complete question with options for evaluation
+            formatted_query = self._format_question_for_generation(query)
             
-            # Generate answer with medical prompts
-            answer = self.generator.generate_hierarchical_answer(
-                query=query,
-                context=context,
-                documents=documents
-            )
+            # Generate answer with medical optimizations
+            answer = self.generator.generate_answer(formatted_query, documents)
             
             inference_time = time.time() - inference_start
             self.inference_times.append(inference_time)
@@ -180,40 +174,11 @@ class HierarchicalEvaluator(BaseEvaluator):
             logger.error(f"❌ Answer generation failed: {e}")
             return f"Error generating answer: {str(e)}"
     
-    def _prepare_hierarchical_context(self, documents: List[Dict]) -> str:
-        """Prepare context with hierarchical tier information."""
-        if not documents:
-            return ""
-        
-        # Group documents by tier
-        tier_docs = {"tier1": [], "tier2": [], "tier3": []}
-        for doc in documents:
-            tier = f"tier{doc.get('tier', 2)}"
-            if tier in tier_docs:
-                tier_docs[tier].append(doc)
-        
-        # Build hierarchical context
-        context_parts = []
-        
-        # Tier 1: Foundational Knowledge
-        if tier_docs["tier1"]:
-            context_parts.append("=== FOUNDATIONAL MEDICAL KNOWLEDGE ===")
-            for i, doc in enumerate(tier_docs["tier1"][:3], 1):
-                context_parts.append(f"[Foundation {i}] {doc['text']}")
-        
-        # Tier 2: Clinical Reasoning
-        if tier_docs["tier2"]:
-            context_parts.append("\n=== CLINICAL REASONING ===")
-            for i, doc in enumerate(tier_docs["tier2"][:4], 1):
-                context_parts.append(f"[Clinical {i}] {doc['text']}")
-        
-        # Tier 3: Evidence-Based Medicine
-        if tier_docs["tier3"]:
-            context_parts.append("\n=== EVIDENCE-BASED MEDICINE ===")
-            for i, doc in enumerate(tier_docs["tier3"][:3], 1):
-                context_parts.append(f"[Evidence {i}] {doc['text']}")
-        
-        return "\n".join(context_parts)
+    def _format_question_for_generation(self, query: str) -> str:
+        """Format question for generation, preserving options if present."""
+        # The query might already be formatted with options from the benchmark
+        # Just return as-is since it should include options
+        return query
     
     def _validate_medical_answer(self, answer: str, query: str, documents: List[Dict]) -> str:
         """Validate medical accuracy and terminology in generated answer."""
@@ -242,9 +207,9 @@ class HierarchicalEvaluator(BaseEvaluator):
                 disclaimer_terms = ["consult", "professional", "physician", "doctor"]
                 has_disclaimer = any(term in answer_lower for term in disclaimer_terms)
                 
-                if not has_disclaimer:
-                    # Add basic medical disclaimer
-                    answer += "\n\nNote: This information is for educational purposes. Please consult with a healthcare professional for medical advice."
+                if not has_disclaimer and "anaphylaxis" not in query_lower:
+                    # Add basic medical disclaimer for certain types of questions
+                    answer += "\n\nNote: This information is for educational purposes. Consult healthcare professionals for medical advice."
             
             return answer
             
@@ -257,18 +222,27 @@ class HierarchicalEvaluator(BaseEvaluator):
         question_id = question.get("id", "unknown")
         query = question.get("question", "")
         
+        # Format question with options for proper evaluation
+        if "options" in question and question["options"]:
+            formatted_query = self._format_question_with_options(question)
+        else:
+            formatted_query = query
+        
         logger.debug(f"🔍 Evaluating question {question_id}: {query[:100]}...")
         
         try:
             # Retrieve documents
             retrieval_start = time.time()
-            documents = self.retrieve_documents(query, top_k=10)
+            documents = self.retrieve_documents(formatted_query, top_k=10)
             retrieval_time = time.time() - retrieval_start
             
             # Generate answer
             generation_start = time.time()
-            answer = self.generate_answer(query, documents)
+            answer = self.generate_answer(formatted_query, documents)
             generation_time = time.time() - generation_start
+            
+            # Extract answer choice
+            extracted_answer = self._extract_answer_choice(answer)
             
             # Calculate medical relevance score
             medical_relevance = self._calculate_medical_relevance(query, documents, answer)
@@ -277,7 +251,9 @@ class HierarchicalEvaluator(BaseEvaluator):
             result = {
                 "question_id": question_id,
                 "question": query,
+                "formatted_question": formatted_query,
                 "generated_answer": answer,
+                "extracted_answer": extracted_answer,
                 "retrieved_documents": len(documents),
                 "retrieval_time": retrieval_time,
                 "generation_time": generation_time,
@@ -290,7 +266,13 @@ class HierarchicalEvaluator(BaseEvaluator):
             
             # Add ground truth comparison if available
             if "answer" in question:
-                result["ground_truth"] = question["answer"]
+                correct_answer = question["answer"]
+                is_correct = self._compare_answers(extracted_answer, correct_answer)
+                result.update({
+                    "correct_answer": correct_answer,
+                    "is_correct": is_correct,
+                    "accuracy": 1.0 if is_correct else 0.0
+                })
             
             if "options" in question:
                 result["options"] = question["options"]
@@ -306,8 +288,66 @@ class HierarchicalEvaluator(BaseEvaluator):
                 "error": str(e),
                 "retrieval_time": 0,
                 "generation_time": 0,
-                "total_time": 0
+                "total_time": 0,
+                "is_correct": False,
+                "accuracy": 0.0
             }
+    
+    def _format_question_with_options(self, question: Dict) -> str:
+        """Format question text with options for the LLM."""
+        question_text = question['question']
+        
+        if 'options' not in question or not question['options']:
+            return question_text
+        
+        options = question['options']
+        
+        # Handle different option formats
+        if isinstance(options, dict):
+            # Options are in dict format like {'A': 'text', 'B': 'text'}
+            formatted_options = []
+            for key in sorted(options.keys()):
+                formatted_options.append(f"{key}: {options[key]}")
+            options_text = "\n".join(formatted_options)
+        elif isinstance(options, list):
+            # Options are in list format
+            formatted_options = []
+            for i, option in enumerate(options):
+                letter = chr(65 + i)  # A, B, C, D, E
+                formatted_options.append(f"{letter}: {option}")
+            options_text = "\n".join(formatted_options)
+        else:
+            return question_text
+        
+        # Combine question and options
+        full_question = f"{question_text}\n\nOptions:\n{options_text}"
+        return full_question
+    
+    def _extract_answer_choice(self, response: str) -> Optional[str]:
+        """Extract answer choice from response."""
+        import re
+        
+        # Look for patterns like "Answer: A" or "The answer is B"
+        patterns = [
+            r'(?:answer|Answer):\s*([A-E])',
+            r'(?:answer|Answer)\s+is\s*([A-E])',
+            r'\b([A-E])\s*(?:is\s+correct|is\s+the\s+answer)',
+            r'(?:^|\s)([A-E])(?:\s*$|\s*\.)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, response)
+            if match:
+                return match.group(1).upper()
+        
+        return None
+    
+    def _compare_answers(self, predicted: Optional[str], correct: str) -> bool:
+        """Compare predicted and correct answers."""
+        if not predicted or not correct:
+            return False
+        
+        return predicted.strip().upper() == correct.strip().upper()
     
     def _calculate_medical_relevance(self, query: str, documents: List[Dict], answer: str) -> float:
         """Calculate medical relevance score for the response."""
