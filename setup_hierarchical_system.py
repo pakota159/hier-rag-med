@@ -260,7 +260,6 @@ def find_foundation_dataset() -> Path:
         # Correct paths for your directory structure
         Path("data/foundation_dataset/foundation_medical_data.json"),
         Path("data/foundation_dataset/unified_dataset.json"),
-        Path("data/foundation_dataset").glob("foundation_specialty_rebalanced_*.json"),
         # Original paths as fallbacks
         Path("data/foundation_data.json"),
         Path("data/raw/foundation_data.json"),
@@ -274,22 +273,24 @@ def find_foundation_dataset() -> Path:
         Path("dataset.json")
     ]
     
+    # Check regular paths first
     for path in search_paths:
-        if hasattr(path, 'glob'):  # Handle glob patterns
-            for file_path in path:
-                if file_path.exists():
-                    logger.info(f"📁 Found dataset: {file_path}")
-                    return file_path
-        elif path.exists():
+        if path.exists():
             logger.info(f"📁 Found dataset: {path}")
             return path
     
+    # Check glob patterns separately
+    glob_dir = Path("data/foundation_dataset")
+    if glob_dir.exists():
+        for file_path in glob_dir.glob("foundation_specialty_rebalanced_*.json"):
+            if file_path.exists():
+                logger.info(f"📁 Found dataset: {file_path}")
+                return file_path
+    
     logger.error("❌ Foundation dataset not found in any of these locations:")
     for path in search_paths:
-        if hasattr(path, 'glob'):
-            logger.error(f"   - {path.parent}/*{path.name}")
-        else:
-            logger.error(f"   - {path}")
+        logger.error(f"   - {path}")
+    logger.error(f"   - data/foundation_dataset/foundation_specialty_rebalanced_*.json")
     logger.error("💡 Please run one of these first:")
     logger.error("   python fetch_foundation_data.py --max-results 50000")
     logger.error("   python fetch_data.py --source all --max-results 1000")
