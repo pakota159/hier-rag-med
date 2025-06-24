@@ -69,70 +69,27 @@ class ConfigLoader:
         self.config_dir = config_dir or Path(__file__).parent.parent / "configs"
         self.loaded_config: Optional[EvaluationConfig] = None
         
-        # GPU optimization mappings
-        self.gpu_optimizations = {
-            "RTX 4090": {
-                "embedding_batch_size": 128,
-                "llm_batch_size": 32,
-                "memory_fraction": 0.85,
-                "max_workers": 8,
-                "benchmark_batches": {
-                    "mirage": 32,
-                    "medreason": 16, 
-                    "pubmedqa": 64,
-                    "msmarco": 128
-                }
-            },
-            "RTX 3090": {
-                "embedding_batch_size": 64,
-                "llm_batch_size": 16,
-                "memory_fraction": 0.80,
-                "max_workers": 6,
-                "benchmark_batches": {
-                    "mirage": 16,
-                    "medreason": 8,
-                    "pubmedqa": 32,
-                    "msmarco": 64
-                }
-            },
-            "A100": {
-                "embedding_batch_size": 256,
-                "llm_batch_size": 64,
-                "memory_fraction": 0.90,
-                "max_workers": 12,
-                "benchmark_batches": {
-                    "mirage": 64,
-                    "medreason": 32,
-                    "pubmedqa": 128,
-                    "msmarco": 256
-                }
-            }
-        }
+        # Create config directory if it doesn't exist
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"🔧 Config loader initialized for: {self.config_dir}")
     
     def load_config(self, config_path: Optional[Path] = None) -> EvaluationConfig:
-        """
-        Load evaluation configuration with environment optimization.
+        """Load configuration from file or create default."""
+        # Load base configuration
+        base_config = self._load_base_config(config_path)
         
-        Args:
-            config_path: Specific config file path (optional)
-            
-        Returns:
-            Optimized EvaluationConfig
-        """
-        # Try to load configuration from multiple sources
-        config_dict = self._load_config_dict(config_path)
+        # Apply environment optimizations
+        optimized_config = self.update_config_for_environment(base_config)
         
-        # Update for current environment
-        config_dict = self.update_config_for_environment(config_dict)
+        # Convert to EvaluationConfig
+        eval_config = self._create_evaluation_config(optimized_config)
         
-        # Create structured configuration
-        self.loaded_config = self._create_evaluation_config(config_dict)
-        
-        logger.info(f"✅ Configuration loaded for {self.loaded_config.platform}")
-        return self.loaded_config
+        self.loaded_config = eval_config
+        return eval_config
     
-    def _load_config_dict(self, config_path: Optional[Path] = None) -> Dict[str, Any]:
-        """Load configuration dictionary from file."""
+    def _load_base_config(self, config_path: Optional[Path] = None) -> Dict[str, Any]:
+        """Load base configuration from file with fallback."""
         config_paths = []
         
         if config_path:
@@ -162,7 +119,7 @@ class ConfigLoader:
     
     def update_config_for_environment(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Update configuration based on detected environment - FIXED VERSION.
+        Update configuration based on detected environment.
         
         Args:
             config: Base configuration
@@ -171,7 +128,7 @@ class ConfigLoader:
             Environment-optimized configuration
         """
         # Detect environment
-        is_runpod = os.path.exists("/workspace")
+        is_runpod = os.path.exists("/workspace") or "RUNPOD_POD_ID" in os.environ
         is_docker = os.path.exists("/.dockerenv")
         has_gpu = torch.cuda.is_available() if torch is not None else False
         
@@ -187,7 +144,7 @@ class ConfigLoader:
             env_config = config.get("environments", {}).get("cloud", {})
             config.update(env_config)
             
-            # Set RunPod-specific paths - FIXED
+            # Set RunPod-specific paths
             self._set_runpod_paths(config)
             
             # Enable GPU optimizations if available
@@ -234,9 +191,9 @@ class ConfigLoader:
         return config
     
     def _set_runpod_paths(self, config: Dict[str, Any]) -> None:
-        """Set appropriate paths for RunPod environment - FIXED VERSION."""
-        # RunPod/container paths - CORRECTED to use project directory
-        project_base = "/workspace/hierragmed"  # Fixed: was missing hierragmed
+        """Set appropriate paths for RunPod environment."""
+        # RunPod/container paths - Fixed to use project directory
+        project_base = "/workspace/hierragmed"
         
         # Verify project directory exists
         if os.path.exists(project_base):
@@ -279,174 +236,131 @@ class ConfigLoader:
     
     def _apply_gpu_optimizations(self, config: Dict[str, Any]) -> None:
         """Apply GPU optimizations based on detected hardware."""
-        if not torch or not torch.cuda.is_available():
-            return
+        # Get GPU memory info
+        if torch and torch.cuda.is_available():
+            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            logger.info(f"🎮 GPU Memory: {gpu_memory_gb:.1f} GB")
+            
+            # Adjust batch sizes based on GPU memory
+            if gpu_memory_gb >= 20:  # RTX 4090 or better
+                embedding_batch = 128
+                llm_batch = 32
+            elif gpu_memory_gb >= 12:  # RTX 3080/4070 tier
+                embedding_batch = 64
+                llm_batch = 16
+            else:  # Lower-end GPUs
+                embedding_batch = 32
+                llm_batch = 8
+        else:
+            embedding_batch = 16
+            llm_batch = 4
         
-        try:
-            gpu_name = torch.cuda.get_device_name(0)
-            logger.info(f"🔥 Optimizing for GPU: {gpu_name}")
-            
-            # Get GPU-specific optimizations
-            optimizations = None
-            for gpu_type, opts in self.gpu_optimizations.items():
-                if gpu_type in gpu_name:
-                    optimizations = opts
-                    break
-            
-            if not optimizations:
-                # Generic optimizations for unknown GPU
-                memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                optimizations = self._get_generic_gpu_optimizations(memory_gb)
-            
-            # Apply optimizations to config
-            self._apply_optimizations_to_config(config, optimizations)
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to apply GPU optimizations: {e}")
+        # Update model configurations
+        if "models" not in config:
+            config["models"] = {}
+        
+        models_config = config["models"]
+        
+        # Embedding model settings
+        if "embedding" not in models_config:
+            models_config["embedding"] = {}
+        models_config["embedding"].update({
+            "device": "cuda",
+            "batch_size": embedding_batch,
+            "pin_memory": True,
+            "use_mixed_precision": True
+        })
+        
+        # LLM settings
+        if "llm" not in models_config:
+            models_config["llm"] = {}
+        models_config["llm"].update({
+            "device": "cuda",
+            "batch_size": llm_batch,
+            "use_flash_attention": True
+        })
+        
+        # System-level optimizations
+        config.setdefault("performance", {}).update({
+            "num_workers": 8,
+            "pin_memory": True,
+            "non_blocking": True,
+            "gpu_memory_fraction": 0.85
+        })
+        
+        logger.info(f"🚀 Applied GPU optimizations: embedding_batch={embedding_batch}, llm_batch={llm_batch}")
     
     def _apply_conservative_gpu_optimizations(self, config: Dict[str, Any]) -> None:
         """Apply conservative GPU optimizations for local development."""
-        # Smaller batch sizes for local development
-        models = config.setdefault("models", {})
-        if "embedding" in models:
-            models["embedding"]["batch_size"] = min(64, models["embedding"].get("batch_size", 32))
-        if "llm" in models:
-            models["llm"]["batch_size"] = min(16, models["llm"].get("batch_size", 8))
+        if "models" not in config:
+            config["models"] = {}
         
-        # Conservative performance settings
-        performance = config.setdefault("performance", {})
-        performance.update({
-            "use_gpu_acceleration": True,
-            "mixed_precision": False,  # More conservative
-            "compile_models": False,   # More conservative
-            "memory_efficient": True,
-            "gpu_memory_fraction": 0.7,  # Leave more headroom
-            "parallel_processing": True,
-            "max_workers": 4,  # Fewer workers
-            "prefetch_factor": 1
-        })
-    
-    def _get_generic_gpu_optimizations(self, memory_gb: float) -> Dict[str, Any]:
-        """Get generic GPU optimizations based on memory."""
-        if memory_gb >= 20:  # High-end GPU
-            embedding_batch = 96
-            llm_batch = 24
-            workers = 8
-        elif memory_gb >= 12:  # Mid-range GPU
-            embedding_batch = 48
-            llm_batch = 12
-            workers = 6
-        elif memory_gb >= 8:   # Entry-level GPU
-            embedding_batch = 24
-            llm_batch = 6
-            workers = 4
-        else:                  # Low-memory GPU
-            embedding_batch = 12
-            llm_batch = 3
-            workers = 2
+        models_config = config["models"]
         
-        return {
-            "embedding_batch_size": embedding_batch,
-            "llm_batch_size": llm_batch,
-            "memory_fraction": 0.8,
-            "max_workers": workers,
-            "benchmark_batches": {
-                "mirage": embedding_batch // 4,
-                "medreason": embedding_batch // 8,
-                "pubmedqa": embedding_batch // 2,
-                "msmarco": embedding_batch
-            }
-        }
-    
-    def _apply_optimizations_to_config(self, config: Dict[str, Any], optimizations: Dict[str, Any]) -> None:
-        """Apply optimizations to configuration."""
-        # Update model batch sizes
-        models = config.setdefault("models", {})
-        if "embedding" in models:
-            models["embedding"]["batch_size"] = optimizations["embedding_batch_size"]
-        if "llm" in models:
-            models["llm"]["batch_size"] = optimizations["llm_batch_size"]
-        
-        # Update performance settings
-        performance = config.setdefault("performance", {})
-        performance.update({
-            "use_gpu_acceleration": True,
-            "mixed_precision": True,
-            "compile_models": True,
-            "memory_efficient": True,
-            "gpu_memory_fraction": optimizations["memory_fraction"],
-            "parallel_processing": True,
-            "max_workers": optimizations["max_workers"],
-            "prefetch_factor": 2
+        # Conservative settings for local development
+        if "embedding" not in models_config:
+            models_config["embedding"] = {}
+        models_config["embedding"].update({
+            "device": "cuda" if torch and torch.cuda.is_available() else "cpu",
+            "batch_size": 32,
+            "pin_memory": False
         })
         
-        # Update benchmark batch sizes
-        benchmarks = config.setdefault("benchmarks", {})
-        for benchmark_name, batch_size in optimizations["benchmark_batches"].items():
-            if benchmark_name in benchmarks:
-                benchmarks[benchmark_name]["batch_size"] = batch_size
+        if "llm" not in models_config:
+            models_config["llm"] = {}
+        models_config["llm"].update({
+            "device": "cuda" if torch and torch.cuda.is_available() else "cpu",
+            "batch_size": 8
+        })
+        
+        config.setdefault("performance", {}).update({
+            "num_workers": 4,
+            "pin_memory": False,
+            "gpu_memory_fraction": 0.7
+        })
+        
+        logger.info("💻 Applied conservative GPU optimizations for local development")
     
     def _configure_gpu_monitoring(self, config: Dict[str, Any]) -> None:
         """Configure GPU monitoring settings."""
-        monitoring = config.setdefault("monitoring", {})
-        monitoring.update({
-            "enable_gpu_monitoring": True,
-            "gpu_poll_interval": 10,
-            "log_gpu_memory": True,
-            "log_gpu_utilization": True,
-            "track_inference_time": True,
-            "track_memory_usage": True,
-            "track_throughput": True
+        config.setdefault("monitoring", {}).update({
+            "gpu_metrics": True,
+            "memory_tracking": True,
+            "performance_logging": True,
+            "interval_seconds": 10
         })
-        
-        # GPU-specific logging
-        logging_config = config.setdefault("logging", {})
-        logging_config.update({
-            "log_gpu_stats": True,
-            "gpu_stats_interval": 30,
-            "log_timing": True,
-            "log_memory_usage": True,
-            "log_batch_sizes": True
-        })
-    
-    def _create_evaluation_config(self, config: Dict[str, Any]) -> EvaluationConfig:
-        """Create structured evaluation configuration."""
-        # Extract GPU configuration
-        gpu_config = GPUConfig(
-            device="cuda" if torch and torch.cuda.is_available() else "cpu",
-            embedding_batch_size=config.get("models", {}).get("embedding", {}).get("batch_size", 128),
-            llm_batch_size=config.get("models", {}).get("llm", {}).get("batch_size", 32),
-            mixed_precision=config.get("performance", {}).get("mixed_precision", True),
-            compile_models=config.get("performance", {}).get("compile_models", True),
-            memory_fraction=config.get("performance", {}).get("gpu_memory_fraction", 0.85),
-            pin_memory=True,
-            num_workers=config.get("performance", {}).get("max_workers", 8)
-        )
-        
-        return EvaluationConfig(
-            platform=config.get("platform", "Generic"),
-            results_dir=config.get("results_dir", "evaluation/results"),
-            data_dir=config.get("data_dir", "data"),
-            gpu_config=gpu_config,
-            models=config.get("models", {}),
-            benchmarks=config.get("benchmarks", {}),
-            performance=config.get("performance", {}),
-            logging=config.get("logging", {})
-        )
     
     def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration as fallback."""
+        """Get default configuration."""
         return {
-            "platform": "Generic",
-            "results_dir": "evaluation/results",
             "data_dir": "data",
+            "results_dir": "evaluation/results",
             "cache_dir": "evaluation/cache",
             "logs_dir": "evaluation/logs",
             "models": {
-                "embedding": {"device": "auto", "batch_size": 32},
-                "llm": {"device": "auto", "batch_size": 16},
-                "kg_system": {"enabled": True},
-                "hierarchical_system": {"enabled": True}
+                "embedding": {
+                    "name": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
+                    "device": "cpu",
+                    "batch_size": 16,
+                    "max_length": 512
+                },
+                "llm": {
+                    "name": "mistral:7b-instruct",
+                    "device": "cpu",
+                    "batch_size": 8,
+                    "temperature": 0.7
+                },
+                "hierarchical_system": {"enabled": True},
+                "kg_system": {"enabled": True}
+            },
+            "processing": {
+                "chunk_size": 512,
+                "chunk_overlap": 100,
+                "hierarchy_tiers": {
+                    "tier1": {"name": "pattern_recognition", "chunk_size": 256},
+                    "tier2": {"name": "hypothesis_testing", "chunk_size": 512},
+                    "tier3": {"name": "confirmation", "chunk_size": 1024}
+                }
             },
             "benchmarks": {
                 "mirage": {"enabled": True},
@@ -454,47 +368,78 @@ class ConfigLoader:
                 "pubmedqa": {"enabled": True},
                 "msmarco": {"enabled": True}
             },
-            "performance": {
-                "use_gpu_acceleration": False,
-                "mixed_precision": False,
-                "compile_models": False,
-                "memory_efficient": True,
-                "parallel_processing": True,
-                "max_workers": 4
+            "logging": {
+                "level": "INFO",
+                "format": "{time} | {level} | {message}"
             },
-            "logging": {"level": "INFO"}
+            "performance": {
+                "num_workers": 4,
+                "pin_memory": False,
+                "gpu_memory_fraction": 0.8
+            },
+            "environments": {
+                "local": {
+                    "max_concurrent_requests": 5,
+                    "cache_size": "1GB"
+                },
+                "cloud": {
+                    "max_concurrent_requests": 20,
+                    "cache_size": "5GB"
+                },
+                "docker": {
+                    "max_concurrent_requests": 10,
+                    "cache_size": "2GB"
+                }
+            }
         }
     
-    def get_gpu_optimized_config(self, gpu_name: str = "RTX 4090") -> Dict[str, Any]:
-        """Get GPU-optimized configuration for specific hardware."""
-        config = self._get_default_config()
+    def _create_evaluation_config(self, config_dict: Dict[str, Any]) -> EvaluationConfig:
+        """Create EvaluationConfig from dictionary."""
+        # Extract GPU configuration
+        gpu_config = GPUConfig(
+            device=config_dict.get("models", {}).get("embedding", {}).get("device", "cpu"),
+            embedding_batch_size=config_dict.get("models", {}).get("embedding", {}).get("batch_size", 16),
+            llm_batch_size=config_dict.get("models", {}).get("llm", {}).get("batch_size", 8),
+            memory_fraction=config_dict.get("performance", {}).get("gpu_memory_fraction", 0.8),
+            num_workers=config_dict.get("performance", {}).get("num_workers", 4),
+            pin_memory=config_dict.get("performance", {}).get("pin_memory", False)
+        )
         
-        if gpu_name in self.gpu_optimizations:
-            optimizations = self.gpu_optimizations[gpu_name]
-            self._apply_optimizations_to_config(config, optimizations)
-        
-        return config
+        return EvaluationConfig(
+            platform=config_dict.get("platform", "Generic"),
+            results_dir=config_dict.get("results_dir", "evaluation/results"),
+            data_dir=config_dict.get("data_dir", "data"),
+            gpu_config=gpu_config,
+            models=config_dict.get("models", {}),
+            benchmarks=config_dict.get("benchmarks", {}),
+            performance=config_dict.get("performance", {}),
+            logging=config_dict.get("logging", {})
+        )
     
     def validate_gpu_requirements(self) -> bool:
-        """Validate that GPU requirements are met."""
+        """Validate GPU requirements for evaluation."""
+        if not torch:
+            logger.error("❌ PyTorch not available")
+            return False
+        
+        if not torch.cuda.is_available():
+            logger.warning("⚠️ CUDA not available, falling back to CPU")
+            return True  # CPU is still valid
+        
         try:
-            if not torch:
-                logger.error("❌ PyTorch not available")
+            # Test GPU access
+            device = torch.device("cuda")
+            torch.cuda.empty_cache()
+            
+            # Check memory
+            total_memory = torch.cuda.get_device_properties(0).total_memory
+            memory_gb = total_memory / (1024**3)
+            
+            if memory_gb < 4:
+                logger.warning(f"⚠️ Low GPU memory: {memory_gb:.1f} GB")
                 return False
             
-            if not torch.cuda.is_available():
-                logger.error("❌ CUDA not available")
-                return False
-            
-            # Check GPU memory
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            required_memory = 8.0  # Minimum 8GB for evaluation
-            
-            if gpu_memory < required_memory:
-                logger.error(f"❌ Insufficient GPU memory: {gpu_memory:.1f}GB < {required_memory}GB")
-                return False
-            
-            logger.info("✅ GPU requirements validated")
+            logger.info(f"✅ GPU validation passed: {memory_gb:.1f} GB available")
             return True
             
         except Exception as e:

@@ -109,107 +109,233 @@ class Config:
 
     def _load_config(self) -> Dict:
         """Load configuration from file with fallback to enhanced defaults."""
-        # Try to load GPU config first for RunPod environments
-        if self.environment == "runpod_gpu":
-            gpu_config_path = Path(__file__).parent.parent / "evaluation" / "configs" / "gpu_runpod_config.yaml"
-            if gpu_config_path.exists():
-                try:
-                    with open(gpu_config_path, "r") as f:
-                        config = yaml.safe_load(f)
-                    logger.info(f"✅ Loaded GPU config from {gpu_config_path}")
-                    self._validate_medical_config(config)
-                    return config
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to load GPU config: {e}")
+        try:
+            if self.config_path.exists():
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                logger.info(f"✅ Loaded config from {self.config_path}")
+            else:
+                config = {}
+                logger.warning(f"⚠️ Config file not found: {self.config_path}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load config: {e}")
+            config = {}
         
-        # Try main config file
-        if self.config_path.exists():
-            with open(self.config_path, "r") as f:
-                config = yaml.safe_load(f)
-            logger.info(f"✅ Loaded config from {self.config_path}")
-            
-            # Validate medical embedding configuration
-            self._validate_medical_config(config)
-            return config
-        else:
-            logger.warning(f"⚠️ Config file not found: {self.config_path}")
-            logger.info("🔧 Using enhanced default configuration for medical Q&A")
-            return self._get_enhanced_default_config()
-
-    def _validate_medical_config(self, config: Dict) -> None:
-        """Validate medical embedding configuration."""
-        embedding_config = config.get("models", {}).get("embedding", {})
+        # Apply defaults
+        default_config = self._get_default_config()
+        merged_config = self._deep_merge(default_config, config)
         
-        # Check if medical embedding is properly configured
-        if embedding_config.get("use_medical_embedding", True):
-            medical_model = embedding_config.get("name", "")
-            if "BiomedNLP-PubMedBERT" not in medical_model:
-                logger.warning("⚠️ Medical embedding not configured, using default")
-                embedding_config["name"] = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
-                embedding_config["use_medical_embedding"] = True
+        return merged_config
 
-    def _get_enhanced_default_config(self) -> Dict:
-        """Enhanced default configuration optimized for medical Q&A."""
+    def _get_default_config(self) -> Dict:
+        """Get enhanced default configuration with processing section."""
         return {
             "data_dir": "data",
+            "logs_dir": "logs",
             "models": {
                 "embedding": {
                     "name": "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
-                    "fallback_name": "sentence-transformers/all-MiniLM-L6-v2",
-                    "device": "auto",  # Will be set by _apply_environment_config
+                    "device": "cpu",
                     "batch_size": 16,
+                    "use_medical_embedding": True,
                     "max_length": 512,
-                    "normalize_embeddings": True,
-                    "use_medical_embedding": True
+                    "trust_remote_code": False
                 },
                 "llm": {
                     "name": "mistral:7b-instruct",
-                    "device": "auto",  # Will be set by _apply_environment_config
-                    "batch_size": 16,
                     "temperature": 0.7,
                     "context_window": 4096,
-                    "max_new_tokens": 512
+                    "device": "cpu",
+                    "batch_size": 8
+                },
+                "kg_system": {
+                    "enabled": True,
+                    "device": "cpu"
+                },
+                "hierarchical_system": {
+                    "enabled": True,
+                    "device": "cpu"
+                }
+            },
+            "processing": {
+                "chunk_size": 512,
+                "chunk_overlap": 100,
+                "min_chunk_size": 50,
+                "max_chunk_size": 1024,
+                "enable_semantic_chunking": True,
+                "preserve_sentence_boundaries": True,
+                "hierarchy_tiers": {
+                    "tier1": {
+                        "name": "pattern_recognition",
+                        "description": "Fast pattern matching for medical concepts",
+                        "chunk_size": 256,
+                        "overlap": 50
+                    },
+                    "tier2": {
+                        "name": "hypothesis_testing", 
+                        "description": "Systematic evidence collection",
+                        "chunk_size": 512,
+                        "overlap": 100
+                    },
+                    "tier3": {
+                        "name": "confirmation",
+                        "description": "Comprehensive verification",
+                        "chunk_size": 1024,
+                        "overlap": 150
+                    }
                 }
             },
             "retrieval": {
-                "tier1_top_k": 5,
-                "tier2_top_k": 4,
-                "tier3_top_k": 3,
-                "similarity_threshold": 0.7,
-                "enable_reranking": True
+                "top_k": 5,
+                "hybrid_search": True,
+                "alpha": 0.5,
+                "similarity_threshold": 0.1,
+                "hierarchical_search": {
+                    "tier1_k": 10,
+                    "tier2_k": 5,
+                    "tier3_k": 3,
+                    "combine_strategy": "weighted"
+                }
             },
-            "generation": {
-                "system_prompt": "You are a medical knowledge assistant specialized in clinical reasoning and evidence-based medicine.",
-                "enable_answer_extraction": True,
-                "force_answer_format": True
+            "prompts": {
+                "system": """You are a medical knowledge assistant. Answer the multiple choice question based on the provided medical context.
+
+Instructions:
+1. Read the question and all answer options carefully
+2. Use the provided medical context to determine the correct answer
+3. Select ONLY ONE answer: A, B, C, D, or E
+4. End your response with exactly: "Answer: [LETTER]"
+
+Format your response as:
+[Your reasoning based on the medical context]
+
+Answer: [A/B/C/D/E]""",
+                
+                "tier1_system": """You are analyzing medical patterns and concepts. Focus on:
+- Basic medical terminology and definitions
+- Anatomical structures and functions
+- Pattern recognition in symptoms
+- Basic diagnostic criteria
+
+Answer the multiple choice question with: Answer: [LETTER]""",
+                
+                "tier2_system": """You are performing clinical reasoning and hypothesis testing. Focus on:
+- Pathophysiology and disease mechanisms
+- Differential diagnosis considerations
+- Clinical reasoning chains
+- Evidence-based analysis
+
+Answer the multiple choice question with: Answer: [LETTER]""",
+                
+                "tier3_system": """You are providing comprehensive medical verification. Focus on:
+- Evidence-based medical facts
+- Clinical guidelines and protocols
+- Confirmatory diagnostic information
+- Authoritative medical knowledge
+
+Answer the multiple choice question with: Answer: [LETTER]""",
+                
+                "question_template": """Question: {question}
+
+Medical Context:
+{context}
+
+Options:
+{options}
+
+Based on the medical context provided, select the correct answer."""
+            },
+            "vector_db": {
+                "persist_directory": "data/vector_db",
+                "collection_names": {
+                    "tier1": "tier1_pattern_recognition",
+                    "tier2": "tier2_hypothesis_testing", 
+                    "tier3": "tier3_confirmation"
+                },
+                "distance_metric": "cosine",
+                "max_batch_size": 1000
+            },
+            "web": {
+                "host": "0.0.0.0",
+                "port": 8000,
+                "cors_origins": ["*"]
+            },
+            "logging": {
+                "level": "INFO",
+                "format": "{time} | {level} | {name}:{function}:{line} - {message}",
+                "file_rotation": "10 MB"
+            },
+            "evaluation": {
+                "enable_medical_validation": True,
+                "check_medical_terminology": True,
+                "benchmarks": {
+                    "mirage": {"enabled": True},
+                    "medreason": {"enabled": True},
+                    "pubmedqa": {"enabled": True},
+                    "msmarco": {"enabled": True}
+                }
             }
         }
 
+    def _deep_merge(self, default: Dict, override: Dict) -> Dict:
+        """Deep merge two dictionaries."""
+        result = default.copy()
+        
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        
+        return result
+
     def _create_directories(self) -> None:
-        """Create necessary data directories."""
+        """Create necessary directories."""
         directories = [
-            "vector_db", "logs", "processed", "benchmarks", "cache"
+            self.config["data_dir"],
+            self.config["logs_dir"],
+            f"{self.config['data_dir']}/vector_db",
+            f"{self.config['data_dir']}/foundation",
+            f"{self.config['data_dir']}/processed",
+            f"{self.config['data_dir']}/raw"
         ]
         
-        for directory in directories:
-            self.get_data_dir(directory)
+        for dir_path in directories:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+        
+        logger.debug(f"📁 Created directories: {directories}")
 
     def _setup_logging(self) -> None:
-        """Setup logging with enhanced medical system identification."""
-        log_dir = self.get_data_dir("logs")
-        log_file = log_dir / f"basic_reasoning_{self.environment}.log"
+        """Set up logging configuration."""
+        log_level = self.config["logging"]["level"]
+        log_format = self.config["logging"]["format"]
         
+        # Configure loguru
+        logger.remove()  # Remove default handler
+        logger.add(
+            sys.stderr,
+            level=log_level,
+            format=log_format,
+            colorize=True
+        )
+        
+        # Add file logging
+        log_file = Path(self.config["logs_dir"]) / "hierarchical_system.log"
         logger.add(
             log_file,
-            rotation="1 day",
-            retention="7 days",
-            level="INFO",
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level} | MedRAG | {message}"
+            level=log_level,
+            format=log_format,
+            rotation=self.config["logging"]["file_rotation"],
+            retention="7 days"
         )
 
-    def get_data_dir(self, subdir: str) -> Path:
-        """Get data directory path and create if it doesn't exist."""
-        data_dir = Path(self.config["data_dir"]) / subdir
+    def get_data_dir(self, subdir: str = "") -> Path:
+        """Get data directory path with optional subdirectory."""
+        if subdir:
+            data_dir = Path(self.config["data_dir"]) / subdir
+        else:
+            data_dir = Path(self.config["data_dir"])
+        
         data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir
 
@@ -231,10 +357,14 @@ class Config:
     def get_embedding_config(self) -> Dict:
         """Get complete embedding configuration."""
         return self.config["models"]["embedding"]
+    
+    def get_processing_config(self) -> Dict:
+        """Get processing configuration."""
+        return self.config["processing"]
 
     def save(self) -> None:
         """Save configuration to file."""
-        with open(self.config_path, "w") as f:
+        with open(self.config_path, "w", encoding="utf-8") as f:
             yaml.dump(self.config, f, default_flow_style=False, indent=2)
         logger.info(f"💾 Saved configuration to {self.config_path}")
 
@@ -257,7 +387,8 @@ class Config:
             "medical_model": "BiomedNLP" in embedding_config.get("name", ""),
             "medical_flag": embedding_config.get("use_medical_embedding", False),
             "device_set": embedding_config.get("device") is not None,
-            "valid_device": embedding_config.get("device") in ["cuda", "mps", "cpu"]
+            "valid_device": embedding_config.get("device") in ["cuda", "mps", "cpu"],
+            "processing_config": "processing" in self.config
         }
         
         all_valid = all(checks.values())
