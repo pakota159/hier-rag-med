@@ -1,50 +1,50 @@
 """
-Hierarchical retrieval system for basic reasoning.
-Updated to handle unique ID generation and prevent ChromaDB collisions.
+Retrieval module for Basic Reasoning system.
+Implements hierarchical medical knowledge retrieval.
 """
 
-from pathlib import Path
-from typing import Dict, List, Optional, Union
-import hashlib
-
+from typing import Dict, List, Optional
 import chromadb
-from chromadb.config import Settings
-from loguru import logger
 from sentence_transformers import SentenceTransformer
-from tqdm import tqdm
+from loguru import logger
 
 from .config import Config
 
 
 class HierarchicalRetriever:
-    """Three-tier hierarchical retriever for diagnostic reasoning."""
+    """Hierarchical retriever for medical knowledge."""
 
     def __init__(self, config: Config):
         """Initialize hierarchical retriever."""
         self.config = config
         
-        embedding_config = config.config["models"]["embedding"]
+        # Initialize ChromaDB client
+        self.client = chromadb.PersistentClient(
+            path=str(config.get_data_dir("vector_db"))
+        )
         
+        # Initialize embedding model
+        embedding_config = config.config["models"]["embedding"]
         self.embedding_model = SentenceTransformer(
             embedding_config["name"],
             device=embedding_config["device"]
         )
         
-        self.client = chromadb.PersistentClient(
-            path=str(config.get_data_dir("vector_db")),
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
-            )
-        )
+        # Retrieval configurations
+        retrieval_config = config.config["hierarchical_retrieval"]
+        self.tier1_top_k = retrieval_config["tier1_top_k"]
+        self.tier2_top_k = retrieval_config["tier2_top_k"]
+        self.tier3_top_k = retrieval_config["tier3_top_k"]
         
-        # Three separate collections for three tiers
-        self.tier1_collection = None  # Pattern Recognition
-        self.tier2_collection = None  # Hypothesis Testing
-        self.tier3_collection = None  # Confirmation
+        # Collections
+        self.tier1_collection = None
+        self.tier2_collection = None
+        self.tier3_collection = None
 
-    def create_hierarchical_collections(self) -> None:
-        """Create three-tier collections."""
+    def create_hierarchical_collections(self):
+        """Create hierarchical collections for medical knowledge."""
+        logger.info("🔧 Creating hierarchical medical knowledge collections")
+        
         collection_names = [
             "tier1_pattern_recognition",
             "tier2_hypothesis_testing", 
@@ -55,234 +55,221 @@ class HierarchicalRetriever:
         for name in collection_names:
             try:
                 self.client.delete_collection(name)
-                logger.info(f"Deleted existing collection: {name}")
-            except Exception:
+                logger.info(f"🗑️ Deleted existing collection: {name}")
+            except:
                 pass
         
         # Create new collections
         self.tier1_collection = self.client.create_collection(
             name="tier1_pattern_recognition",
-            metadata={"hnsw:space": "cosine"}
-        )
-        self.tier2_collection = self.client.create_collection(
-            name="tier2_hypothesis_testing",
-            metadata={"hnsw:space": "cosine"}
-        )
-        self.tier3_collection = self.client.create_collection(
-            name="tier3_confirmation",
-            metadata={"hnsw:space": "cosine"}
+            metadata={"description": "Basic medical concepts, anatomy, definitions"}
         )
         
-        logger.info("✅ Created hierarchical collections")
+        self.tier2_collection = self.client.create_collection(
+            name="tier2_hypothesis_testing",
+            metadata={"description": "Clinical reasoning, pathophysiology, diagnostics"}
+        )
+        
+        self.tier3_collection = self.client.create_collection(
+            name="tier3_confirmation", 
+            metadata={"description": "Evidence-based medicine, guidelines, clinical trials"}
+        )
+        
+        logger.info("✅ Created hierarchical medical collections")
 
-    def load_hierarchical_collections(self) -> None:
+    def load_hierarchical_collections(self):
         """Load existing hierarchical collections."""
         try:
             self.tier1_collection = self.client.get_collection("tier1_pattern_recognition")
             self.tier2_collection = self.client.get_collection("tier2_hypothesis_testing")
             self.tier3_collection = self.client.get_collection("tier3_confirmation")
-            logger.info("✅ Loaded hierarchical collections")
+            
+            # Verify collections have content
+            tier1_count = self.tier1_collection.count()
+            tier2_count = self.tier2_collection.count()
+            tier3_count = self.tier3_collection.count()
+            
+            logger.info(f"📚 Loaded hierarchical collections:")
+            logger.info(f"   Tier 1 (Basic Medical): {tier1_count} documents")
+            logger.info(f"   Tier 2 (Clinical): {tier2_count} documents")
+            logger.info(f"   Tier 3 (Evidence): {tier3_count} documents")
+            
+            if tier1_count == 0 or tier2_count == 0 or tier3_count == 0:
+                raise ValueError("One or more collections are empty")
+                
         except Exception as e:
-            logger.error(f"Collections not found: {e}")
-            raise ValueError("Hierarchical collections do not exist. Create them first.")
+            logger.error(f"❌ Failed to load hierarchical collections: {e}")
+            raise
 
-    def generate_unique_id(self, tier_name: str, doc_metadata: Dict, index: int) -> str:
-        """
-        Generate a truly unique ID for ChromaDB to prevent collisions.
-        Uses multiple fallback strategies to ensure uniqueness.
-        """
-        # Strategy 1: Use unique_id if available
-        if "unique_id" in doc_metadata:
-            return f"{tier_name}_{doc_metadata['unique_id']}"
+    def add_documents_to_tiers(self, organized_docs: Dict[str, List[Dict]]):
+        """Add documents to appropriate tier collections."""
+        logger.info("📝 Adding documents to hierarchical medical tiers")
         
-        # Strategy 2: Use tier_chunk_id if available
-        if "tier_chunk_id" in doc_metadata:
-            doc_id = doc_metadata.get("doc_id", "doc")
-            return f"{tier_name}_{doc_id}_{doc_metadata['tier_chunk_id']}"
+        # ChromaDB batch size limit
+        max_batch_size = 5000
         
-        # Strategy 3: Create hash-based ID from content and metadata
-        doc_id = doc_metadata.get("doc_id", "doc")
-        chunk_id = doc_metadata.get("chunk_id", 0)
-        source = doc_metadata.get("source", "unknown")
+        # Add to Tier 1 - Basic Medical Knowledge
+        tier1_docs = organized_docs["pattern_recognition"]
+        if tier1_docs:
+            self._add_documents_in_batches(tier1_docs, self.tier1_collection, "Tier 1 (Basic Medical)", max_batch_size)
         
-        # Create a unique string to hash
-        unique_string = f"{tier_name}_{doc_id}_{chunk_id}_{source}_{index}"
-        hash_suffix = hashlib.md5(unique_string.encode()).hexdigest()[:8]
+        # Add to Tier 2 - Clinical Reasoning  
+        tier2_docs = organized_docs["hypothesis_testing"]
+        if tier2_docs:
+            self._add_documents_in_batches(tier2_docs, self.tier2_collection, "Tier 2 (Clinical)", max_batch_size)
         
-        return f"{tier_name}_{doc_id}_{chunk_id}_{hash_suffix}"
+        # Add to Tier 3 - Evidence-Based Medicine
+        tier3_docs = organized_docs["confirmation"]
+        if tier3_docs:
+            self._add_documents_in_batches(tier3_docs, self.tier3_collection, "Tier 3 (Evidence)", max_batch_size)
 
-    def add_documents_to_tiers(self, organized_docs: Dict[str, List[Dict]]) -> None:
-        """Add documents to appropriate tier collections with unique ID generation."""
-        if not all([self.tier1_collection, self.tier2_collection, self.tier3_collection]):
-            raise ValueError("Collections not initialized. Call create_hierarchical_collections first.")
-
-        tier_collections = {
-            "pattern_recognition": self.tier1_collection,
-            "hypothesis_testing": self.tier2_collection,
-            "confirmation": self.tier3_collection
-        }
-
-        for tier_name, documents in organized_docs.items():
-            if not documents:
-                logger.warning(f"⚠️ No documents found for tier: {tier_name}")
-                continue
-                
-            collection = tier_collections[tier_name]
+    def _add_documents_in_batches(self, docs: List[Dict], collection, tier_name: str, batch_size: int):
+        """Add documents to collection in batches."""
+        total_docs = len(docs)
+        
+        for i in range(0, total_docs, batch_size):
+            batch_docs = docs[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_docs + batch_size - 1) // batch_size
             
-            # Prepare documents for batch processing
-            texts = []
-            metadatas = []
-            ids = []
-            used_ids = set()  # Track used IDs to prevent duplicates
-
-            for i, doc in enumerate(tqdm(documents, desc=f"Preparing {tier_name} documents")):
-                texts.append(doc["text"])
-                
-                # Clean metadata for ChromaDB compatibility
-                cleaned_metadata = self.clean_metadata(doc["metadata"])
-                metadatas.append(cleaned_metadata)
-                
-                # Generate unique ID
-                unique_id = self.generate_unique_id(tier_name, doc["metadata"], i)
-                
-                # Ensure ID is truly unique within this batch
-                counter = 0
-                original_id = unique_id
-                while unique_id in used_ids:
-                    counter += 1
-                    unique_id = f"{original_id}_{counter}"
-                
-                used_ids.add(unique_id)
-                ids.append(unique_id)
-
-            logger.info(f"📝 Generated {len(ids)} unique IDs for {tier_name}")
+            logger.info(f"📝 Adding batch {batch_num}/{total_batches} to {tier_name} ({len(batch_docs)} docs)")
             
-            # Verify no duplicates
-            if len(set(ids)) != len(ids):
-                duplicates = len(ids) - len(set(ids))
-                raise ValueError(f"❌ Found {duplicates} duplicate IDs in {tier_name} - this should not happen!")
-
-            # Generate embeddings in batches
-            batch_size = self.config.config["models"]["embedding"]["batch_size"]
-            embeddings = []
+            texts = [doc["text"] for doc in batch_docs]
+            embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
+            ids = [doc["metadata"]["tier_chunk_id"] for doc in batch_docs]
+            metadatas = [doc["metadata"] for doc in batch_docs]
             
-            for i in tqdm(range(0, len(texts), batch_size), desc=f"Generating {tier_name} embeddings"):
-                batch_texts = texts[i:i + batch_size]
-                batch_embeddings = self.embedding_model.encode(
-                    batch_texts,
-                    show_progress_bar=False,
-                    convert_to_numpy=True
-                )
-                embeddings.extend(batch_embeddings)
-
-            # Add to collection in batches to avoid ChromaDB limits
-            chroma_batch_size = 5000  # ChromaDB safe batch size
-            for i in tqdm(range(0, len(texts), chroma_batch_size), desc=f"Adding {tier_name} to ChromaDB"):
-                batch_end = min(i + chroma_batch_size, len(texts))
-                
-                try:
-                    collection.add(
-                        embeddings=embeddings[i:batch_end],
-                        documents=texts[i:batch_end],
-                        metadatas=metadatas[i:batch_end],
-                        ids=ids[i:batch_end]
-                    )
-                except Exception as e:
-                    logger.error(f"❌ Error adding batch {i//chroma_batch_size + 1} to {tier_name}: {e}")
-                    # Log the problematic IDs for debugging
-                    batch_ids = ids[i:batch_end]
-                    duplicate_ids = [id for id in batch_ids if batch_ids.count(id) > 1]
-                    if duplicate_ids:
-                        logger.error(f"Duplicate IDs in batch: {duplicate_ids[:10]}")
-                    raise
-            
-            logger.info(f"✅ Added {len(documents)} documents to {tier_name}")
-
-    def clean_metadata(self, metadata: Dict) -> Dict:
-        """Clean metadata to ensure ChromaDB compatibility."""
-        cleaned = {}
-        for key, value in metadata.items():
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                cleaned[key] = value
-            elif isinstance(value, list):
-                # Convert lists to semicolon-separated strings
-                cleaned[key] = "; ".join(str(item) for item in value) if value else ""
-            else:
-                # Convert other types to strings
-                cleaned[key] = str(value)
-        return cleaned
+            collection.add(
+                embeddings=embeddings.tolist(),
+                documents=texts,
+                metadatas=metadatas,
+                ids=ids
+            )
+        
+        logger.info(f"✅ Added {total_docs} docs to {tier_name}")
 
     def hierarchical_search(self, query: str) -> Dict[str, List[Dict]]:
-        """Perform three-tier hierarchical search."""
-        if not all([self.tier1_collection, self.tier2_collection, self.tier3_collection]):
-            raise ValueError("Collections not loaded.")
-
+        """Perform hierarchical search across all medical tiers."""
+        logger.info(f"🔍 Hierarchical medical search: {query[:100]}...")
+        
         # Generate query embedding
-        query_embedding = self.embedding_model.encode(
-            query,
-            show_progress_bar=False,
-            convert_to_numpy=True
-        )
-
-        retrieval_config = self.config.config["hierarchical_retrieval"]
+        query_embedding = self.embedding_model.encode([query])
         
         results = {}
         
-        # Tier 1: Pattern Recognition - Fast initial screening
-        tier1_results = self.tier1_collection.query(
-            query_embeddings=[query_embedding],
-            n_results=retrieval_config["tier1_top_k"]
-        )
-        results["tier1_patterns"] = self._format_results(tier1_results)
+        # Search Tier 1 - Basic Medical Knowledge
+        try:
+            tier1_results = self.tier1_collection.query(
+                query_embeddings=query_embedding.tolist(),
+                n_results=self.tier1_top_k,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            results["tier1_patterns"] = [
+                {
+                    "text": doc,
+                    "metadata": meta,
+                    "score": 1 - dist  # Convert distance to similarity
+                }
+                for doc, meta, dist in zip(
+                    tier1_results["documents"][0],
+                    tier1_results["metadatas"][0], 
+                    tier1_results["distances"][0]
+                )
+            ]
+        except Exception as e:
+            logger.warning(f"Tier 1 search failed: {e}")
+            results["tier1_patterns"] = []
         
-        # Tier 2: Hypothesis Testing - Reasoning chains
-        tier2_results = self.tier2_collection.query(
-            query_embeddings=[query_embedding],
-            n_results=retrieval_config["tier2_top_k"]
-        )
-        results["tier2_hypotheses"] = self._format_results(tier2_results)
+        # Search Tier 2 - Clinical Reasoning
+        try:
+            tier2_results = self.tier2_collection.query(
+                query_embeddings=query_embedding.tolist(),
+                n_results=self.tier2_top_k,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            results["tier2_hypotheses"] = [
+                {
+                    "text": doc,
+                    "metadata": meta,
+                    "score": 1 - dist
+                }
+                for doc, meta, dist in zip(
+                    tier2_results["documents"][0],
+                    tier2_results["metadatas"][0],
+                    tier2_results["distances"][0]
+                )
+            ]
+        except Exception as e:
+            logger.warning(f"Tier 2 search failed: {e}")
+            results["tier2_hypotheses"] = []
         
-        # Tier 3: Confirmation - Clinical evidence
-        tier3_results = self.tier3_collection.query(
-            query_embeddings=[query_embedding],
-            n_results=retrieval_config["tier3_top_k"]
-        )
-        results["tier3_confirmation"] = self._format_results(tier3_results)
+        # Search Tier 3 - Evidence-Based Medicine
+        try:
+            tier3_results = self.tier3_collection.query(
+                query_embeddings=query_embedding.tolist(),
+                n_results=self.tier3_top_k,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            results["tier3_confirmation"] = [
+                {
+                    "text": doc,
+                    "metadata": meta,
+                    "score": 1 - dist
+                }
+                for doc, meta, dist in zip(
+                    tier3_results["documents"][0],
+                    tier3_results["metadatas"][0],
+                    tier3_results["distances"][0]
+                )
+            ]
+        except Exception as e:
+            logger.warning(f"Tier 3 search failed: {e}")
+            results["tier3_confirmation"] = []
+        
+        # Log search results
+        tier1_count = len(results["tier1_patterns"])
+        tier2_count = len(results["tier2_hypotheses"]) 
+        tier3_count = len(results["tier3_confirmation"])
+        
+        logger.info(f"🔍 Retrieved: T1={tier1_count}, T2={tier2_count}, T3={tier3_count}")
         
         return results
 
-    def _format_results(self, results) -> List[Dict[str, Union[str, float]]]:
-        """Format ChromaDB results."""
-        formatted_results = []
-        for i in range(len(results["documents"][0])):
-            formatted_results.append({
-                "text": results["documents"][0][i],
-                "metadata": results["metadatas"][0][i],
-                "score": 1.0 - float(results["distances"][0][i])
-            })
-        return formatted_results
-
-    def combined_search(self, query: str, n_results: int = 10) -> List[Dict]:
-        """Traditional combined search across all tiers (fallback)."""
-        hierarchical_results = self.hierarchical_search(query)
+    def search_single_tier(self, query: str, tier: int, top_k: int = 5) -> List[Dict]:
+        """Search a single tier for debugging."""
+        query_embedding = self.embedding_model.encode([query])
         
-        # Combine all tier results
-        all_results = []
-        all_results.extend(hierarchical_results["tier1_patterns"])
-        all_results.extend(hierarchical_results["tier2_hypotheses"])
-        all_results.extend(hierarchical_results["tier3_confirmation"])
+        if tier == 1 and self.tier1_collection:
+            collection = self.tier1_collection
+        elif tier == 2 and self.tier2_collection:
+            collection = self.tier2_collection
+        elif tier == 3 and self.tier3_collection:
+            collection = self.tier3_collection
+        else:
+            return []
         
-        # Sort by score and return top results
-        all_results.sort(key=lambda x: x["score"], reverse=True)
-        return all_results[:n_results]
-
-    def get_collection_stats(self) -> Dict[str, int]:
-        """Get statistics for all collections."""
-        stats = {}
-        if self.tier1_collection:
-            stats["tier1_pattern_recognition"] = self.tier1_collection.count()
-        if self.tier2_collection:
-            stats["tier2_hypothesis_testing"] = self.tier2_collection.count()
-        if self.tier3_collection:
-            stats["tier3_confirmation"] = self.tier3_collection.count()
-        return stats
+        try:
+            results = collection.query(
+                query_embeddings=query_embedding.tolist(),
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            return [
+                {
+                    "text": doc,
+                    "metadata": meta,
+                    "score": 1 - dist
+                }
+                for doc, meta, dist in zip(
+                    results["documents"][0],
+                    results["metadatas"][0],
+                    results["distances"][0]
+                )
+            ]
+        except Exception as e:
+            logger.error(f"Single tier {tier} search failed: {e}")
+            return []

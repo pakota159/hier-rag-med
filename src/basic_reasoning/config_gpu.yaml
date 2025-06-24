@@ -54,67 +54,37 @@ processing:
   num_workers: 4
   pin_memory: true
 
-# Enhanced hierarchical prompts for GPU inference
+# Hierarchical prompts for medical multiple choice questions (GPU optimized)
 prompts:
   system: |
-    You are a therapeutic guidance assistant that provides evidence-based treatment recommendations.
-    Focus on proven clinical benefits, therapeutic advantages, and positive patient outcomes.
-    Emphasize what treatments help patients rather than contraindications or dangers.
-    Use three-tier reasoning: Pattern Recognition → Evidence-Based Guidelines → Treatment Confirmation.
+    You are a medical knowledge assistant specialized in answering multiple choice questions.
+    You must analyze the question using three-tier hierarchical reasoning and select the correct answer.
+    
+    CRITICAL INSTRUCTIONS:
+    - Always answer with ONLY the letter (A, B, C, D, or E)
+    - Format your final answer as: "Answer: [LETTER]"
+    - Use the provided medical knowledge to reason through each option
+    - Be precise and evidence-based in your analysis
+    - Keep responses concise for GPU efficiency
+    
+    EXAMPLE FORMAT:
+    Question: What is the most common cause of pneumonia?
+    Options: A) Virus B) Bacteria C) Fungus D) Parasite
+    
+    Analysis: [brief reasoning]
+    Answer: B
     
   tier1_prompt: |
-    Based on these therapeutic patterns, identify proven treatments and their clinical benefits.
-    Focus on evidence-based therapies and positive outcomes documented in guidelines.
+    TIER 1 - PATTERN RECOGNITION: Identify key medical concepts, symptoms, anatomy, and basic classifications.
+    Use these foundational patterns to understand what the question is asking about.
+    Focus on: definitions, basic anatomy, fundamental medical concepts, symptom recognition.
     
   tier2_prompt: |
-    Using these clinical guidelines, explain the therapeutic benefits and evidence supporting recommended treatments.
-    Emphasize how treatments improve patient outcomes and reduce disease complications.
+    TIER 2 - CLINICAL REASONING: Apply clinical knowledge, pathophysiology, and diagnostic criteria.
+    Use these clinical insights to evaluate each answer option systematically.
+    Focus on: disease mechanisms, clinical presentations, diagnostic criteria, treatment principles.
     
   tier3_prompt: |
-    Confirm treatment recommendations with comprehensive evidence of clinical benefits.
-    Integrate all evidence to highlight therapeutic advantages and positive patient outcomes.
-
-# Performance settings
-performance:
-  use_gpu_acceleration: true
-  mixed_precision: true
-  compile_models: true
-  memory_efficient: true
-  
-  # CUDA optimizations
-  cuda_deterministic: false
-  cuda_benchmark: true
-  
-  # Memory management for 24GB GPU
-  gpu_memory_fraction: 0.8
-  memory_growth: true
-  max_memory_per_process: "20GB"
-  
-  # Hierarchical processing optimization
-  enable_tier_parallelization: true
-  max_concurrent_tiers: 2
-
-# Collection management
-collections:
-  primary_symptoms:
-    name: "primary_symptoms"
-    chunk_size: 512
-    overlap: 100
-  differential_diagnosis:
-    name: "differential_diagnosis" 
-    chunk_size: 512
-    overlap: 100
-  final_diagnosis:
-    name: "final_diagnosis"
-    chunk_size: 512
-    overlap: 100
-
-# Web interface (if needed on GPU)
-web:
-  host: 0.0.0.0
-  port: 8503
-  cors_origins: ["*"]
-  # GPU-specific settings
-  worker_class: "uvicorn.workers.UvicornWorker"
-  workers: 2
-  max_requests: 1000
+    TIER 3 - EVIDENCE CONFIRMATION: Confirm with established medical facts, guidelines, and evidence.
+    Use this authoritative knowledge to definitively select the correct answer.
+    Focus on: medical guidelines, established facts, evidence-based medicine, definitive criteria.

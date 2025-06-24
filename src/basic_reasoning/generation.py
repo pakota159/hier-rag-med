@@ -6,6 +6,7 @@ Implements hierarchical diagnostic reasoning generation.
 from typing import Dict, List, Optional
 import requests
 import json
+import re
 from loguru import logger
 
 from .config import Config
@@ -50,6 +51,25 @@ class HierarchicalGenerator:
             logger.error(f"Ollama API call failed: {e}")
             return f"Error: Unable to connect to Ollama: {e}"
 
+    def _extract_answer(self, response: str) -> str:
+        """Extract answer letter from response."""
+        # Look for "Answer: X" pattern first
+        answer_pattern = re.search(r'Answer:\s*([A-E])', response, re.IGNORECASE)
+        if answer_pattern:
+            return answer_pattern.group(1).upper()
+        
+        # Look for standalone letters at end of response
+        end_pattern = re.search(r'\b([A-E])\s*$', response.strip(), re.IGNORECASE)
+        if end_pattern:
+            return end_pattern.group(1).upper()
+        
+        # Look for any letter in the response (last resort)
+        letter_matches = re.findall(r'\b([A-E])\b', response, re.IGNORECASE)
+        if letter_matches:
+            return letter_matches[-1].upper()  # Return last found letter
+        
+        return "A"  # Default fallback
+
     def generate_hierarchical_response(
         self,
         query: str,
@@ -59,18 +79,18 @@ class HierarchicalGenerator:
         
         # Prepare context from each tier
         tier1_context = "\n".join([
-            f"Pattern {i+1}: {doc['text'][:200]}..."
-            for i, doc in enumerate(hierarchical_results["tier1_patterns"])
+            f"Pattern {i+1}: {doc['text'][:300]}..."
+            for i, doc in enumerate(hierarchical_results.get("tier1_patterns", []))
         ])
         
         tier2_context = "\n".join([
-            f"Hypothesis {i+1}: {doc['text'][:300]}..."
-            for i, doc in enumerate(hierarchical_results["tier2_hypotheses"])
+            f"Clinical Knowledge {i+1}: {doc['text'][:400]}..."
+            for i, doc in enumerate(hierarchical_results.get("tier2_hypotheses", []))
         ])
         
         tier3_context = "\n".join([
-            f"Evidence {i+1}: {doc['text'][:300]}..."
-            for i, doc in enumerate(hierarchical_results["tier3_confirmation"])
+            f"Evidence {i+1}: {doc['text'][:400]}..."
+            for i, doc in enumerate(hierarchical_results.get("tier3_confirmation", []))
         ])
 
         # Build hierarchical prompt
@@ -85,21 +105,30 @@ TIER 1 - PATTERN RECOGNITION:
 {tier1_prompt}
 {tier1_context}
 
-TIER 2 - HYPOTHESIS TESTING:
+TIER 2 - CLINICAL REASONING:
 {tier2_prompt}
 {tier2_context}
 
-TIER 3 - CONFIRMATION:
+TIER 3 - EVIDENCE CONFIRMATION:
 {tier3_prompt}
 {tier3_context}
 
 Question: {query}
 
-Hierarchical Diagnostic Response:"""
+Provide your analysis and select the correct answer. End with "Answer: [LETTER]"
+
+Response:"""
 
         response = self._call_ollama(prompt)
+        
+        # Extract and validate answer
+        extracted_answer = self._extract_answer(response)
+        
+        # Ensure response ends with proper format
+        if not re.search(r'Answer:\s*[A-E]', response, re.IGNORECASE):
+            response += f"\n\nAnswer: {extracted_answer}"
+        
         logger.info("Generated hierarchical diagnostic response")
-
         return response
 
     def generate(
@@ -115,12 +144,28 @@ Hierarchical Diagnostic Response:"""
             for i, doc in enumerate(context)
         ])
 
-        # Prepare prompt
+        # Prepare prompt with MCQ format
         system_prompt = system_prompt or self.config.config["prompts"]["system"]
-        prompt = f"{system_prompt}\n\nContext:\n{context_text}\n\nQuestion: {query}\n\nAnswer:"
+        prompt = f"""{system_prompt}
+
+Context:
+{context_text}
+
+Question: {query}
+
+Analyze the question and select the correct answer. End with "Answer: [LETTER]"
+
+Response:"""
 
         # Generate response
         response = self._call_ollama(prompt)
+        
+        # Extract and validate answer
+        extracted_answer = self._extract_answer(response)
+        
+        # Ensure response ends with proper format
+        if not re.search(r'Answer:\s*[A-E]', response, re.IGNORECASE):
+            response += f"\n\nAnswer: {extracted_answer}"
+        
         logger.info("Generated response from LLM")
-
         return response
