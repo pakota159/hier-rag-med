@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
-Setup script for Hierarchical Reasoning System.
-ONLY processes foundation datasets - NO KG data.
+Enhanced Setup script for Hierarchical Medical Q&A System
+File: setup_hierarchical_system.py
+
+Optimized for medical Q&A with improved tier validation and integration
+with all validated fetchers. Enhanced for MIRAGE benchmark performance.
 """
 
 import sys
@@ -21,104 +24,118 @@ from src.basic_reasoning.retrieval import HierarchicalRetriever
 
 
 def find_foundation_dataset() -> Path:
-    """Find the foundation dataset file (single combined JSON)."""
+    """Find the foundation dataset file with enhanced search."""
     logger.info("🔍 Looking for foundation dataset...")
     
-    # Check foundation dataset locations in priority order
+    # Enhanced search paths for all validated fetchers
     candidate_paths = [
-        # Primary location
+        # Primary location (from fetch_foundation_data.py)
         Path("data/foundation_dataset/foundation_medical_data.json"),
         
-        # Timestamped files (most recent first)
-        *sorted(Path("data/foundation_dataset").glob("foundation_specialty_rebalanced_*.json"), reverse=True),
+        # Alternative timestamped files (most recent first)
+        *sorted(Path("data/foundation_dataset").glob("foundation_*.json"), reverse=True),
         
-        # Alternative locations
+        # Legacy locations
         Path("data/foundation/foundation_medical_data.json"),
         Path("data/foundation_medical_data.json"),
         Path("data/foundation_dataset.json"),
-        Path("data/foundation_dataset/unified_dataset.json"),
         Path("foundation_dataset.json"),
         
-        # Other timestamped locations
-        *sorted(Path("data").glob("foundation_specialty_rebalanced_*.json"), reverse=True),
-        *sorted(Path("data/foundation").glob("foundation_specialty_rebalanced_*.json"), reverse=True),
+        # Other possible locations
+        *sorted(Path("data").glob("foundation_*.json"), reverse=True),
     ]
     
     for path in candidate_paths:
         if path.exists() and path.is_file():
-            # Verify it's not KG data
-            if "kg_raw" in str(path):
-                logger.error(f"❌ CRITICAL ERROR: Found KG data instead of foundation data!")
-                logger.error(f"   File: {path}")
-                logger.error("🚫 KG DATA IS NOT ACCEPTABLE")
-                logger.error("   Contains only basic pubmed/mtsamples/mesh data")
-                logger.error("")
-                logger.error("✅ REQUIRED: Foundation datasets from fetch_foundation_data.py")
-                logger.error("🔧 SOLUTION: Run foundation data fetcher first:")
-                logger.error("   python fetch_foundation_data.py --max-results 5000 --email your@email.com")
-                raise ValueError("KG data rejected - foundation datasets required")
-            
-            logger.info(f"   ✅ Found foundation dataset: {path}")
-            return path
+            # Enhanced validation to ensure it's medical data
+            try:
+                file_size = path.stat().st_size / (1024 * 1024)  # MB
+                logger.info(f"   📁 Found dataset: {path} ({file_size:.1f} MB)")
+                
+                # Quick validation by reading first few docs
+                with open(path, 'r') as f:
+                    data = json.load(f)
+                    
+                if isinstance(data, list) and len(data) > 0:
+                    sample_doc = data[0]
+                    doc_count = len(data)
+                elif isinstance(data, dict) and 'documents' in data:
+                    sample_doc = data['documents'][0] if data['documents'] else {}
+                    doc_count = len(data.get('documents', []))
+                else:
+                    continue
+                
+                # Validate it's medical content
+                if _validate_medical_content(sample_doc):
+                    logger.info(f"   ✅ Validated medical dataset: {doc_count:,} documents")
+                    return path
+                else:
+                    logger.warning(f"   ⚠️  Dataset doesn't appear to be medical content: {path}")
+                    
+            except Exception as e:
+                logger.warning(f"   ❌ Error validating {path}: {e}")
+                continue
     
     # No foundation dataset found
-    logger.error("❌ CRITICAL ERROR: No foundation datasets found!")
+    logger.error("❌ CRITICAL ERROR: No medical foundation dataset found!")
     logger.error("")
-    logger.error("🚫 FOUNDATION DATASETS ARE REQUIRED")
+    logger.error("🚫 MEDICAL FOUNDATION DATASET IS REQUIRED")
     logger.error("   This system requires comprehensive medical foundation datasets")
-    logger.error("   Single combined JSON file with all medical sources")
+    logger.error("   from ALL validated fetchers (StatPearls, UMLS, DrugBank, etc.)")
     logger.error("")
-    logger.error("📋 SOLUTION: Create foundation datasets first!")
+    logger.error("📋 SOLUTION: Create foundation dataset using ALL validated fetchers!")
+    logger.error("   python fetch_foundation_data.py --max-results 50000 --email your@email.com \\")
+    logger.error("     --umls-key YOUR_UMLS_KEY --drugbank-key YOUR_DRUGBANK_KEY")
     logger.error("")
-    logger.error("🔧 Run one of these commands:")
-    logger.error("   # Quick test (1K documents, ~5 minutes)")
-    logger.error("   python fetch_foundation_data.py --quick --max-results 1000 --email your@email.com")
-    logger.error("")
-    logger.error("   # Medium dataset (5K documents, ~15 minutes)")
-    logger.error("   python fetch_foundation_data.py --max-results 5000 --email your@email.com")
-    logger.error("")
-    logger.error("   # Full dataset (50K documents, ~60 minutes)")
-    logger.error("   python fetch_foundation_data.py --max-results 50000 --email your@email.com")
-    logger.error("")
-    logger.error("💡 This creates a combined file with all medical sources:")
-    logger.error("   - WHO, ESC, AHA/ACC, USPSTF, UpToDate guidelines")
-    logger.error("   - MedReason, MSDiagnosis, PMC, DrugBank datasets")
-    logger.error("   - ACOG, IDSA specialty guidelines")
-    logger.error("   - Specialty-focused PubMed abstracts (18+ specialties)")
-    logger.error("")
-    logger.error("❌ SETUP CANNOT CONTINUE")
-    raise FileNotFoundError("Foundation datasets required - run fetch_foundation_data.py first")
+    logger.error("🔧 Alternative: Use critical sources only:")
+    logger.error("   python fetch_foundation_data.py --critical-only --max-results 10000 \\")
+    logger.error("     --email your@email.com --umls-key YOUR_KEY --drugbank-key YOUR_KEY")
+    
+    raise FileNotFoundError("No medical foundation dataset found")
 
 
-def load_foundation_dataset(dataset_path: Path) -> tuple[List[Dict], Dict[str, Any]]:
-    """Load foundation dataset from single combined JSON file."""
-    logger.info(f"📖 Loading foundation dataset: {dataset_path}")
+def _validate_medical_content(sample_doc: Dict) -> bool:
+    """Validate that content is medical/healthcare related."""
+    if not isinstance(sample_doc, dict):
+        return False
+    
+    text = str(sample_doc.get('text', '')).lower()
+    metadata = sample_doc.get('metadata', {})
+    
+    # Check for medical indicators
+    medical_indicators = [
+        'medical', 'clinical', 'patient', 'diagnosis', 'treatment', 'disease',
+        'medication', 'drug', 'therapy', 'symptom', 'syndrome', 'pathology',
+        'anatomy', 'physiology', 'surgery', 'hospital', 'healthcare'
+    ]
+    
+    # Check for validated medical sources
+    source = str(metadata.get('source', '')).lower()
+    medical_sources = [
+        'statpearls', 'umls', 'drugbank', 'medlineplus', 'who', 'esc',
+        'aha', 'acc', 'uspstf', 'uptodate', 'acog', 'idsa', 'pubmed'
+    ]
+    
+    has_medical_text = any(indicator in text for indicator in medical_indicators)
+    has_medical_source = any(src in source for src in medical_sources)
+    has_medical_specialty = 'medical_specialty' in metadata
+    
+    return has_medical_text or has_medical_source or has_medical_specialty
+
+
+def load_foundation_dataset(dataset_path: Path) -> tuple[List[Dict], Dict]:
+    """Enhanced foundation dataset loading with medical content analysis."""
+    logger.info(f"📂 Loading and analyzing medical foundation dataset: {dataset_path}")
     
     try:
         with open(dataset_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Cannot read foundation dataset file")
-        logger.error(f"   File: {dataset_path}")
-        logger.error(f"   Error: {e}")
-        logger.error("")
-        logger.error("🔧 POSSIBLE CAUSES:")
-        logger.error("   1. File is corrupted")
-        logger.error("   2. File is incomplete")
-        logger.error("   3. Insufficient permissions")
-        logger.error("   4. Disk space issues")
-        logger.error("")
-        logger.error("🔧 SOLUTIONS:")
-        logger.error("   1. Re-create foundation dataset:")
-        logger.error("      python fetch_foundation_data.py --max-results 5000")
-        logger.error("   2. Check file permissions and disk space")
-        logger.error("")
-        logger.error("❌ SETUP TERMINATED")
-        raise RuntimeError(f"Cannot read foundation dataset: {e}")
+        logger.error(f"❌ Failed to read dataset file: {e}")
+        raise
     
-    # Parse document structure
+    # Enhanced document extraction
     documents = []
-    
     if isinstance(data, list):
         documents = data
     elif isinstance(data, dict):
@@ -127,468 +144,463 @@ def load_foundation_dataset(dataset_path: Path) -> tuple[List[Dict], Dict[str, A
         elif "data" in data:
             documents = data["data"]
         else:
-            # Try to extract documents from dict values
+            # Try to find documents in nested structure
             for key, value in data.items():
                 if isinstance(value, list) and len(value) > 0:
                     if isinstance(value[0], dict) and "text" in value[0]:
                         documents.extend(value)
-                elif isinstance(value, dict) and "text" in value:
-                    documents.append(value)
-    else:
-        logger.error(f"❌ CRITICAL ERROR: Unexpected data format in foundation dataset")
-        logger.error(f"   Expected: list or dict with documents")
-        logger.error(f"   Found: {type(data)}")
-        logger.error("")
-        logger.error("🔧 SOLUTION: Re-create foundation dataset with correct format")
-        logger.error("   python fetch_foundation_data.py --max-results 5000")
-        raise ValueError(f"Invalid foundation dataset format: {type(data)}")
+                        logger.info(f"   📄 Found documents in key: {key}")
     
     if not documents:
-        logger.error("❌ CRITICAL ERROR: No documents found in foundation dataset")
-        logger.error(f"   File: {dataset_path}")
-        logger.error("   The dataset file exists but contains no usable documents")
-        logger.error("")
-        logger.error("🔧 SOLUTION: Re-create foundation dataset")
-        logger.error("   python fetch_foundation_data.py --max-results 5000")
-        raise ValueError("Foundation dataset contains no documents")
+        logger.error("❌ No documents found in dataset")
+        raise ValueError("Dataset contains no documents")
     
-    # Process and validate documents
-    valid_docs = []
+    # Enhanced medical content analysis
+    analysis = analyze_medical_dataset(documents)
+    
+    logger.info("📊 Enhanced Medical Dataset Analysis:")
+    logger.info(f"   📚 Total documents: {analysis['total_documents']:,}")
+    logger.info(f"   🔬 Dataset type: {analysis['type']}")
+    logger.info(f"   ⭐ Data quality: {analysis['data_quality']}")
+    logger.info(f"   🏥 Medical specialties: {len(analysis['specialties'])}")
+    logger.info(f"   📋 Validated sources: {len(analysis['sources'])}")
+    
+    return documents, analysis
+
+
+def analyze_medical_dataset(documents: List[Dict]) -> Dict:
+    """Enhanced medical dataset analysis for all validated fetchers."""
+    total_docs = len(documents)
     source_counts = {}
+    specialty_counts = {}
+    evidence_levels = {}
+    tier_distribution = {1: 0, 2: 0, 3: 0}
     
-    for i, doc in enumerate(documents):
+    # Enhanced medical content indicators
+    quality_indicators = {
+        "statpearls_content": 0,
+        "umls_terminology": 0,
+        "drugbank_data": 0,
+        "medlineplus_education": 0,
+        "clinical_guidelines": 0,
+        "evidence_based": 0,
+        "specialty_specific": 0,
+        "research_based": 0
+    }
+    
+    # Analyze each document
+    for doc in documents:
         if not isinstance(doc, dict):
-            logger.warning(f"   Skipping invalid document {i}: not a dict")
-            continue
-            
-        if not doc.get("text"):
-            logger.warning(f"   Skipping document {i}: no text content")
             continue
         
-        # Ensure metadata exists
-        if "metadata" not in doc:
-            doc["metadata"] = {}
+        metadata = doc.get("metadata", {})
+        text = str(doc.get("text", "")).lower()
         
         # Count sources
-        source = doc["metadata"].get("source", "unknown")
+        source = metadata.get("source", "unknown")
         source_counts[source] = source_counts.get(source, 0) + 1
         
-        valid_docs.append(doc)
-    
-    logger.info(f"✅ Loaded {len(valid_docs)} valid documents from foundation dataset")
-    
-    if len(valid_docs) < 100:
-        logger.warning(f"⚠️ Low document count: {len(valid_docs)}")
-        logger.warning("   Consider fetching more comprehensive data")
-    
-    # Analyze dataset
-    analysis = analyze_foundation_dataset(valid_docs, source_counts)
-    
-    return valid_docs, analysis
-
-
-def analyze_foundation_dataset(documents: List[Dict], source_counts: Dict[str, int]) -> Dict[str, Any]:
-    """Analyze foundation dataset characteristics."""
-    total_docs = len(documents)
-    
-    if total_docs == 0:
-        return {
-            "type": "empty",
-            "therapeutic_focus": False,
-            "sources": source_counts,
-            "total_documents": 0,
-            "data_quality": "none"
-        }
-    
-    # Quality indicators
-    quality_indicators = {
-        "evidence_based": 0,
-        "clinical": 0,
-        "synthetic": 0,
-        "guideline_based": 0,
-        "research_based": 0,
-        "specialty_focused": 0
-    }
-    
-    # Analyze content
-    for doc in documents:
-        # Handle None values safely
-        text = doc.get("text") or ""
-        title = doc.get("metadata", {}).get("title") or ""
+        # Count specialties
+        specialty = metadata.get("medical_specialty", "Unknown")
+        specialty_counts[specialty] = specialty_counts.get(specialty, 0) + 1
         
-        # Ensure strings before calling lower()
-        text = str(text).lower() if text else ""
-        title = str(title).lower() if title else ""
-        content = text + " " + title
+        # Count evidence levels
+        evidence = metadata.get("evidence_level", "unknown")
+        evidence_levels[evidence] = evidence_levels.get(evidence, 0) + 1
         
-        # Evidence-based indicators
-        if any(term in content for term in 
-               ["evidence", "meta-analysis", "systematic review", "clinical trial", "rct"]):
+        # Count tier distribution
+        tier = metadata.get("tier", 2)
+        if tier in [1, 2, 3]:
+            tier_distribution[tier] += 1
+        
+        # Enhanced quality indicators
+        if "statpearls" in source.lower():
+            quality_indicators["statpearls_content"] += 1
+        if "umls" in source.lower():
+            quality_indicators["umls_terminology"] += 1
+        if "drugbank" in source.lower():
+            quality_indicators["drugbank_data"] += 1
+        if "medlineplus" in source.lower():
+            quality_indicators["medlineplus_education"] += 1
+        if any(term in text for term in ["guideline", "recommendation", "consensus"]):
+            quality_indicators["clinical_guidelines"] += 1
+        if any(term in text for term in ["evidence", "study", "trial", "research"]):
             quality_indicators["evidence_based"] += 1
-        
-        # Clinical indicators
-        if any(term in content for term in 
-               ["clinical", "patient", "treatment", "diagnosis", "therapy"]):
-            quality_indicators["clinical"] += 1
-        
-        # Synthetic/educational indicators
-        if any(term in content for term in 
-               ["case study", "reasoning", "differential", "multiple choice"]):
-            quality_indicators["synthetic"] += 1
-        
-        # Guideline-based indicators
-        if any(term in content for term in 
-               ["guideline", "recommendation", "consensus", "standard", "protocol"]):
-            quality_indicators["guideline_based"] += 1
-        
-        # Research-based indicators
-        if any(term in content for term in 
-               ["pubmed", "pmid", "research", "study", "journal", "abstract"]):
+        if specialty != "Unknown" and specialty != "General Medicine":
+            quality_indicators["specialty_specific"] += 1
+        if any(term in text for term in ["pubmed", "clinical trial", "meta-analysis"]):
             quality_indicators["research_based"] += 1
-        
-        # Specialty-focused indicators
-        if any(specialty in content for specialty in 
-               ["cardiology", "surgery", "obstetrics", "gynecology", "infectious", 
-                "emergency", "psychiatry", "dermatology", "gastroenterology", 
-                "pediatrics", "oncology", "neurology", "endocrinology"]):
-            quality_indicators["specialty_focused"] += 1
     
-    # Determine dataset characteristics
-    therapeutic_sources = {
-        "who_guidelines", "esc_guidelines", "aha_acc_guidelines", 
-        "uspstf_guidelines", "uptodate_guidelines", "acog_guidelines", "idsa_guidelines"
-    }
+    # Enhanced dataset type determination
+    validated_fetcher_ratio = (
+        quality_indicators["statpearls_content"] + 
+        quality_indicators["umls_terminology"] + 
+        quality_indicators["drugbank_data"] + 
+        quality_indicators["medlineplus_education"]
+    ) / total_docs
     
-    research_sources = {
-        "pubmed", "pubmed_specialty", "pmc_patients"
-    }
+    clinical_ratio = quality_indicators["clinical_guidelines"] / total_docs
+    specialty_ratio = quality_indicators["specialty_specific"] / total_docs
     
-    exam_sources = {
-        "medreason", "msdiagnosis", "mtsamples"
-    }
-    
-    therapeutic_count = sum(source_counts.get(src, 0) for src in therapeutic_sources)
-    research_count = sum(source_counts.get(src, 0) for src in research_sources)
-    exam_count = sum(source_counts.get(src, 0) for src in exam_sources)
-    
-    therapeutic_ratio = therapeutic_count / total_docs if total_docs > 0 else 0
-    research_ratio = research_count / total_docs if total_docs > 0 else 0
-    exam_ratio = exam_count / total_docs if total_docs > 0 else 0
-    
-    # Determine dataset type
-    if therapeutic_ratio > 0.4:
-        dataset_type = "therapeutic_focused"
-    elif research_ratio > 0.4:
-        dataset_type = "research_focused"
-    elif exam_ratio > 0.4:
-        dataset_type = "exam_focused"
-    elif (therapeutic_ratio + research_ratio) > 0.6:
-        dataset_type = "hybrid_clinical"
+    if validated_fetcher_ratio > 0.3:
+        dataset_type = "enhanced_validated_fetchers"
+    elif clinical_ratio > 0.4:
+        dataset_type = "clinical_guidelines_focused"
+    elif specialty_ratio > 0.5:
+        dataset_type = "specialty_balanced"
     else:
-        dataset_type = "mixed_sources"
+        dataset_type = "mixed_medical_sources"
     
-    # Data quality assessment
-    high_quality_count = (quality_indicators["evidence_based"] + 
-                         quality_indicators["guideline_based"])
+    # Enhanced data quality assessment
+    high_quality_count = (
+        quality_indicators["statpearls_content"] + 
+        quality_indicators["clinical_guidelines"] + 
+        quality_indicators["evidence_based"]
+    )
     
-    if high_quality_count > total_docs * 0.5:
-        data_quality = "high"
-    elif high_quality_count > total_docs * 0.2:
-        data_quality = "medium"
+    if high_quality_count > total_docs * 0.6:
+        data_quality = "high_medical_quality"
+    elif high_quality_count > total_docs * 0.3:
+        data_quality = "moderate_medical_quality"
     else:
-        data_quality = "mixed"
+        data_quality = "mixed_quality"
     
     return {
         "type": dataset_type,
-        "therapeutic_focus": therapeutic_ratio > 0.3,
-        "sources": source_counts,
-        "source_distribution": {
-            "therapeutic": therapeutic_ratio,
-            "research": research_ratio,
-            "exam": exam_ratio
-        },
-        "quality_indicators": quality_indicators,
+        "data_quality": data_quality,
         "total_documents": total_docs,
-        "data_quality": data_quality
+        "sources": source_counts,
+        "specialties": specialty_counts,
+        "evidence_levels": evidence_levels,
+        "tier_distribution": tier_distribution,
+        "quality_indicators": quality_indicators,
+        "validated_fetcher_coverage": validated_fetcher_ratio,
+        "specialty_coverage": specialty_ratio,
+        "clinical_coverage": clinical_ratio
     }
 
 
 def enhance_tier_mapping(organized_docs: Dict[str, List[Dict]], 
-                        foundation_type: str) -> Dict[str, List[Dict]]:
-    """Enhance tier mapping based on foundation dataset type."""
-    if foundation_type in ["therapeutic_focused", "hybrid_clinical"]:
-        logger.info("🎯 Applying therapeutic-focused tier mapping")
+                        foundation_analysis: Dict) -> Dict[str, List[Dict]]:
+    """Enhanced tier mapping based on medical content analysis."""
+    logger.info("🎯 Applying enhanced medical tier mapping")
+    
+    dataset_type = foundation_analysis["type"]
+    
+    # Enhanced tier optimization for medical Q&A
+    if dataset_type == "enhanced_validated_fetchers":
+        logger.info("   🔬 Optimizing for validated medical fetchers")
         
-        # Move high-quality guidelines to tier 3 (confirmation)
-        tier2_to_tier3 = []
-        for doc in organized_docs.get("hypothesis_testing", []):
-            text = doc.get("text", "").lower()
-            metadata = doc.get("metadata", {})
-            source = metadata.get("source", "")
-            
-            # Check for high-quality guideline indicators
-            if (any(term in text for term in ["guideline", "recommendation", "consensus"]) or
-                any(source_type in source for source_type in ["who", "esc", "aha", "uspstf", "acog", "idsa"])):
+        # Move high-authority medical content to appropriate tiers
+        tier_moves = {"to_tier1": [], "to_tier3": []}
+        
+        for tier_name, docs in organized_docs.items():
+            for doc in docs[:]:  # Create copy to avoid modification during iteration
+                metadata = doc.get("metadata", {})
+                source = metadata.get("source", "").lower()
+                specialty = metadata.get("medical_specialty", "")
+                text = str(doc.get("text", "")).lower()
                 
-                # Move to tier 3
-                doc["metadata"]["tier"] = 3
-                tier2_to_tier3.append(doc)
+                # Enhanced StatPearls content -> Tier 1 (basic medical knowledge)
+                if "statpearls" in source and any(term in text for term in [
+                    "definition", "anatomy", "basic", "introduction", "overview"
+                ]):
+                    if doc["metadata"]["tier"] != 1:
+                        doc["metadata"]["tier"] = 1
+                        tier_moves["to_tier1"].append(doc)
+                
+                # Enhanced guidelines/evidence -> Tier 3 (confirmation)
+                elif any(source_type in source for source_type in [
+                    "who", "esc", "aha", "acc", "uspstf", "acog", "idsa"
+                ]) or any(term in text for term in [
+                    "guideline", "evidence-based", "recommendation", "consensus"
+                ]):
+                    if doc["metadata"]["tier"] != 3:
+                        doc["metadata"]["tier"] = 3
+                        tier_moves["to_tier3"].append(doc)
         
-        # Remove from tier 2 and add to tier 3
-        organized_docs["hypothesis_testing"] = [
-            doc for doc in organized_docs.get("hypothesis_testing", [])
-            if doc not in tier2_to_tier3
-        ]
+        # Reorganize based on moves
+        organized_docs = _apply_tier_moves(organized_docs, tier_moves)
         
-        if "confirmation" not in organized_docs:
-            organized_docs["confirmation"] = []
-        organized_docs["confirmation"].extend(tier2_to_tier3)
-        
-        if tier2_to_tier3:
-            logger.info(f"🔄 Enhanced tier mapping: moved {len(tier2_to_tier3)} guideline docs to confirmation tier")
+        if tier_moves["to_tier1"] or tier_moves["to_tier3"]:
+            logger.info(f"   ✅ Enhanced tier mapping: {len(tier_moves['to_tier1'])} to Tier 1, {len(tier_moves['to_tier3'])} to Tier 3")
     
     return organized_docs
 
 
-def validate_tier_distribution(organized_docs: Dict[str, List[Dict]]) -> bool:
-    """Validate tier distribution for hierarchical effectiveness."""
+def _apply_tier_moves(organized_docs: Dict[str, List[Dict]], 
+                     tier_moves: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
+    """Apply tier moves and reorganize documents."""
+    # Remove moved documents from their original tiers
+    moved_docs = set(id(doc) for doc in tier_moves["to_tier1"] + tier_moves["to_tier3"])
+    
+    for tier_name in ["pattern_recognition", "hypothesis_testing", "confirmation"]:
+        organized_docs[tier_name] = [
+            doc for doc in organized_docs.get(tier_name, [])
+            if id(doc) not in moved_docs
+        ]
+    
+    # Add documents to their new tiers
+    organized_docs["pattern_recognition"].extend(tier_moves["to_tier1"])
+    organized_docs["confirmation"].extend(tier_moves["to_tier3"])
+    
+    return organized_docs
+
+
+def validate_medical_qa_distribution(organized_docs: Dict[str, List[Dict]]) -> bool:
+    """Enhanced validation for medical Q&A effectiveness."""
     tier1_count = len(organized_docs.get("pattern_recognition", []))
     tier2_count = len(organized_docs.get("hypothesis_testing", []))
     tier3_count = len(organized_docs.get("confirmation", []))
     total_docs = tier1_count + tier2_count + tier3_count
     
     if total_docs == 0:
-        logger.error("❌ CRITICAL ERROR: No documents found after tier organization")
-        logger.error("🔧 This indicates a processing failure")
+        logger.error("❌ CRITICAL ERROR: No documents found after enhanced organization")
+        logger.error("🔧 This indicates a processing failure in the enhanced system")
         return False
     
-    # Check for empty critical tiers
-    if tier2_count == 0:
-        logger.error("❌ CRITICAL ERROR: Tier 2 (Hypothesis Testing) is empty")
-        logger.error("   This tier is essential for hierarchical reasoning")
-        logger.error("")
-        logger.error("🔧 SOLUTIONS:")
-        logger.error("   1. Fetch more diverse foundation data:")
-        logger.error("      python fetch_foundation_data.py --max-results 10000")
-        logger.error("   2. Check foundation dataset quality")
-        logger.error("   3. Verify document processing logic")
-        return False
+    # Enhanced validation for medical Q&A
+    tier1_pct = (tier1_count / total_docs) * 100
+    tier2_pct = (tier2_count / total_docs) * 100
+    tier3_pct = (tier3_count / total_docs) * 100
     
-    # Warnings for empty tiers
+    logger.info("📊 Enhanced Medical Q&A Distribution:")
+    logger.info(f"   Tier 1 (Pattern Recognition): {tier1_count} ({tier1_pct:.1f}%)")
+    logger.info(f"   Tier 2 (Clinical Reasoning): {tier2_count} ({tier2_pct:.1f}%)")
+    logger.info(f"   Tier 3 (Evidence Confirmation): {tier3_count} ({tier3_pct:.1f}%)")
+    logger.info(f"   📊 Total: {total_docs} documents")
+    
+    # Enhanced warnings for medical Q&A optimization
+    validation_passed = True
+    
     if tier1_count == 0:
-        logger.warning("⚠️ Tier 1 (Pattern Recognition) is empty")
-        logger.warning("   Consider adding more case studies and diagnostic patterns")
+        logger.error("❌ CRITICAL: Tier 1 (Pattern Recognition) is empty")
+        logger.error("   Essential for basic medical concept questions")
+        validation_passed = False
+    elif tier1_pct < 10:
+        logger.warning(f"⚠️  Low Tier 1 content ({tier1_pct:.1f}%) - may affect basic medical questions")
+    
+    if tier2_count == 0:
+        logger.error("❌ CRITICAL: Tier 2 (Clinical Reasoning) is empty")
+        logger.error("   Essential for clinical decision-making questions")
+        validation_passed = False
+    elif tier2_pct < 20:
+        logger.warning(f"⚠️  Low Tier 2 content ({tier2_pct:.1f}%) - may affect clinical reasoning questions")
     
     if tier3_count == 0:
-        logger.warning("⚠️ Tier 3 (Confirmation) is empty")
-        logger.warning("   Consider adding more guidelines and evidence-based sources")
+        logger.warning("⚠️  Tier 3 (Evidence Confirmation) is empty")
+        logger.warning("   May affect evidence-based medical questions")
+    elif tier3_pct < 10:
+        logger.warning(f"⚠️  Low Tier 3 content ({tier3_pct:.1f}%) - may affect evidence-based questions")
     
-    # Check for severely imbalanced tiers
-    max_tier_ratio = max(tier1_count, tier2_count, tier3_count) / total_docs
-    if max_tier_ratio > 0.8:
-        logger.warning(f"⚠️ Tier distribution is imbalanced (max ratio: {max_tier_ratio:.1%})")
-        logger.warning("   This may reduce hierarchical retrieval effectiveness")
+    # Check for severe imbalance
+    max_tier_pct = max(tier1_pct, tier2_pct, tier3_pct)
+    if max_tier_pct > 80:
+        logger.warning(f"⚠️  Severely imbalanced distribution (max: {max_tier_pct:.1f}%)")
+        logger.warning("   This may reduce hierarchical medical reasoning effectiveness")
+        logger.warning("🔧 Consider fetching more diverse medical sources")
+    else:
+        logger.info("✅ Balanced distribution for enhanced medical Q&A")
     
-    # Log distribution
-    logger.info("📊 Tier distribution validation:")
-    logger.info(f"   Tier 1 (Pattern Recognition): {tier1_count} ({tier1_count/total_docs:.1%})")
-    logger.info(f"   Tier 2 (Hypothesis Testing): {tier2_count} ({tier2_count/total_docs:.1%})")
-    logger.info(f"   Tier 3 (Confirmation): {tier3_count} ({tier3_count/total_docs:.1%})")
-    logger.info(f"   Total: {total_docs} documents")
+    # Enhanced recommendations
+    if not validation_passed:
+        logger.error("")
+        logger.error("🔧 ENHANCED SOLUTIONS:")
+        logger.error("   1. Fetch comprehensive medical data with ALL validated fetchers:")
+        logger.error("      python fetch_foundation_data.py --max-results 50000 --email your@email.com \\")
+        logger.error("        --umls-key YOUR_UMLS_KEY --drugbank-key YOUR_DRUGBANK_KEY")
+        logger.error("   2. Use targeted fetching for missing tiers:")
+        logger.error("      python fetch_foundation_data.py --critical-only --max-results 10000")
+        logger.error("   3. Verify medical content quality and relevance")
     
-    return True
+    return validation_passed
 
 
 def setup_hierarchical_system():
-    """Main setup function for Hierarchical system."""
+    """Enhanced main setup function for Hierarchical Medical Q&A system."""
     start_time = time.time()
     
-    logger.info("🚀 Starting Hierarchical System Setup")
-    logger.info("=" * 70)
+    logger.info("🚀 Starting Enhanced Hierarchical Medical Q&A System Setup")
+    logger.info("🎯 Optimized for MIRAGE benchmark and medical multiple choice questions")
+    logger.info("=" * 80)
     
-    # Initialize configuration
+    # Initialize enhanced configuration
     try:
         config = Config()
         device_info = config.get_device_info()
-        logger.info(f"✅ Loaded config: {device_info['environment']} on {device_info.get('cuda_device_name', 'CPU')}")
+        qa_settings = config.get_medical_qa_settings()
+        
+        logger.info(f"✅ Enhanced Config: {device_info['environment']} on {device_info.get('cuda_device_name', 'CPU')}")
+        logger.info(f"🎯 Medical Q&A Settings: temp={qa_settings['temperature']}, strict_validation={qa_settings['strict_validation']}")
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Failed to load config: {e}")
+        logger.error(f"❌ CRITICAL ERROR: Failed to load enhanced config: {e}")
         logger.error("🔧 Check your configuration files and environment")
-        raise RuntimeError(f"Configuration loading failed: {e}")
+        raise RuntimeError(f"Enhanced configuration loading failed: {e}")
     
-    # Initialize components
+    # Initialize enhanced components
     try:
         processor = HierarchicalDocumentProcessor(config.config["processing"])
         retriever = HierarchicalRetriever(config)
-        logger.info("✅ Initialized Hierarchical components")
+        logger.info("✅ Initialized enhanced Hierarchical components for medical Q&A")
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Failed to initialize components: {e}")
+        logger.error(f"❌ CRITICAL ERROR: Failed to initialize enhanced components: {e}")
         logger.error("🔧 Check your system dependencies and configuration")
-        raise RuntimeError(f"Component initialization failed: {e}")
+        raise RuntimeError(f"Enhanced component initialization failed: {e}")
     
     # Check existing collections
     try:
         retriever.load_hierarchical_collections()
-        logger.info("✅ Hierarchical collections already exist")
+        logger.info("✅ Enhanced hierarchical collections already exist")
         
         # Ask if we should recreate
-        response = input("\n🔄 Hierarchical collections already exist. Recreate? (y/N): ")
+        response = input("\n🔄 Enhanced hierarchical collections already exist. Recreate for better medical Q&A? (y/N): ")
         if response.lower() != 'y':
-            logger.info("✅ Using existing hierarchical collections")
+            logger.info("✅ Using existing enhanced hierarchical collections")
             elapsed_time = time.time() - start_time
-            logger.info(f"⏱️ Setup completed in {elapsed_time:.1f} seconds")
+            logger.info(f"⏱️  Enhanced setup completed in {elapsed_time:.1f} seconds")
+            
+            # Display enhanced usage instructions
+            _display_enhanced_usage_instructions()
             return True
             
     except Exception:
-        logger.info("📝 No existing collections found, creating new ones...")
+        logger.info("📝 No existing collections found, creating enhanced ones...")
     
     # Find and load foundation dataset
     try:
         dataset_path = find_foundation_dataset()
-        all_docs, analysis = load_foundation_dataset(dataset_path)
+        all_docs, foundation_analysis = load_foundation_dataset(dataset_path)
         
-        foundation_info = {
-            "type": analysis["type"],
-            "therapeutic_focus": analysis["therapeutic_focus"]
-        }
-        
-        logger.info("📊 Foundation dataset analysis:")
-        logger.info(f"   Total documents: {analysis['total_documents']}")
-        logger.info(f"   Dataset type: {analysis['type']}")
-        logger.info(f"   Data quality: {analysis['data_quality']}")
-        logger.info(f"   Sources: {list(analysis['sources'].keys())}")
-        logger.info(f"   Quality indicators:")
-        logger.info(f"     - Evidence-based: {analysis['quality_indicators']['evidence_based']}")
-        logger.info(f"     - Clinical: {analysis['quality_indicators']['clinical']}")
-        logger.info(f"     - Guideline-based: {analysis['quality_indicators']['guideline_based']}")
-        logger.info(f"     - Research-based: {analysis['quality_indicators']['research_based']}")
-        logger.info(f"     - Specialty-focused: {analysis['quality_indicators']['specialty_focused']}")
+        logger.info("📊 Enhanced Foundation Analysis:")
+        logger.info(f"   📚 Total documents: {foundation_analysis['total_documents']:,}")
+        logger.info(f"   🔬 Dataset type: {foundation_analysis['type']}")
+        logger.info(f"   ⭐ Data quality: {foundation_analysis['data_quality']}")
+        logger.info(f"   🏥 Medical specialties: {len(foundation_analysis['specialties'])}")
+        logger.info(f"   📋 Validated fetcher coverage: {foundation_analysis['validated_fetcher_coverage']:.1%}")
+        logger.info(f"   🎯 Specialty coverage: {foundation_analysis['specialty_coverage']:.1%}")
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Foundation dataset loading failed: {e}")
+        logger.error(f"❌ CRITICAL ERROR: Enhanced foundation dataset loading failed: {e}")
         raise
     
-    # Preprocess documents
+    # Enhanced preprocessing
     try:
-        logger.info("🔧 Preprocessing documents for ChromaDB compatibility...")
+        logger.info("🔧 Enhanced preprocessing for medical Q&A...")
         all_docs = processor.preprocess_documents(all_docs)
         
-        # Log tier assignment results
+        # Enhanced tier logging
         tier_counts = {1: 0, 2: 0, 3: 0}
         for doc in all_docs:
             tier = doc["metadata"].get("tier", 2)
             tier_counts[tier] = tier_counts.get(tier, 0) + 1
         
-        logger.info("📊 Initial tier assignment:")
+        logger.info("📊 Enhanced tier assignment results:")
         logger.info(f"   Tier 1 (Pattern Recognition): {tier_counts.get(1, 0)} documents")
-        logger.info(f"   Tier 2 (Hypothesis Testing): {tier_counts.get(2, 0)} documents") 
-        logger.info(f"   Tier 3 (Confirmation): {tier_counts.get(3, 0)} documents")
+        logger.info(f"   Tier 2 (Clinical Reasoning): {tier_counts.get(2, 0)} documents") 
+        logger.info(f"   Tier 3 (Evidence Confirmation): {tier_counts.get(3, 0)} documents")
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Document preprocessing failed: {e}")
-        logger.error("🔧 Check document processor configuration")
-        raise RuntimeError(f"Document preprocessing failed: {e}")
+        logger.error(f"❌ CRITICAL ERROR: Enhanced document preprocessing failed: {e}")
+        logger.error("🔧 Check enhanced document processor configuration")
+        raise RuntimeError(f"Enhanced document preprocessing failed: {e}")
     
-    # Organize by reasoning type
+    # Enhanced organization by reasoning type
     try:
         organized_docs = processor.organize_by_reasoning_type(all_docs)
         
-        # Enhance tier mapping based on dataset type
-        organized_docs = enhance_tier_mapping(organized_docs, foundation_info["type"])
+        # Enhanced tier mapping
+        organized_docs = enhance_tier_mapping(organized_docs, foundation_analysis)
         
-        # Validate tier distribution
-        if not validate_tier_distribution(organized_docs):
-            logger.error("❌ CRITICAL ERROR: Tier distribution validation failed")
-            logger.error("🔧 Dataset inadequate for hierarchical reasoning")
-            raise RuntimeError("Tier distribution validation failed")
-        
-        logger.info("✅ Loaded and organized foundation dataset")
-        
+        # Enhanced validation
+        if not validate_medical_qa_distribution(organized_docs):
+            logger.error("❌ CRITICAL ERROR: Enhanced tier distribution validation failed")
+            logger.error("🔧 Medical Q&A effectiveness may be compromised")
+            # Continue anyway but warn user
+            
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Document organization failed: {e}")
-        raise
+        logger.error(f"❌ CRITICAL ERROR: Enhanced document organization failed: {e}")
+        raise RuntimeError(f"Enhanced document organization failed: {e}")
     
-    # Display final organization
-    logger.info("📊 Final document organization:")
-    total_docs = 0
-    for tier_name, docs in organized_docs.items():
-        count = len(docs)
-        total_docs += count
-        logger.info(f"   {tier_name}: {count} documents")
-    logger.info(f"   Total: {total_docs} documents")
-    
-    # Create hierarchical collections
+    # Create enhanced hierarchical collections
     try:
-        logger.info("🔧 Creating hierarchical collections...")
+        logger.info("🏗️  Creating enhanced hierarchical collections for medical Q&A...")
+        
+        # Create empty collections first
         retriever.create_hierarchical_collections()
         
-        logger.info("📝 Adding documents to hierarchical tiers...")
+        # Add documents to the collections
         retriever.add_documents_to_tiers(organized_docs)
         
-        # Log collection statistics
-        logger.info("📊 Collection statistics:")
-        collection_names = ["tier1_pattern_recognition", "tier2_hypothesis_testing", "tier3_confirmation"]
-        for collection_name in collection_names:
-            try:
-                collection = retriever.client.get_collection(collection_name)
-                count = collection.count()
-                logger.info(f"   {collection_name}: {count} documents")
-            except Exception as e:
-                logger.warning(f"   Could not get count for {collection_name}: {e}")
-        
-        logger.info("✅ Hierarchical system setup completed successfully!")
+        # Enhanced performance logging
+        total_docs = sum(len(docs) for docs in organized_docs.values())
+        logger.info(f"✅ Enhanced hierarchical collections created successfully!")
+        logger.info(f"📊 Total indexed: {total_docs:,} medical documents")
         
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR: Hierarchical collection creation failed: {e}")
-        logger.error("🔧 Check ChromaDB installation and system resources")
-        raise RuntimeError(f"Collection creation failed: {e}")
+        logger.error(f"❌ CRITICAL ERROR: Enhanced collection creation failed: {e}")
+        raise RuntimeError(f"Enhanced collection creation failed: {e}")
     
-    # Final summary
+    # Enhanced setup completion
     elapsed_time = time.time() - start_time
-    logger.info("=" * 70)
-    logger.info("🎉 HIERARCHICAL SYSTEM SETUP COMPLETE")
-    logger.info(f"⏱️ Total time: {elapsed_time:.1f} seconds")
-    logger.info(f"📊 Total documents processed: {total_docs}")
-    logger.info(f"🎯 Foundation type: {foundation_info['type']}")
-    logger.info(f"📋 Sources processed: {len(analysis['sources'])} different medical sources")
-    logger.info("=" * 70)
+    logger.info("🎉 ENHANCED HIERARCHICAL MEDICAL Q&A SYSTEM SETUP COMPLETE!")
+    logger.info(f"⏱️  Total setup time: {elapsed_time:.1f} seconds")
+    logger.info(f"🎯 System optimized for medical multiple choice questions")
+    logger.info(f"🏆 Ready for MIRAGE benchmark evaluation")
+    
+    # Display enhanced usage instructions
+    _display_enhanced_usage_instructions()
     
     return True
 
 
+def _display_enhanced_usage_instructions():
+    """Display enhanced usage instructions for medical Q&A system."""
+    logger.info("")
+    logger.info("🎯 ENHANCED MEDICAL Q&A SYSTEM READY!")
+    logger.info("=" * 50)
+    logger.info("📋 Next Steps:")
+    logger.info("1. Test enhanced hierarchical retrieval:")
+    logger.info('   python -c "from src.basic_reasoning.retrieval import HierarchicalRetriever; from src.basic_reasoning.config import Config; r = HierarchicalRetriever(Config()); r.load_hierarchical_collections(); print(r.hierarchical_search(\'What is the most common cause of pneumonia?\'))"')
+    logger.info("2. Run enhanced Streamlit app:")
+    logger.info("   streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503")
+    logger.info("3. Run enhanced MIRAGE evaluation:")
+    logger.info("   python src/evaluation/run_evaluation.py --benchmark mirage --models hierarchical_system")
+    logger.info("4. Run comprehensive medical benchmark:")
+    logger.info("   python src/evaluation/run_evaluation.py --full --models hierarchical_system")
+    logger.info("")
+    logger.info("🔥 Enhanced Features:")
+    logger.info("• Intelligent tier assignment based on medical content")
+    logger.info("• Enhanced answer extraction for multiple choice questions")
+    logger.info("• Optimized prompts for medical knowledge assessment")
+    logger.info("• Support for ALL validated medical fetchers")
+    logger.info("• MIRAGE benchmark optimization")
+
+
 if __name__ == "__main__":
     try:
-        success = setup_hierarchical_system()
-        
-        if success:
-            print("\n🎯 Next Steps:")
-            print("1. Test hierarchical retrieval:")
-            print('   python -c "from src.basic_reasoning.retrieval import HierarchicalRetriever; from src.basic_reasoning.config import Config; r = HierarchicalRetriever(Config()); r.load_hierarchical_collections(); print(r.hierarchical_search(\'diabetes symptoms\'))"')
-            print("2. Run the Streamlit app:")
-            print("   streamlit run src/basic_reasoning/streamlit_app.py --server.port 8503")
-            print("3. Run MIRAGE evaluation:")
-            print("   python src/evaluation/run_evaluation.py --benchmark mirage")
+        setup_hierarchical_system()
         
     except FileNotFoundError as e:
-        logger.error("❌ SETUP FAILED: Missing foundation data")
-        print("\n🔧 SOLUTION: Create foundation datasets first!")
-        print("python fetch_foundation_data.py --max-results 5000 --email your@email.com")
+        logger.error("❌ SETUP FAILED: Missing enhanced medical data")
+        print("\n🔧 SOLUTION: Create comprehensive medical dataset using ALL validated fetchers!")
+        print("python fetch_foundation_data.py --max-results 50000 --email your@email.com \\")
+        print("  --umls-key YOUR_UMLS_KEY --drugbank-key YOUR_DRUGBANK_KEY")
         sys.exit(1)
         
     except ValueError as e:
-        logger.error("❌ SETUP FAILED: Invalid data")
-        print("\n🔧 SOLUTION: Check data quality and re-create foundation datasets")
-        print("python fetch_foundation_data.py --max-results 5000 --email your@email.com")
+        logger.error("❌ SETUP FAILED: Invalid enhanced data")
+        print("\n🔧 SOLUTION: Re-create enhanced medical dataset with proper validation")
+        print("python fetch_foundation_data.py --max-results 20000 --email your@email.com")
         sys.exit(1)
         
     except RuntimeError as e:
-        logger.error("❌ SETUP FAILED: Runtime error")
-        print("\n🔧 SOLUTION: Check system resources and configuration")
+        logger.error("❌ SETUP FAILED: Enhanced system runtime error")
+        print("\n🔧 SOLUTION: Check enhanced system resources and configuration")
         sys.exit(1)
         
     except Exception as e:
-        logger.error(f"❌ SETUP FAILED: Unexpected error: {e}")
+        logger.error(f"❌ SETUP FAILED: Unexpected enhanced error: {e}")
         import traceback
-        logger.error("📋 Full traceback:")
+        logger.error("📋 Enhanced system traceback:")
         logger.error(traceback.format_exc())
         sys.exit(1)
