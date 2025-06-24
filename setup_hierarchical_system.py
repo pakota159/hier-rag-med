@@ -23,6 +23,44 @@ from src.basic_reasoning.processing import HierarchicalDocumentProcessor
 from src.basic_reasoning.retrieval import HierarchicalRetriever
 
 
+def install_missing_packages():
+    """Install missing packages automatically."""
+    import subprocess
+    import sys
+    
+    missing_packages = []
+    
+    try:
+        import sentence_transformers
+    except ImportError:
+        missing_packages.append("sentence-transformers>=2.2.2")
+    
+    try:
+        import transformers
+    except ImportError:
+        missing_packages.append("transformers>=4.35.0")
+    
+    try:
+        import safetensors
+    except ImportError:
+        missing_packages.append("safetensors>=0.4.0")
+    
+    if missing_packages:
+        logger.warning(f"🔧 Installing missing packages: {missing_packages}")
+        for package in missing_packages:
+            try:
+                logger.info(f"   📦 Installing {package}...")
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            except subprocess.CalledProcessError as e:
+                logger.error(f"❌ Failed to install {package}: {e}")
+                return False
+        
+        logger.info("✅ Missing packages installed successfully")
+        return True
+    
+    return True
+
+
 def validate_medical_embedding_setup() -> bool:
     """Validate that the system can load the medical embedding model with safetensors support."""
     logger.info("🏥 Validating medical embedding setup...")
@@ -38,12 +76,23 @@ def validate_medical_embedding_setup() -> bool:
         
         # Test model loading with safetensors preference
         logger.info(f"   🧠 Testing model loading: {model_name}")
-        model = AutoModel.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            trust_remote_code=False,
-            use_safetensors=True  # Prefer safetensors format
-        )
+        
+        # Try with safetensors first
+        try:
+            model = AutoModel.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                trust_remote_code=False,
+                use_safetensors=True  # Prefer safetensors format
+            )
+        except Exception as safetensors_error:
+            # Fallback to standard loading
+            logger.warning("⚠️ Safetensors loading failed, trying standard loading...")
+            model = AutoModel.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                trust_remote_code=False
+            )
         
         # Test a simple encoding
         test_text = "The patient presents with acute myocardial infarction."
@@ -148,6 +197,15 @@ def check_system_requirements() -> Dict[str, bool]:
         logger.info(f"   ✅ Sentence Transformers {sentence_transformers.__version__}")
     except ImportError:
         logger.warning("   ⚠️ Sentence Transformers not installed")
+        # Try to install it automatically
+        logger.info("   🔧 Attempting to install sentence-transformers...")
+        if install_missing_packages():
+            try:
+                import sentence_transformers
+                requirements["sentence_transformers"] = True
+                logger.info(f"   ✅ Sentence Transformers {sentence_transformers.__version__} installed successfully")
+            except ImportError:
+                logger.error("   ❌ Failed to import sentence-transformers after installation")
     
     try:
         import chromadb
@@ -165,6 +223,17 @@ def check_system_requirements() -> Dict[str, bool]:
     else:
         failed = [k for k, v in requirements.items() if not v and k in core_requirements]
         logger.warning(f"⚠️ Missing requirements: {failed}")
+        
+        # Provide installation instructions
+        if "sentence_transformers" in failed:
+            logger.error("💡 To install sentence-transformers:")
+            logger.error("   pip install sentence-transformers>=2.2.2")
+        if "transformers" in failed:
+            logger.error("💡 To install transformers:")
+            logger.error("   pip install transformers>=4.35.0")
+        if "chromadb" in failed:
+            logger.error("💡 To install chromadb:")
+            logger.error("   pip install chromadb>=0.4.22")
     
     return requirements
 
@@ -266,12 +335,30 @@ def setup_enhanced_hierarchical_system():
     
     start_time = time.time()
     
-    # Check system requirements
+    # Check system requirements with auto-installation
     requirements = check_system_requirements()
     core_reqs = ["torch", "transformers", "sentence_transformers", "chromadb", "sufficient_memory", "device_support"]
     if not all(requirements[req] for req in core_reqs):
-        logger.error("❌ Core system requirements not met. Please install missing packages.")
-        return False
+        logger.error("❌ Core system requirements not met.")
+        
+        # Try to install missing packages automatically
+        missing_reqs = [req for req in core_reqs if not requirements[req]]
+        if any(req in missing_reqs for req in ["sentence_transformers", "transformers"]):
+            logger.info("🔧 Attempting to install missing packages...")
+            if install_missing_packages():
+                # Re-check requirements after installation
+                requirements = check_system_requirements()
+                if all(requirements[req] for req in core_reqs):
+                    logger.info("✅ All requirements now satisfied after installation")
+                else:
+                    logger.error("❌ Some requirements still not met after installation attempt")
+                    return False
+            else:
+                logger.error("❌ Failed to install missing packages")
+                return False
+        else:
+            logger.error("❌ Please install missing packages manually")
+            return False
     
     # Warn about PyTorch version but continue
     if not requirements["torch_version"]:
