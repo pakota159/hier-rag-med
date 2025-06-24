@@ -1,6 +1,5 @@
-# HierRAGMed Evaluation Configuration - Main Fallback
-# Universal configuration that adapts to different environments
-# Falls back from gpu_runpod_config.yaml when specific settings unavailable
+# HierRAGMed Evaluation Configuration - Updated for Medical Embeddings
+# Universal configuration adapted for Microsoft BiomedNLP-PubMedBERT
 
 # Platform identification
 platform: "Generic"
@@ -13,27 +12,43 @@ data_dir: "data"
 cache_dir: "evaluation/cache"
 logs_dir: "evaluation/logs"
 
-# Adaptive model configurations
+# Enhanced model configurations with medical embedding
 models:
   embedding:
-    name: "sentence-transformers/all-MiniLM-L6-v2"
+    name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+    fallback_name: "sentence-transformers/all-MiniLM-L6-v2"
     device: "auto"  # Auto-detect: cuda > mps > cpu
-    batch_size: 32   # Conservative default (adaptive)
+    batch_size: 16   # Conservative default (adaptive)
     max_length: 512
     normalize_embeddings: true
     trust_remote_code: false
+    use_medical_embedding: true
     
-    # Device-specific overrides
+    # Model loading optimizations
+    model_kwargs:
+      torch_dtype: "float16"  # Will be adjusted per device
+      attn_implementation: "eager"
+    
+    # Device-specific overrides for medical model
     device_settings:
       cuda:
-        batch_size: 128
+        batch_size: 32
         mixed_precision: true
+        model_kwargs:
+          torch_dtype: "float16"
+          attn_implementation: "flash_attention_2"
       mps:
-        batch_size: 16
-        mixed_precision: false
-      cpu:
         batch_size: 8
         mixed_precision: false
+        model_kwargs:
+          torch_dtype: "float16"
+          attn_implementation: "eager"
+      cpu:
+        batch_size: 4
+        mixed_precision: false
+        model_kwargs:
+          torch_dtype: "float32"
+          attn_implementation: "eager"
     
   llm:
     name: "mistral:7b-instruct"
@@ -65,6 +80,11 @@ models:
     mixed_precision: false  # Conservative default
     gradient_checkpointing: false
     
+    # KG-specific embedding config
+    embedding:
+      name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+      use_medical_embedding: true
+    
   hierarchical_system:
     enabled: true
     device: "auto"
@@ -72,6 +92,11 @@ models:
     compile_model: false
     mixed_precision: false
     gradient_checkpointing: false
+    
+    # Hierarchical-specific embedding config
+    embedding:
+      name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+      use_medical_embedding: true
 
 # Performance configuration (adaptive)
 performance:
@@ -82,356 +107,57 @@ performance:
   
   # Conservative defaults
   use_gpu_acceleration: false  # Will be enabled if GPU detected
-  mixed_precision: false       # Will be enabled for CUDA
-  compile_models: false        # Will be enabled for PyTorch 2.0+
+  mixed_precision: false
+  compile_models: false
   memory_efficient: true
   
-  # Memory management (conservative)
-  gpu_memory_fraction: 0.7     # Conservative for compatibility
-  memory_growth: true
-  allow_memory_growth: true
-  
-  # Processing
-  parallel_processing: false   # Conservative default
-  max_workers: 2              # Conservative default
-  prefetch_factor: 1          # Conservative default
-  
-  # Caching
-  enable_model_cache: true
-  enable_result_cache: true
+  # Medical model specific optimizations
+  medical_model_optimizations:
+    enable_gradient_checkpointing: false  # For inference
+    use_attention_optimization: true
+    enable_model_parallelism: false
 
-# Benchmark configurations (conservative settings)
+# Evaluation specific settings
+evaluation:
+  # Medical embedding optimizations
+  enable_medical_validation: true
+  check_medical_terminology: true
+  validate_clinical_accuracy: true
+  
+  # Similarity computation for medical content
+  similarity_model: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+  fallback_similarity_model: "sentence-transformers/all-MiniLM-L6-v2"
+  
+  # Evaluation parameters
+  batch_size: 8  # Conservative for medical model
+  max_workers: 2
+  timeout_per_question: 120  # Increased for medical processing
+
+# Benchmark configurations
 benchmarks:
   mirage:
     enabled: true
-    name: "MIRAGE"
-    data_path: "data/benchmarks/mirage"
-    cache_file: "mirage_benchmark.json"
-    
-    # Conservative settings
-    batch_size: 16
-    max_samples: null
-    quick_eval_samples: 200  # Smaller for quick testing
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "f1", "precision", "recall"]
-    target_accuracy: 0.70  # Conservative target
-    
-    # Processing settings
-    prefetch_batches: 1
-    num_workers: 2
-    pin_memory: false  # Conservative default
-    
-    # Device-specific overrides
-    device_overrides:
-      cuda:
-        batch_size: 32
-        num_workers: 4
-        pin_memory: true
-      mps:
-        batch_size: 8
-        num_workers: 2
-        pin_memory: false
-      cpu:
-        batch_size: 4
-        num_workers: 1
-        pin_memory: false
+    medical_focus: true
+    use_medical_embedding: true
   
-  medreason:
+  med_qa:
     enabled: true
-    name: "MedReason"
-    data_path: "data/benchmarks/medreason"
-    cache_file: "medreason_benchmark.json"
-    
-    # Conservative settings
-    batch_size: 8
-    max_samples: null
-    quick_eval_samples: 200
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "reasoning_score", "consistency"]
-    target_accuracy: 0.65
-    
-    # Processing settings
-    prefetch_batches: 1
-    num_workers: 2
-    pin_memory: false
-    
-    # Device-specific overrides
-    device_overrides:
-      cuda:
-        batch_size: 16
-        num_workers: 4
-        pin_memory: true
-      mps:
-        batch_size: 4
-        num_workers: 2
-        pin_memory: false
-      cpu:
-        batch_size: 2
-        num_workers: 1
-        pin_memory: false
+    medical_focus: true
+    use_medical_embedding: true
   
-  pubmedqa:
+  pub_med_qa:
     enabled: true
-    name: "PubMedQA"
-    data_path: "data/benchmarks/pubmedqa"
-    cache_file: "pubmedqa_benchmark.json"
-    
-    # Conservative settings
-    batch_size: 16
-    max_samples: null
-    quick_eval_samples: 200
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "bleu", "rouge"]
-    target_accuracy: 0.70
-    
-    # Processing settings
-    prefetch_batches: 1
-    num_workers: 2
-    pin_memory: false
-    
-    # Device-specific overrides
-    device_overrides:
-      cuda:
-        batch_size: 64
-        num_workers: 6
-        pin_memory: true
-      mps:
-        batch_size: 8
-        num_workers: 2
-        pin_memory: false
-      cpu:
-        batch_size: 4
-        num_workers: 1
-        pin_memory: false
-  
-  msmarco:
-    enabled: true
-    name: "MS MARCO"
-    data_path: "data/benchmarks/msmarco"
-    cache_file: "msmarco_benchmark.json"
-    
-    # Conservative settings
-    batch_size: 32
-    max_samples: null
-    quick_eval_samples: 500
-    
-    # Evaluation parameters
-    metrics: ["ndcg@10", "map", "mrr", "recall@100"]
-    target_ndcg: 0.30  # Conservative target
-    
-    # Processing settings
-    prefetch_batches: 1
-    num_workers: 2
-    pin_memory: false
-    
-    # Device-specific overrides
-    device_overrides:
-      cuda:
-        batch_size: 128
-        num_workers: 8
-        pin_memory: true
-      mps:
-        batch_size: 16
-        num_workers: 2
-        pin_memory: false
-      cpu:
-        batch_size: 8
-        num_workers: 1
-        pin_memory: false
-
-# Evaluation orchestration
-evaluation:
-  # Execution strategy (conservative)
-  parallel_benchmarks: false
-  parallel_models: false
-  
-  # Progress tracking
-  enable_progress_tracking: true
-  save_intermediate_results: true
-  checkpoint_frequency: 1  # More frequent for safety
-  
-  # Error handling
-  continue_on_error: true
-  max_retries: 2  # Conservative
-  retry_delay: 3  # seconds
-  
-  # Timeouts (generous for slower hardware)
-  benchmark_timeout: 7200   # 2 hours
-  model_timeout: 3600       # 1 hour
-  
-  # Memory management
-  clear_cache_between_benchmarks: true
-  clear_cache_between_models: true
-  force_garbage_collection: true
+    medical_focus: true
+    use_medical_embedding: true
 
 # Logging configuration
 logging:
   level: "INFO"
-  format: "%(asctime)s | %(levelname)-8s | %(message)s"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | MedEval | {message}"
+  rotation: "1 day"
+  retention: "7 days"
   
-  # File logging
-  log_to_file: true
-  log_file: "evaluation/logs/evaluation.log"
-  max_log_size: "50MB"  # Smaller for compatibility
-  backup_count: 3
-  
-  # Console logging
-  log_to_console: true
-  console_level: "INFO"
-  
-  # Performance logging (optional)
-  log_gpu_stats: false     # Will be enabled if GPU detected
-  gpu_stats_interval: 60   # Less frequent
-  log_timing: true
-  log_memory_usage: false  # Conservative default
-  log_batch_sizes: false   # Conservative default
-
-# Monitoring and metrics
-monitoring:
-  # GPU monitoring (conditional)
-  enable_gpu_monitoring: false  # Will be enabled if GPU detected
-  gpu_poll_interval: 30         # Less frequent
-  log_gpu_memory: false
-  log_gpu_utilization: false
-  
-  # Performance monitoring
-  track_inference_time: true
-  track_memory_usage: false
-  track_throughput: true
-  
-  # Alerts (disabled by default)
-  enable_alerts: false
-  memory_threshold: 0.8
-  time_threshold: 10800  # 3 hours
-
-# Output configuration
-output:
-  # Results format
-  save_format: "json"
-  include_metadata: true
-  include_gpu_stats: false  # Will be enabled if GPU detected
-  include_timing_data: true
-  
-  # Compression (disabled by default for compatibility)
-  compress_results: false
-  compression_level: 3
-  
-  # Backup
-  create_backups: true
-  backup_count: 2
-  
-  # Reports
-  generate_html_report: true
-  generate_pdf_report: false
-  include_visualizations: true
-
-# Environment-specific settings
-environments:
-  # Local development
-  local:
-    data_dir: "data"
-    results_dir: "evaluation/results"
-    enable_debug: true
-    quick_eval_default: true
-    
-  # Docker/Container
-  docker:
-    data_dir: "/app/data"
-    results_dir: "/app/evaluation/results"
-    enable_debug: false
-    auto_detect_device: true
-    
-  # Cloud platforms
-  cloud:
-    data_dir: "/workspace/data"
-    results_dir: "/workspace/evaluation/results"
-    enable_debug: false
-    auto_optimize_batch_size: true
-
-# Device auto-detection logic
-device_detection:
-  # Detection order
-  priority: ["cuda", "mps", "cpu"]
-  
-  # Requirements check
-  check_memory: true
-  min_gpu_memory: 4  # GB
-  check_cuda_version: true
-  min_cuda_version: "11.0"
-  
-  # Fallback behavior
-  fallback_to_cpu: true
-  warn_on_fallback: true
-  
-  # Auto-optimization
-  auto_adjust_batch_size: true
-  auto_enable_mixed_precision: true
-  auto_enable_compilation: true
-
-# Development and debugging
-debug:
-  # Debug modes
-  enable_debug: false
-  verbose_logging: false
-  profile_memory: false
-  profile_time: false
-  
-  # Testing
-  dry_run: false
-  sample_data_only: false
-  skip_model_loading: false
-  quick_eval_default: false
-  
-  # Device debugging
-  check_cuda_errors: false
-  log_cuda_calls: false
-  memory_debug: false
-
-# Streamlit configuration (universal)
-streamlit:
-  # Server settings
-  server:
-    address: "localhost"  # Default for local
-    port: 8501
-    enableXsrfProtection: true
-    enableCORS: false
-    
-  # UI settings
-  theme:
-    base: "light"  # Default theme
-    primaryColor: "#FF6B6B"
-    backgroundColor: "#FFFFFF"
-    secondaryBackgroundColor: "#F0F2F6"
-    textColor: "#262730"
-    
-  # Performance
-  maxUploadSize: 100  # MB (conservative)
-  maxMessageSize: 100  # MB (conservative)
-  
-  # Features
-  show_gpu_metrics: false  # Will be enabled if GPU detected
-  refresh_interval: 10     # seconds (less frequent)
-  enable_real_time_monitoring: false
-
-# Compatibility settings
-compatibility:
-  # Python version requirements
-  min_python_version: "3.8"
-  
-  # Package versions
-  torch_min_version: "1.12.0"
-  transformers_min_version: "4.20.0"
-  streamlit_min_version: "1.20.0"
-  
-  # Feature toggles for older systems
-  enable_torch_compile: false  # Will be enabled for PyTorch 2.0+
-  enable_mixed_precision: false  # Will be enabled for compatible hardware
-  enable_flash_attention: false  # Advanced feature
-  
-  # Graceful degradation
-  fallback_on_error: true
-  disable_advanced_features: false
-  warn_on_compatibility: true
+  # Medical evaluation specific logging
+  log_medical_validation: true
+  log_embedding_performance: true
+  log_device_utilization: true

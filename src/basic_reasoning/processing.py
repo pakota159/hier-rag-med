@@ -1,459 +1,537 @@
 """
-Enhanced Hierarchical Document Processing for Medical Q&A
-File: src/basic_reasoning/processing.py
+Enhanced Document Processing module for Basic Reasoning system.
+Updated to support Microsoft BiomedNLP-PubMedBERT medical embedding.
 
-Implements intelligent tier assignment based on medical content analysis
-and reasoning types for optimal multiple choice question answering.
+File: src/basic_reasoning/processing.py
 """
 
-from typing import Dict, List
-import json
 import re
+import json
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from loguru import logger
+import numpy as np
+from collections import defaultdict
+
+from .config import Config
 
 
 class HierarchicalDocumentProcessor:
-    """Enhanced document processor for hierarchical medical reasoning."""
+    """Enhanced document processor for medical hierarchical organization."""
 
-    def __init__(self, config: Dict):
-        """Initialize processor with enhanced medical content analysis."""
+    def __init__(self, config: Config):
+        """Initialize document processor with medical optimizations."""
         self.config = config
         
-        # Enhanced medical content classifiers
-        self.tier1_patterns = {
-            # Basic medical knowledge patterns
-            "definitions": [
-                "definition", "defined as", "refers to", "is a", "means",
-                "terminology", "called", "known as", "term for"
-            ],
-            "anatomy": [
-                "anatomy", "structure", "located", "consists of", "composed of",
-                "organ", "tissue", "cell", "bone", "muscle", "nerve"
-            ],
-            "physiology": [
-                "function", "works by", "process", "mechanism", "physiology",
-                "normal", "homeostasis", "regulation", "metabolism"
-            ],
-            "basic_concepts": [
-                "classification", "types of", "categories", "forms of",
-                "variants", "subtypes", "kinds of", "classes"
-            ],
-            "symptoms_signs": [
-                "symptom", "sign", "presentation", "manifests", "appears as",
-                "characterized by", "typical", "common", "usual"
-            ]
-        }
+        # Processing configurations
+        processing_config = config.config["processing"]
+        self.chunk_size = processing_config["chunk_size"]
+        self.chunk_overlap = processing_config["chunk_overlap"]
+        self.min_content_length = processing_config.get("min_content_length", 50)
+        self.enable_medical_entity_recognition = processing_config.get("enable_medical_entity_recognition", True)
+        self.preserve_medical_terminology = processing_config.get("preserve_medical_terminology", True)
         
-        self.tier2_patterns = {
-            # Clinical reasoning patterns
-            "pathophysiology": [
-                "pathophysiology", "pathogenesis", "develops when", "caused by",
-                "mechanism of disease", "how disease", "process of"
-            ],
-            "diagnostic_criteria": [
-                "diagnosis", "diagnostic criteria", "criteria for", "diagnosed when",
-                "features include", "characterized by", "findings"
-            ],
-            "clinical_reasoning": [
-                "differential diagnosis", "consider", "rule out", "distinguish",
-                "likely", "probable", "most common", "typically"
-            ],
-            "treatment_principles": [
-                "treatment", "management", "therapy", "approach", "protocol",
-                "guidelines recommend", "first-line", "standard care"
-            ],
-            "disease_mechanisms": [
-                "leads to", "results in", "causes", "mechanism", "pathway",
-                "cascade", "triggers", "initiates", "progression"
-            ]
-        }
+        # Target tier distribution
+        self.target_distribution = processing_config.get("target_tier_distribution", {
+            "tier1": 0.30,
+            "tier2": 0.40,
+            "tier3": 0.30
+        })
         
-        self.tier3_patterns = {
-            # Evidence-based medicine patterns
-            "guidelines": [
-                "guideline", "recommendation", "consensus", "standard",
-                "protocol", "evidence-based", "best practice"
-            ],
-            "research_evidence": [
-                "study showed", "research indicates", "evidence suggests",
-                "meta-analysis", "systematic review", "clinical trial"
-            ],
-            "clinical_outcomes": [
-                "outcome", "prognosis", "survival", "mortality", "efficacy",
-                "effectiveness", "results", "response rate"
-            ],
-            "authoritative_sources": [
-                "who", "fda", "cdc", "aha", "acc", "esc", "acog", "idsa",
-                "guidelines", "consensus", "statement", "position"
-            ],
-            "evidence_levels": [
-                "grade a", "grade b", "level 1", "level 2", "strong evidence",
-                "moderate evidence", "high quality", "randomized"
-            ]
+        # Medical terminology patterns
+        self.medical_patterns = self._compile_medical_patterns()
+        
+        # Tier classification rules
+        self.tier_rules = self._initialize_tier_rules()
+        
+        # Processing statistics
+        self.processing_stats = {
+            "total_processed": 0,
+            "tier_assignments": {"tier1": 0, "tier2": 0, "tier3": 0},
+            "failed_processing": 0,
+            "medical_entities_found": 0
+        }
+
+    def _compile_medical_patterns(self) -> Dict[str, re.Pattern]:
+        """Compile medical terminology patterns for classification."""
+        patterns = {
+            # Basic medical concepts (Tier 1)
+            "anatomy": re.compile(r'\b(?:anatomy|anatomical|structure|organ|tissue|cell|bone|muscle|nerve|blood|heart|lung|liver|kidney|brain|stomach)\b', re.IGNORECASE),
+            "physiology": re.compile(r'\b(?:physiology|physiological|function|normal|homeostasis|metabolism|circulation|respiration|digestion)\b', re.IGNORECASE),
+            "basic_terms": re.compile(r'\b(?:definition|basic|fundamental|introduction|overview|concept|principle)\b', re.IGNORECASE),
+            
+            # Clinical reasoning (Tier 2)
+            "clinical": re.compile(r'\b(?:clinical|diagnosis|diagnostic|differential|symptom|sign|presentation|examination|assessment|patient|case)\b', re.IGNORECASE),
+            "pathology": re.compile(r'\b(?:pathology|pathological|disease|disorder|condition|syndrome|infection|inflammation|lesion|abnormal)\b', re.IGNORECASE),
+            "treatment": re.compile(r'\b(?:treatment|therapy|therapeutic|management|medication|drug|surgery|procedure|intervention|care)\b', re.IGNORECASE),
+            
+            # Evidence-based medicine (Tier 3)
+            "research": re.compile(r'\b(?:study|trial|research|evidence|meta-analysis|systematic review|randomized|controlled|cohort|case-control)\b', re.IGNORECASE),
+            "guidelines": re.compile(r'\b(?:guideline|recommendation|consensus|protocol|standard|best practice|evidence-based|clinical practice)\b', re.IGNORECASE),
+            "outcomes": re.compile(r'\b(?:outcome|prognosis|mortality|morbidity|survival|efficacy|effectiveness|safety|adverse|complication)\b', re.IGNORECASE),
+            
+            # Medical specialties
+            "specialties": re.compile(r'\b(?:cardiology|pulmonology|gastroenterology|neurology|oncology|psychiatry|pediatrics|geriatrics|emergency|surgery)\b', re.IGNORECASE),
+            
+            # Medical procedures and tests
+            "procedures": re.compile(r'\b(?:biopsy|endoscopy|catheterization|intubation|ventilation|dialysis|transfusion|transplant)\b', re.IGNORECASE),
+            "diagnostics": re.compile(r'\b(?:x-ray|CT|MRI|ultrasound|echocardiogram|electrocardiogram|blood test|laboratory|imaging)\b', re.IGNORECASE)
+        }
+        return patterns
+
+    def _initialize_tier_rules(self) -> Dict[int, Dict]:
+        """Initialize tier classification rules."""
+        return {
+            1: {  # Basic medical knowledge
+                "primary_patterns": ["anatomy", "physiology", "basic_terms"],
+                "weight": 1.0,
+                "description": "Foundational medical knowledge, anatomy, basic concepts"
+            },
+            2: {  # Clinical reasoning
+                "primary_patterns": ["clinical", "pathology", "treatment", "specialties", "procedures", "diagnostics"],
+                "weight": 1.0,
+                "description": "Clinical reasoning, diagnosis, treatment, procedures"
+            },
+            3: {  # Evidence-based medicine
+                "primary_patterns": ["research", "guidelines", "outcomes"],
+                "weight": 1.0,
+                "description": "Evidence-based medicine, research, guidelines"
+            }
         }
 
     def preprocess_documents(self, documents: List[Dict]) -> List[Dict]:
-        """Enhanced preprocessing with intelligent tier assignment."""
+        """Preprocess documents with enhanced medical hierarchical organization."""
         logger.info(f"🔧 Enhanced preprocessing of {len(documents)} documents for medical Q&A")
         
+        if not documents:
+            return []
+        
         processed_docs = []
-        tier_stats = {"content_based": 0, "source_based": 0, "fallback": 0}
+        failed_count = 0
         
         for i, doc in enumerate(documents):
             try:
-                # Create unique document ID
-                doc_id = f"doc_{i:06d}"
-                
-                # Validate required fields
-                if "text" not in doc or not doc["text"]:
-                    continue
-                
-                if "metadata" not in doc:
-                    doc["metadata"] = {}
-                
-                # Convert text to string and validate
-                text = str(doc["text"]) if doc["text"] else ""
-                if len(text.strip()) < 50:  # Increased minimum length for medical content
-                    continue
-                
-                # Clean metadata for ChromaDB compatibility
-                clean_metadata = self._clean_metadata(doc["metadata"])
-                
-                # Enhanced tier assignment
-                tier, assignment_method = self._assign_medical_tier_enhanced(doc)
-                tier_stats[assignment_method] += 1
-                
-                # Determine medical specialty more accurately
-                specialty = self._determine_medical_specialty_enhanced(doc)
-                
-                processed_doc = {
-                    "text": text,
-                    "metadata": {
-                        **clean_metadata,
-                        "doc_id": doc_id,
-                        "tier": tier,
-                        "tier_chunk_id": f"tier{tier}_{i}",
-                        "medical_specialty": specialty,
-                        "assignment_method": assignment_method
-                    }
-                }
-                
-                processed_docs.append(processed_doc)
-                
+                processed_doc = self._process_single_document(doc, i)
+                if processed_doc:
+                    processed_docs.append(processed_doc)
+                    self.processing_stats["total_processed"] += 1
+                else:
+                    failed_count += 1
+                    
             except Exception as e:
-                logger.warning(f"Failed to process document {i}: {e}")
+                logger.warning(f"Failed to process document {i}: {str(e)}")
+                failed_count += 1
+                self.processing_stats["failed_processing"] += 1
                 continue
+            
+            # Progress logging
+            if (i + 1) % 1000 == 0:
+                logger.info(f"   📝 Processed {i + 1:,}/{len(documents):,} documents")
         
-        logger.info(f"✅ Enhanced preprocessing complete: {len(processed_docs)} documents")
-        logger.info(f"📊 Tier assignment methods: {tier_stats}")
+        # Apply tier balancing
+        processed_docs = self._balance_tier_distribution(processed_docs)
+        
+        # Log final statistics
+        self._log_processing_statistics(processed_docs, failed_count)
+        
         return processed_docs
 
-    def _assign_medical_tier_enhanced(self, doc: Dict) -> tuple[int, str]:
-        """Enhanced tier assignment with content analysis and balanced distribution."""
+    def _process_single_document(self, doc: Dict, doc_index: int) -> Optional[Dict]:
+        """Process a single document with medical enhancement."""
+        if not isinstance(doc, dict):
+            return None
+        
+        # Extract text content
+        text = self._extract_text_content(doc)
+        if not text or len(text.strip()) < self.min_content_length:
+            return None
+        
+        # Clean and normalize text
+        text = self._clean_text(text)
+        
+        # Extract metadata
         metadata = doc.get("metadata", {})
-        text = str(doc.get("text", "")).lower()
-        title = str(metadata.get("title", "")).lower()
+        if not isinstance(metadata, dict):
+            metadata = {}
         
-        combined_text = f"{title} {text}"
+        # Enhance metadata with medical information
+        metadata = self._enhance_metadata(metadata, text, doc_index)
         
-        # CONTENT-ONLY ANALYSIS (no source bias)
-        tier1_score = self._calculate_pattern_score(combined_text, self.tier1_patterns)
-        tier2_score = self._calculate_pattern_score(combined_text, self.tier2_patterns)
-        tier3_score = self._calculate_pattern_score(combined_text, self.tier3_patterns)
+        # Assign hierarchical tier
+        tier = self._assign_hierarchical_tier(text, metadata)
+        metadata["tier"] = tier
+        self.processing_stats["tier_assignments"][f"tier{tier}"] += 1
         
-        # Content-based assignment with balanced distribution
-        max_score = max(tier1_score, tier2_score, tier3_score)
+        # Extract medical entities if enabled
+        if self.enable_medical_entity_recognition:
+            medical_entities = self._extract_medical_entities(text)
+            metadata["medical_entities"] = medical_entities
+            if medical_entities:
+                self.processing_stats["medical_entities_found"] += 1
         
-        # If clear content-based classification exists
-        if max_score >= 2:
-            if tier1_score == max_score:
-                return self._balanced_tier_assignment(1), "content_based"
-            elif tier3_score == max_score:
-                return self._balanced_tier_assignment(3), "content_based"
-            else:
-                return self._balanced_tier_assignment(2), "content_based"
-        
-        # For unclear content, use balanced random assignment based on text characteristics
-        text_length = len(combined_text)
-        complexity_indicators = sum(1 for word in [
-            'pathophysiology', 'mechanism', 'etiology', 'diagnosis', 
-            'treatment', 'management', 'therapy', 'clinical', 'patient'
-        ] if word in combined_text)
-        
-        # Balanced assignment based on content characteristics
-        if text_length < 200 or any(word in combined_text for word in [
-            'definition', 'what is', 'overview', 'introduction', 'basic'
-        ]):
-            return self._balanced_tier_assignment(1), "content_analysis"
-        elif complexity_indicators >= 3 or any(word in combined_text for word in [
-            'evidence', 'study', 'trial', 'research', 'guideline', 'recommendation'
-        ]):
-            return self._balanced_tier_assignment(3), "content_analysis"
-        else:
-            return self._balanced_tier_assignment(2), "content_analysis"
-    
-    def _balanced_tier_assignment(self, preferred_tier: int) -> int:
-        """Ensure balanced tier distribution (target: 30/40/30)."""
-        if not hasattr(self, '_tier_counts'):
-            self._tier_counts = {1: 0, 2: 0, 3: 0}
-            self._total_processed = 0
-        
-        self._total_processed += 1
-        
-        # Target distribution percentages
-        target_ratios = {1: 0.30, 2: 0.40, 3: 0.30}
-        
-        # Calculate current ratios
-        current_ratios = {
-            tier: count / self._total_processed 
-            for tier, count in self._tier_counts.items()
+        # Create processed document
+        processed_doc = {
+            "text": text,
+            "metadata": metadata
         }
         
-        # Check if preferred tier is under its target
-        if current_ratios[preferred_tier] < target_ratios[preferred_tier]:
-            self._tier_counts[preferred_tier] += 1
-            return preferred_tier
-        
-        # Find most under-represented tier
-        deficits = {
-            tier: target_ratios[tier] - current_ratios[tier]
-            for tier in [1, 2, 3]
-        }
-        
-        # Assign to most deficient tier
-        assigned_tier = max(deficits.keys(), key=lambda k: deficits[k])
-        self._tier_counts[assigned_tier] += 1
-        return assigned_tier
+        return processed_doc
 
-    def _calculate_pattern_score(self, text: str, patterns: Dict[str, List[str]]) -> int:
-        """Calculate weighted pattern score for tier assignment."""
-        total_score = 0
+    def _extract_text_content(self, doc: Dict) -> str:
+        """Extract text content from document with multiple fallbacks."""
+        # Try different possible text fields
+        text_fields = ["text", "content", "body", "abstract", "summary", "description"]
         
-        for category, pattern_list in patterns.items():
-            category_score = 0
-            for pattern in pattern_list:
-                # Use word boundaries for more accurate matching
-                if re.search(r'\b' + re.escape(pattern) + r'\b', text):
-                    category_score += 1
-            
-            # Weight categories differently
-            if category in ["definitions", "guidelines", "research_evidence"]:
-                total_score += category_score * 2  # Higher weight
-            else:
-                total_score += category_score
+        for field in text_fields:
+            if field in doc:
+                text = doc[field]
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
         
-        return total_score
+        # Try nested content
+        if "data" in doc and isinstance(doc["data"], dict):
+            for field in text_fields:
+                if field in doc["data"]:
+                    text = doc["data"][field]
+                    if isinstance(text, str) and text.strip():
+                        return text.strip()
+        
+        return ""
 
-    def _determine_medical_specialty_enhanced(self, doc: Dict) -> str:
-        """Enhanced medical specialty determination."""
-        metadata = doc.get("metadata", {})
-        text = str(doc.get("text", "")).lower()
-        title = str(metadata.get("title", "")).lower()
+    def _clean_text(self, text: str) -> str:
+        """Clean and normalize text while preserving medical terminology."""
+        if not text:
+            return ""
         
-        # Check existing specialty
-        existing_specialty = metadata.get("medical_specialty")
-        if existing_specialty and existing_specialty != "Unknown":
-            return existing_specialty
+        # Remove excessive whitespace
+        text = re.sub(r'\s+', ' ', text)
         
-        combined_text = f"{title} {text}"
+        # Remove HTML tags if present
+        text = re.sub(r'<[^>]+>', '', text)
         
-        # Enhanced specialty mapping
-        specialty_keywords = {
-            "Cardiology": [
-                "heart", "cardiac", "cardiovascular", "coronary", "myocardial",
-                "arrhythmia", "hypertension", "blood pressure", "ecg", "echo"
-            ],
-            "Endocrinology": [
-                "diabetes", "insulin", "glucose", "thyroid", "hormone", "endocrine",
-                "metabolism", "pituitary", "adrenal", "pancreas"
-            ],
-            "Pulmonology": [
-                "lung", "pulmonary", "respiratory", "asthma", "copd", "pneumonia",
-                "breathing", "ventilation", "oxygen", "bronchial"
-            ],
-            "Neurology": [
-                "brain", "neurological", "stroke", "seizure", "dementia", "migraine",
-                "nervous system", "spinal", "cognitive", "memory"
-            ],
-            "Infectious Disease": [
-                "infection", "antibiotic", "antimicrobial", "sepsis", "bacterial",
-                "viral", "fungal", "pathogen", "microorganism", "resistance"
-            ],
-            "Oncology": [
-                "cancer", "tumor", "malignancy", "chemotherapy", "oncology",
-                "metastasis", "carcinoma", "lymphoma", "leukemia", "radiation"
-            ],
-            "Gastroenterology": [
-                "gastrointestinal", "digestive", "liver", "stomach", "intestine",
-                "bowel", "gastric", "hepatic", "colon", "pancreatic"
-            ],
-            "Nephrology": [
-                "kidney", "renal", "dialysis", "urine", "creatinine", "filtration",
-                "nephron", "proteinuria", "uremia", "electrolyte"
-            ],
-            "Obstetrics/Gynecology": [
-                "pregnancy", "pregnant", "delivery", "birth", "gynecologic",
-                "obstetric", "uterine", "ovarian", "cervical", "menstrual"
-            ],
-            "Pediatrics": [
-                "pediatric", "child", "infant", "neonatal", "adolescent",
-                "growth", "development", "vaccination", "congenital"
-            ],
-            "Psychiatry": [
-                "psychiatric", "mental health", "depression", "anxiety", "psychotic",
-                "behavioral", "cognitive therapy", "antidepressant", "mood"
-            ],
-            "Emergency Medicine": [
-                "emergency", "trauma", "acute", "critical", "resuscitation",
-                "triage", "shock", "cpr", "defibrillation", "urgent"
+        # Remove URLs
+        text = re.sub(r'http[s]?://\S+', '', text)
+        
+        # Remove email addresses
+        text = re.sub(r'\S+@\S+', '', text)
+        
+        # Preserve medical abbreviations (don't split on periods)
+        if self.preserve_medical_terminology:
+            # Common medical abbreviations
+            medical_abbrevs = [
+                r'\bDr\.', r'\bMD\.', r'\bRN\.', r'\bPhD\.', r'\bDDS\.', r'\bDVM\.',
+                r'\be\.g\.', r'\bi\.e\.', r'\bvs\.', r'\betc\.', r'\bmg\.', r'\bml\.',
+                r'\bIV\.', r'\bPO\.', r'\bBID\.', r'\bTID\.', r'\bQID\.'
             ]
+            
+            # Temporarily replace abbreviations
+            protected_abbrevs = {}
+            for i, abbrev_pattern in enumerate(medical_abbrevs):
+                placeholder = f"__ABBREV_{i}__"
+                matches = re.findall(abbrev_pattern, text, re.IGNORECASE)
+                for match in matches:
+                    protected_abbrevs[placeholder] = match
+                    text = re.sub(abbrev_pattern, placeholder, text, flags=re.IGNORECASE)
+            
+            # Clean text
+            text = text.strip()
+            
+            # Restore abbreviations
+            for placeholder, original in protected_abbrevs.items():
+                text = text.replace(placeholder, original)
+        
+        return text.strip()
+
+    def _enhance_metadata(self, metadata: Dict, text: str, doc_index: int) -> Dict:
+        """Enhance metadata with medical information."""
+        enhanced_metadata = metadata.copy()
+        
+        # Ensure required fields
+        if "doc_id" not in enhanced_metadata:
+            enhanced_metadata["doc_id"] = f"doc_{doc_index}"
+        
+        # Extract medical specialty if not present
+        if "medical_specialty" not in enhanced_metadata:
+            specialty = self._classify_medical_specialty(text)
+            if specialty:
+                enhanced_metadata["medical_specialty"] = specialty
+        
+        # Extract source type if not present
+        if "source_type" not in enhanced_metadata:
+            source_type = self._classify_source_type(text, enhanced_metadata)
+            enhanced_metadata["source_type"] = source_type
+        
+        # Add content length
+        enhanced_metadata["content_length"] = len(text)
+        
+        # Add medical content score
+        enhanced_metadata["medical_content_score"] = self._calculate_medical_content_score(text)
+        
+        return enhanced_metadata
+
+    def _classify_medical_specialty(self, text: str) -> Optional[str]:
+        """Classify medical specialty based on text content."""
+        text_lower = text.lower()
+        
+        specialty_keywords = {
+            "cardiology": ["heart", "cardiac", "cardiovascular", "coronary", "artery", "ecg", "ekg"],
+            "pulmonology": ["lung", "respiratory", "pneumonia", "asthma", "copd", "breathing"],
+            "gastroenterology": ["stomach", "intestine", "digestive", "gi", "liver", "hepatic"],
+            "neurology": ["brain", "neurological", "seizure", "stroke", "nervous", "cognitive"],
+            "oncology": ["cancer", "tumor", "malignant", "chemotherapy", "radiation", "oncology"],
+            "infectious_disease": ["infection", "bacteria", "virus", "antibiotic", "sepsis"],
+            "endocrinology": ["diabetes", "hormone", "thyroid", "endocrine", "insulin"],
+            "psychiatry": ["mental", "psychiatric", "depression", "anxiety", "therapy"],
+            "emergency_medicine": ["emergency", "trauma", "critical", "urgent", "triage"],
+            "pediatrics": ["child", "pediatric", "infant", "adolescent", "developmental"]
         }
         
-        # Score each specialty
         specialty_scores = {}
         for specialty, keywords in specialty_keywords.items():
-            score = sum(1 for keyword in keywords if keyword in combined_text)
+            score = sum(1 for keyword in keywords if keyword in text_lower)
             if score > 0:
                 specialty_scores[specialty] = score
         
-        # Return highest scoring specialty
         if specialty_scores:
             return max(specialty_scores, key=specialty_scores.get)
         
-        return "General Medicine"
+        return None
 
-    def _clean_metadata(self, metadata: Dict) -> Dict:
-        """Clean metadata for ChromaDB compatibility."""
-        clean_meta = {}
+    def _classify_source_type(self, text: str, metadata: Dict) -> str:
+        """Classify the type of medical source."""
+        text_lower = text.lower()
+        source = metadata.get("source", "").lower()
         
-        for key, value in metadata.items():
-            if value is None:
-                continue
-            elif isinstance(value, (str, int, float, bool)):
-                if isinstance(value, str) and value.strip() == "":
-                    continue
-                clean_meta[key] = value
-            elif isinstance(value, list):
-                if value:
-                    clean_meta[key] = ", ".join(str(item) for item in value if item is not None)
-            elif isinstance(value, dict):
-                if value:
-                    clean_meta[key] = str(value)
-            else:
-                str_value = str(value).strip()
-                if str_value and str_value.lower() not in ["none", "null", ""]:
-                    clean_meta[key] = str_value
+        # High-quality sources
+        if any(hq in source for hq in ["pubmed", "nejm", "cochrane", "uptodate", "statpearls"]):
+            return "high_quality"
         
-        return clean_meta
+        # Research sources
+        if any(research in text_lower for research in ["study", "trial", "research", "meta-analysis"]):
+            return "research"
+        
+        # Guidelines
+        if any(guideline in text_lower for guideline in ["guideline", "recommendation", "consensus"]):
+            return "guideline"
+        
+        # Textbook/educational
+        if any(edu in text_lower for edu in ["textbook", "chapter", "education", "learning"]):
+            return "educational"
+        
+        return "general"
 
-    def organize_by_reasoning_type(self, documents: List[Dict]) -> Dict[str, List[Dict]]:
-        """Organize documents by enhanced medical reasoning tiers."""
-        logger.info(f"📊 Organizing {len(documents)} documents by enhanced medical reasoning tiers")
+    def _calculate_medical_content_score(self, text: str) -> float:
+        """Calculate medical content relevance score."""
+        if not text:
+            return 0.0
         
-        organized = {
-            "pattern_recognition": [],  # Tier 1 - Basic medical knowledge
-            "hypothesis_testing": [],   # Tier 2 - Clinical reasoning
-            "confirmation": []          # Tier 3 - Evidence-based medicine
+        total_matches = 0
+        total_patterns = len(self.medical_patterns)
+        
+        for pattern in self.medical_patterns.values():
+            matches = len(pattern.findall(text))
+            total_matches += min(matches, 5)  # Cap matches per pattern
+        
+        # Normalize score
+        max_possible_score = total_patterns * 5
+        score = total_matches / max_possible_score if max_possible_score > 0 else 0.0
+        
+        return min(1.0, score)
+
+    def _extract_medical_entities(self, text: str) -> List[str]:
+        """Extract medical entities from text."""
+        entities = []
+        
+        for entity_type, pattern in self.medical_patterns.items():
+            matches = pattern.findall(text)
+            for match in matches:
+                entities.append(f"{entity_type}:{match.lower()}")
+        
+        # Remove duplicates and limit
+        entities = list(set(entities))
+        return entities[:20]  # Limit to top 20 entities
+
+    def _assign_hierarchical_tier(self, text: str, metadata: Dict) -> int:
+        """Assign document to hierarchical tier based on content analysis."""
+        text_lower = text.lower()
+        
+        # Calculate tier scores
+        tier_scores = {}
+        
+        for tier, rules in self.tier_rules.items():
+            score = 0
+            
+            # Primary pattern matching
+            for pattern_name in rules["primary_patterns"]:
+                if pattern_name in self.medical_patterns:
+                    matches = len(self.medical_patterns[pattern_name].findall(text_lower))
+                    score += matches * rules["weight"]
+            
+            tier_scores[tier] = score
+        
+        # Source-based adjustments
+        source_type = metadata.get("source_type", "general")
+        source = metadata.get("source", "").lower()
+        
+        # Tier 1 adjustments (basic knowledge)
+        if any(basic in source for basic in ["anatomy", "physiology", "textbook", "basic"]):
+            tier_scores[1] *= 1.3
+        
+        # Tier 3 adjustments (evidence-based)
+        if source_type in ["research", "guideline"] or any(evidence in source for evidence in ["pubmed", "cochrane", "trial"]):
+            tier_scores[3] *= 1.4
+        
+        # Content length considerations
+        content_length = len(text)
+        if content_length < 200:  # Short content often basic definitions
+            tier_scores[1] *= 1.2
+        elif content_length > 1000:  # Long content often detailed clinical/research
+            tier_scores[3] *= 1.1
+        
+        # Medical specialty considerations
+        specialty = metadata.get("medical_specialty")
+        if specialty in ["emergency_medicine", "surgery"]:
+            tier_scores[2] *= 1.2  # Clinical focus
+        
+        # Determine tier with highest score
+        if not any(tier_scores.values()):
+            return 2  # Default to tier 2 for clinical reasoning
+        
+        assigned_tier = max(tier_scores, key=tier_scores.get)
+        
+        return assigned_tier
+
+    def _balance_tier_distribution(self, documents: List[Dict]) -> List[Dict]:
+        """Balance tier distribution according to target ratios."""
+        if not documents:
+            return documents
+        
+        # Count current distribution
+        current_distribution = {"tier1": 0, "tier2": 0, "tier3": 0}
+        for doc in documents:
+            tier = doc["metadata"].get("tier", 2)
+            current_distribution[f"tier{tier}"] += 1
+        
+        total_docs = len(documents)
+        target_counts = {
+            tier: int(total_docs * ratio) 
+            for tier, ratio in self.target_distribution.items()
         }
         
-        tier_counts = {1: 0, 2: 0, 3: 0}
-        specialty_counts = {}
-        assignment_methods = {"content_based": 0, "source_based": 0, "fallback": 0}
+        # Calculate needed adjustments
+        adjustments_needed = {}
+        for tier, target_count in target_counts.items():
+            current_count = current_distribution[tier]
+            adjustments_needed[tier] = target_count - current_count
+        
+        # Apply adjustments if significant imbalance
+        max_imbalance = max(abs(adj) for adj in adjustments_needed.values())
+        if max_imbalance > total_docs * 0.1:  # Only if >10% imbalance
+            documents = self._redistribute_tiers(documents, adjustments_needed)
+        
+        return documents
+
+    def _redistribute_tiers(self, documents: List[Dict], adjustments: Dict) -> List[Dict]:
+        """Redistribute documents across tiers to achieve target distribution."""
+        # Group documents by current tier
+        tier_groups = {"tier1": [], "tier2": [], "tier3": []}
         
         for doc in documents:
             tier = doc["metadata"].get("tier", 2)
-            specialty = doc["metadata"].get("medical_specialty", "Unknown")
-            method = doc["metadata"].get("assignment_method", "unknown")
-            
-            # Count statistics
-            tier_counts[tier] = tier_counts.get(tier, 0) + 1
-            specialty_counts[specialty] = specialty_counts.get(specialty, 0) + 1
-            assignment_methods[method] = assignment_methods.get(method, 0) + 1
-            
-            # Organize by tier
-            if tier == 1:
-                organized["pattern_recognition"].append(doc)
-            elif tier == 3:
-                organized["confirmation"].append(doc)
-            else:  # tier == 2 or any other value
-                organized["hypothesis_testing"].append(doc)
+            tier_groups[f"tier{tier}"].append(doc)
         
-        # Enhanced logging
-        total_docs = sum(tier_counts.values())
-        logger.info(f"📊 Enhanced medical knowledge organization:")
-        logger.info(f"   Tier 1 (Pattern Recognition): {tier_counts.get(1, 0)} docs ({tier_counts.get(1, 0)/total_docs*100:.1f}%)")
-        logger.info(f"   Tier 2 (Clinical Reasoning): {tier_counts.get(2, 0)} docs ({tier_counts.get(2, 0)/total_docs*100:.1f}%)")
-        logger.info(f"   Tier 3 (Evidence Confirmation): {tier_counts.get(3, 0)} docs ({tier_counts.get(3, 0)/total_docs*100:.1f}%)")
+        # Sort each tier by medical content score (candidates for reassignment)
+        for tier in tier_groups:
+            tier_groups[tier].sort(
+                key=lambda x: x["metadata"].get("medical_content_score", 0.5)
+            )
         
-        logger.info(f"📊 Assignment methods:")
-        for method, count in assignment_methods.items():
-            logger.info(f"   {method}: {count} docs ({count/total_docs*100:.1f}%)")
+        # Perform reassignments
+        for tier, adjustment in adjustments.items():
+            if adjustment > 0:  # Need more documents in this tier
+                # Take from over-represented tiers
+                for other_tier in tier_groups:
+                    if other_tier != tier and len(tier_groups[other_tier]) > 0:
+                        # Move documents with appropriate content
+                        target_tier_num = int(tier[-1])
+                        moved = 0
+                        
+                        for doc in tier_groups[other_tier][:]:
+                            if moved >= adjustment:
+                                break
+                            
+                            # Check if document could reasonably belong to target tier
+                            score = self._calculate_tier_suitability(doc, target_tier_num)
+                            if score > 0.3:  # Reasonable fit
+                                doc["metadata"]["tier"] = target_tier_num
+                                tier_groups[other_tier].remove(doc)
+                                tier_groups[tier].append(doc)
+                                moved += 1
         
-        logger.info(f"📊 Top medical specialties:")
-        top_specialties = sorted(specialty_counts.items(), key=lambda x: x[1], reverse=True)[:8]
-        for specialty, count in top_specialties:
-            logger.info(f"   {specialty}: {count} docs")
+        # Reconstruct document list
+        redistributed_docs = []
+        for tier_docs in tier_groups.values():
+            redistributed_docs.extend(tier_docs)
         
-        # Validate distribution for medical Q&A effectiveness
-        self._validate_medical_qa_distribution(tier_counts, total_docs)
-        
-        return organized
+        return redistributed_docs
 
-    def _validate_medical_qa_distribution(self, tier_counts: Dict[int, int], total_docs: int):
-        """Validate tier distribution for optimal medical Q&A performance."""
-        if total_docs == 0:
-            logger.error("❌ No documents found after organization")
-            return
+    def _calculate_tier_suitability(self, doc: Dict, target_tier: int) -> float:
+        """Calculate how suitable a document is for a target tier."""
+        text = doc.get("text", "")
+        metadata = doc.get("metadata", {})
         
-        tier1_pct = (tier_counts.get(1, 0) / total_docs) * 100
-        tier2_pct = (tier_counts.get(2, 0) / total_docs) * 100
-        tier3_pct = (tier_counts.get(3, 0) / total_docs) * 100
+        # Use the same scoring logic as tier assignment
+        text_lower = text.lower()
+        rules = self.tier_rules.get(target_tier, {})
         
-        # Optimal distribution for medical Q&A
-        if tier1_pct < 15:
-            logger.warning(f"⚠️ Low Tier 1 content ({tier1_pct:.1f}%) - may affect basic concept questions")
-        if tier2_pct < 25:
-            logger.warning(f"⚠️ Low Tier 2 content ({tier2_pct:.1f}%) - may affect clinical reasoning questions")
-        if tier3_pct < 15:
-            logger.warning(f"⚠️ Low Tier 3 content ({tier3_pct:.1f}%) - may affect evidence-based questions")
+        score = 0
+        for pattern_name in rules.get("primary_patterns", []):
+            if pattern_name in self.medical_patterns:
+                matches = len(self.medical_patterns[pattern_name].findall(text_lower))
+                score += matches
         
-        # Check for severe imbalance
-        max_tier_pct = max(tier1_pct, tier2_pct, tier3_pct)
-        if max_tier_pct > 75:
-            logger.warning(f"⚠️ Severely imbalanced distribution (max: {max_tier_pct:.1f}%)")
-            logger.warning("   This may reduce hierarchical reasoning effectiveness")
-        else:
-            logger.info("✅ Balanced tier distribution for medical Q&A")
+        # Normalize by text length
+        text_length = len(text)
+        if text_length > 0:
+            score = score / (text_length / 100)  # Per 100 characters
+        
+        return min(1.0, score)
 
-    def load_foundation_dataset(self, foundation_dir: Path) -> List[Dict[str, str]]:
-        """Load foundation dataset for enhanced medical knowledge processing."""
-        logger.info(f"📂 Loading foundation dataset from {foundation_dir}")
+    def _log_processing_statistics(self, processed_docs: List[Dict], failed_count: int):
+        """Log comprehensive processing statistics."""
+        total_input = self.processing_stats["total_processed"] + failed_count
         
-        # Try multiple file patterns
-        dataset_files = [
-            foundation_dir / "foundation_medical_data.json",
-            foundation_dir / "foundation_specialty_rebalanced.json",
-            foundation_dir / "unified_dataset.json"
-        ]
+        # Tier distribution
+        tier_distribution = {"tier1": 0, "tier2": 0, "tier3": 0}
+        for doc in processed_docs:
+            tier = doc["metadata"].get("tier", 2)
+            tier_distribution[f"tier{tier}"] += 1
         
-        for dataset_file in dataset_files:
-            if dataset_file.exists():
-                logger.info(f"   Found dataset: {dataset_file}")
-                
-                with open(dataset_file, 'r') as f:
-                    data = json.load(f)
-                
-                # Handle different data formats
-                if isinstance(data, list):
-                    documents = data
-                elif isinstance(data, dict) and 'documents' in data:
-                    documents = data['documents']
-                else:
-                    documents = []
-                
-                logger.info(f"✅ Loaded {len(documents)} documents for enhanced processing")
-                return documents
+        logger.info("📊 Processing completed:")
+        logger.info(f"   📝 Total input documents: {total_input:,}")
+        logger.info(f"   ✅ Successfully processed: {len(processed_docs):,}")
+        logger.info(f"   ❌ Failed processing: {failed_count:,}")
+        logger.info(f"   🏥 Medical entities found: {self.processing_stats['medical_entities_found']:,}")
         
-        logger.error(f"❌ No foundation dataset found in {foundation_dir}")
-        return []
+        logger.info("📊 Tier distribution:")
+        total_processed = len(processed_docs)
+        for tier, count in tier_distribution.items():
+            percentage = (count / total_processed * 100) if total_processed > 0 else 0
+            target_percentage = self.target_distribution.get(tier, 0) * 100
+            logger.info(f"   {tier.upper()}: {count:,} documents ({percentage:.1f}%, target: {target_percentage:.1f}%)")
+
+    def get_processing_statistics(self) -> Dict:
+        """Get comprehensive processing statistics."""
+        return {
+            "processing_stats": self.processing_stats.copy(),
+            "tier_rules": self.tier_rules,
+            "target_distribution": self.target_distribution,
+            "medical_patterns_count": len(self.medical_patterns),
+            "config": {
+                "chunk_size": self.chunk_size,
+                "chunk_overlap": self.chunk_overlap,
+                "min_content_length": self.min_content_length,
+                "enable_medical_entity_recognition": self.enable_medical_entity_recognition,
+                "preserve_medical_terminology": self.preserve_medical_terminology
+            }
+        }

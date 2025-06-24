@@ -1,111 +1,191 @@
-# src/evaluation/configs/gpu_runpod_config.yaml
-# Updated GPU RunPod Configuration - PubMedQA Disabled (Already in MIRAGE)
+# HierRAGMed GPU Evaluation Configuration - Medical Embedding Optimized
+# High-performance configuration for CUDA/RunPod environments
 
-# General settings
-enable_result_cache: true
-max_memory_usage: 0.9  # Use 90% of available GPU memory
-precision: "float16"   # Use mixed precision for GPU optimization
+# Platform identification
+platform: "GPU"
+environment: "runpod_gpu"
+gpu_optimized: true
 
-# Benchmark configurations with GPU optimization
-benchmarks:
-  mirage:
-    enabled: true
-    name: "MIRAGE"
-    data_path: "data/benchmarks/mirage"
-    cache_file: "mirage_benchmark.json"
-    
-    # GPU-optimized settings
-    batch_size: 32  # Questions per batch
-    max_samples: null  # Use full dataset
-    quick_eval_samples: 200  # For quick testing
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "f1", "precision", "recall", "clinical_accuracy"]
-    target_accuracy: 0.74
-    
-    # GPU-specific optimizations
-    prefetch_batches: 2
-    num_workers: 4
-    pin_memory: true
-    
-    # MIRAGE-specific QADataset integration
-    use_official_dataset: true
-    dataset_source: "https://github.com/Teddy-XiongGZ/MIRAGE"
-    
-  medreason:
-    enabled: true
-    name: "MedReason"
-    data_path: "data/benchmarks/medreason"
-    cache_file: "medreason_benchmark.json"
-    
-    # GPU-optimized settings
-    batch_size: 16  # Reasoning chains per batch
-    max_samples: null
-    quick_eval_samples: 200
-    
-    # Evaluation parameters
-    metrics: ["accuracy", "reasoning_score", "consistency", "reasoning_chain_quality"]
-    target_accuracy: 0.71
-    
-    # GPU-specific optimizations
-    prefetch_batches: 2
-    num_workers: 4
-    pin_memory: true
-    
-  # PubMedQA DISABLED - Already included in MIRAGE benchmark
-  pubmedqa:
-    enabled: false  # DISABLED: Already covered by MIRAGE
-    name: "PubMedQA"
-    disabled_reason: "PubMedQA questions are already included in the MIRAGE benchmark"
-    alternative: "Use MIRAGE benchmark which includes PubMedQA-style research questions"
-    
-  msmarco:
-    enabled: true
-    name: "MS MARCO"
-    data_path: "data/benchmarks/msmarco"
-    cache_file: "msmarco_benchmark.json"
-    
-    # GPU-optimized settings
-    batch_size: 128  # Maximum batch for embeddings
-    max_samples: null
-    quick_eval_samples: 1000
-    
-    # Evaluation parameters
-    metrics: ["mrr", "ndcg", "recall_at_k", "precision_at_k"]
-    target_mrr: 0.35
-    
-    # GPU-specific optimizations
-    prefetch_batches: 3
-    num_workers: 6
-    pin_memory: true
+# Directory structure
+results_dir: "evaluation/results"
+data_dir: "data"
+cache_dir: "evaluation/cache"
+logs_dir: "evaluation/logs"
 
-# System configurations
-systems:
+# GPU-optimized model configurations with medical embedding
+models:
+  embedding:
+    name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+    fallback_name: "sentence-transformers/all-MiniLM-L6-v2"
+    device: "cuda"
+    batch_size: 32  # Higher for GPU
+    max_length: 512
+    normalize_embeddings: true
+    trust_remote_code: false
+    use_medical_embedding: true
+    
+    # GPU optimizations for medical model
+    model_kwargs:
+      torch_dtype: "float16"
+      attn_implementation: "flash_attention_2"  # Use flash attention if available
+      low_cpu_mem_usage: true
+    
+    # GPU performance settings
+    compile_model: true
+    mixed_precision: true
+    gradient_checkpointing: false  # Disable for inference
+    memory_efficient: true
+    
+  llm:
+    name: "mistral:7b-instruct"
+    device: "cuda"
+    batch_size: 16
+    temperature: 0.7
+    context_window: 4096
+    max_new_tokens: 512
+    do_sample: false
+    
+    # GPU optimizations
+    mixed_precision: true
+    use_flash_attention: true
+  
+  # Enhanced system configurations for medical embedding
   kg_system:
     enabled: true
-    name: "Knowledge Graph Enhanced RAG"
-    model_path: "models/kg_enhanced"
+    device: "cuda"
+    memory_efficient: true
+    compile_model: true
+    mixed_precision: true
+    gradient_checkpointing: false
+    
+    # Medical embedding config for KG
+    embedding:
+      name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+      use_medical_embedding: true
+      batch_size: 32
+      device: "cuda"
     
   hierarchical_system:
     enabled: true
-    name: "Hierarchical Diagnostic RAG"
-    model_path: "models/hierarchical"
+    device: "cuda"
+    memory_efficient: true
+    compile_model: true
+    mixed_precision: true
+    gradient_checkpointing: false
+    
+    # Medical embedding config for hierarchical system
+    embedding:
+      name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+      use_medical_embedding: true
+      batch_size: 32
+      device: "cuda"
+    
+    # Enhanced hierarchical retrieval settings
+    hierarchical_retrieval:
+      tier1_top_k: 8  # Increased for GPU processing power
+      tier2_top_k: 6
+      tier3_top_k: 4
+      enable_evidence_stratification: true
+      enable_temporal_weighting: true
+      medical_specialty_boost: true
+      balanced_tier_distribution: true
+      medical_entity_boost: 1.2
+      clinical_context_window: 3
 
-# GPU memory management
-memory_management:
-  clear_cache_between_benchmarks: true
-  gradient_checkpointing: true
+# High-performance GPU settings
+performance:
+  # GPU acceleration
+  use_gpu_acceleration: true
   mixed_precision: true
-  max_sequence_length: 2048
-
-# Output configuration
-output:
-  save_detailed_results: true
-  generate_visualizations: true
-  export_formats: ["json", "csv", "html"]
+  compile_models: true
+  memory_efficient: true
   
-# Performance monitoring
+  # CUDA optimizations
+  cuda_deterministic: false
+  cuda_benchmark: true
+  
+  # Memory management for high-end GPU (24GB+)
+  gpu_memory_fraction: 0.85
+  memory_growth: true
+  max_memory_per_process: "20GB"
+  
+  # Medical model specific optimizations
+  medical_model_optimizations:
+    enable_gradient_checkpointing: false  # Disabled for inference
+    use_attention_optimization: true
+    enable_model_parallelism: false
+    batch_processing: true
+    
+  # Parallel processing
+  max_workers: 4
+  batch_evaluation: true
+
+# Enhanced evaluation settings for medical content
+evaluation:
+  # Medical embedding optimizations
+  enable_medical_validation: true
+  check_medical_terminology: true
+  validate_clinical_accuracy: true
+  
+  # Similarity computation with medical focus
+  similarity_model: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+  fallback_similarity_model: "sentence-transformers/all-MiniLM-L6-v2"
+  
+  # High-performance evaluation parameters
+  batch_size: 16  # Higher for GPU
+  max_workers: 4
+  timeout_per_question: 60  # Faster on GPU
+  
+  # Medical evaluation metrics
+  calculate_medical_relevance: true
+  analyze_tier_distribution: true
+  track_embedding_performance: true
+
+# GPU-optimized benchmark configurations
+benchmarks:
+  mirage:
+    enabled: true
+    medical_focus: true
+    use_medical_embedding: true
+    batch_processing: true
+    gpu_acceleration: true
+  
+  med_qa:
+    enabled: true
+    medical_focus: true
+    use_medical_embedding: true
+    batch_processing: true
+    gpu_acceleration: true
+  
+  pub_med_qa:
+    enabled: true
+    medical_focus: true
+    use_medical_embedding: true
+    batch_processing: true
+    gpu_acceleration: true
+
+# Logging configuration for GPU environment
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | GPU-MedEval | {message}"
+  rotation: "1 day"
+  retention: "7 days"
+  
+  # GPU-specific logging
+  log_medical_validation: true
+  log_embedding_performance: true
+  log_device_utilization: true
+  log_memory_usage: true
+  log_gpu_metrics: true
+
+# Resource monitoring
 monitoring:
   track_gpu_usage: true
-  log_memory_usage: true
-  benchmark_timing: true
+  track_memory_usage: true
+  track_inference_time: true
+  save_performance_logs: true
+  
+  # Performance thresholds
+  max_memory_usage_gb: 20
+  max_inference_time_seconds: 30
+  target_throughput_questions_per_minute: 10

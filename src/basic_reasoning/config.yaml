@@ -1,20 +1,43 @@
 # Enhanced Basic Reasoning - Hierarchical Medical Q&A Configuration
 # Optimized for MIRAGE benchmark and medical multiple choice questions
+# Updated to use Microsoft BiomedNLP-PubMedBERT medical embedding
 
 data_dir: data/foundation
 
 # Model configurations with medical embeddings
 models:
   embedding:
-    name: sentence-transformers/all-MiniLM-L6-v2  # Will be overridden with medical embedding
-    medical_embedding: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext  # Medical-specific embedding
-    device: mps  # M1 Mac GPU acceleration
-    batch_size: 16
+    name: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext  # Primary medical embedding
+    fallback_name: sentence-transformers/all-MiniLM-L6-v2  # Fallback if medical model fails
+    device: mps  # M1 Mac GPU acceleration (change to cuda for NVIDIA GPUs)
+    batch_size: 8   # Reduced for larger medical model
+    max_length: 512
+    normalize_embeddings: true
+    trust_remote_code: false
     use_medical_embedding: true
+    
+    # Performance optimizations for medical model
+    model_kwargs:
+      torch_dtype: float16  # Use half precision for memory efficiency
+      attn_implementation: "eager"  # More stable for medical models
+    
+    # Device-specific overrides
+    device_settings:
+      cuda:
+        batch_size: 16
+        mixed_precision: true
+      mps:
+        batch_size: 8
+        mixed_precision: false
+      cpu:
+        batch_size: 4
+        mixed_precision: false
+
   llm:
     name: mistral:7b-instruct
     temperature: 0.3  # Lower for more consistent answers
     context_window: 4096
+    device: auto  # Auto-detect device
 
 # Enhanced hierarchical retrieval with medical optimization
 hierarchical_retrieval:
@@ -25,13 +48,19 @@ hierarchical_retrieval:
   enable_temporal_weighting: true
   medical_specialty_boost: true  # Boost specialty-matched content
   balanced_tier_distribution: true  # Force balanced distribution
+  
+  # Medical-specific retrieval parameters
+  medical_entity_boost: 1.2  # Boost documents with medical entities
+  clinical_context_window: 3  # Consider surrounding context for clinical relevance
 
 # Processing configurations optimized for medical content
 processing:
-  chunk_size: 512
-  chunk_overlap: 100
+  chunk_size: 384  # Reduced for medical model context
+  chunk_overlap: 96  # 25% overlap
   min_content_length: 50  # Ensure meaningful medical content
   enable_medical_entity_recognition: true
+  preserve_medical_terminology: true  # Don't split medical terms
+  
   target_tier_distribution:  # Target balanced distribution
     tier1: 0.30  # 30% Pattern Recognition
     tier2: 0.40  # 40% Clinical Reasoning  
@@ -66,51 +95,20 @@ prompts:
   tier1_prompt: |
     TIER 1 - MEDICAL PATTERN RECOGNITION:
     Analyze the basic medical concepts, definitions, anatomy, and fundamental knowledge patterns.
-    
-    Focus areas:
-    • Medical terminology and definitions
-    • Basic anatomy and physiology
-    • Fundamental disease concepts
-    • Clinical presentations and symptoms
-    • Basic classifications and categories
-    
-    Use this foundational knowledge to understand what the question is asking about.
+    Focus on established medical facts, terminology, and basic pathophysiology.
     
   tier2_prompt: |
     TIER 2 - CLINICAL REASONING:
-    Apply clinical knowledge, pathophysiology, and diagnostic reasoning.
-    
-    Focus areas:
-    • Disease mechanisms and pathophysiology
-    • Clinical decision-making processes
-    • Diagnostic criteria and differential diagnosis
-    • Treatment principles and management approaches
-    • Risk factors and prognostic indicators
-    
-    Use this clinical knowledge to systematically evaluate each answer option.
+    Apply clinical reasoning and diagnostic thinking to the medical scenario.
+    Consider differential diagnosis, clinical presentations, and diagnostic approaches.
     
   tier3_prompt: |
-    TIER 3 - EVIDENCE-BASED CONFIRMATION:
-    Confirm with established medical facts, guidelines, and research evidence.
-    
-    Focus areas:
-    • Clinical practice guidelines (WHO, AHA, ESC, etc.)
-    • Evidence-based medicine and research findings
-    • Established medical standards and protocols
-    • Authoritative medical recommendations
-    • Definitive diagnostic and treatment criteria
-    
-    Use this authoritative knowledge to select the most accurate answer.
+    TIER 3 - EVIDENCE CONFIRMATION:
+    Evaluate evidence-based medicine, treatment guidelines, and research findings.
+    Consider latest clinical guidelines, treatment protocols, and research evidence.
 
-# Web interface
-web:
-  host: 0.0.0.0
-  port: 8503
-  cors_origins: ["*"]
-
-# Enhanced evaluation settings
+# Evaluation and validation settings
 evaluation:
-  enable_answer_extraction: true
-  answer_validation_strict: true
-  require_final_answer_format: true
-  log_reasoning_steps: true
+  enable_medical_validation: true
+  check_medical_terminology: true
+  validate_clinical_accuracy: true

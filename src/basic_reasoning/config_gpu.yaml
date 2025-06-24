@@ -1,63 +1,92 @@
-# Enhanced Basic Reasoning System GPU Configuration (RunPod/CUDA)
-# Hierarchical Medical Q&A optimized for GPU evaluation and MIRAGE benchmark
+# Enhanced Basic Reasoning - GPU Configuration
+# Optimized for CUDA/RunPod environments with Microsoft BiomedNLP-PubMedBERT
 
-# Environment
-environment: "gpu"
-platform: "runpod"
-
-# Data directory
 data_dir: data/foundation
 
-# GPU-optimized model configurations
+# Model configurations optimized for GPU with medical embeddings
 models:
   embedding:
-    name: sentence-transformers/all-MiniLM-L6-v2
+    name: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+    fallback_name: sentence-transformers/all-MiniLM-L6-v2
     device: cuda
-    batch_size: 64  # Higher for GPU
+    batch_size: 32  # Higher batch size for GPU
     max_length: 512
     normalize_embeddings: true
     trust_remote_code: false
+    use_medical_embedding: true
+    
     # GPU optimizations
-    mixed_precision: true
+    model_kwargs:
+      torch_dtype: float16
+      attn_implementation: "flash_attention_2"  # Use flash attention if available
+    
+    # GPU performance settings
     compile_model: true
-  
+    mixed_precision: true
+    gradient_checkpointing: false  # Disable for inference
+    memory_efficient: true
+
   llm:
     name: mistral:7b-instruct
-    device: cuda
-    temperature: 0.2  # Lower for more consistent medical Q&A answers
+    temperature: 0.2  # Lower for GPU consistency
     context_window: 4096
-    max_new_tokens: 512
+    device: cuda
+    
     # GPU optimizations
-    batch_size: 32
+    batch_size: 16
     mixed_precision: true
     use_flash_attention: true
 
-# GPU-optimized hierarchical retrieval with enhanced medical focus
+# Enhanced hierarchical retrieval for GPU
 hierarchical_retrieval:
-  tier1_top_k: 8        # Pattern Recognition - more results on GPU
-  tier2_top_k: 6        # Clinical Reasoning - increased for better coverage
-  tier3_top_k: 4        # Evidence Confirmation - more evidence
+  tier1_top_k: 8        # Increased for GPU processing power
+  tier2_top_k: 6        # More documents for better coverage
+  tier3_top_k: 4        # More evidence retrieval
   enable_evidence_stratification: true
   enable_temporal_weighting: true
-  medical_specialty_boost: true  # Boost specialty-matched content
-  # GPU-specific settings
-  batch_size: 64
-  parallel_processing: true
-  num_workers: 4
-  pin_memory: true
+  medical_specialty_boost: true
+  balanced_tier_distribution: true
+  
+  # GPU-specific optimizations
+  batch_retrieval: true
+  parallel_tier_processing: true
+  gpu_accelerated_search: true
 
-# GPU-optimized processing for medical content
+# Processing optimized for GPU memory
 processing:
-  chunk_size: 512
-  chunk_overlap: 100
-  min_content_length: 50  # Ensure meaningful medical content
+  chunk_size: 384
+  chunk_overlap: 96
+  min_content_length: 50
   enable_medical_entity_recognition: true
+  preserve_medical_terminology: true
+  
   # GPU batch processing
-  batch_size: 128
+  batch_size: 64
   num_workers: 4
   pin_memory: true
+  
+  target_tier_distribution:
+    tier1: 0.30
+    tier2: 0.40
+    tier3: 0.30
 
-# Enhanced prompts for medical multiple choice questions (GPU optimized)
+# Performance settings for GPU
+performance:
+  use_gpu_acceleration: true
+  mixed_precision: true
+  compile_models: true
+  memory_efficient: true
+  
+  # CUDA optimizations
+  cuda_deterministic: false
+  cuda_benchmark: true
+  
+  # Memory management for GPU
+  gpu_memory_fraction: 0.8
+  memory_growth: true
+  max_memory_per_process: "20GB"
+
+# Enhanced prompts (same as base config)
 prompts:
   system: |
     You are a medical knowledge expert answering multiple choice questions.
@@ -68,7 +97,6 @@ prompts:
     - Format your final answer as: "Answer: [LETTER]"
     - Base your answer on medical evidence and established knowledge
     - Be precise, accurate, and evidence-based
-    - Keep responses concise for GPU efficiency
     
     RESPONSE FORMAT:
     1. Brief analysis of the question topic
@@ -76,79 +104,17 @@ prompts:
     3. Selection of the best answer
     4. Final answer: "Answer: [LETTER]"
     
-    EXAMPLE:
-    Question: What is the most common cause of community-acquired pneumonia?
-    Options: A) Mycoplasma B) Streptococcus pneumoniae C) Haemophilus influenzae D) Staphylococcus aureus
-    
-    Analysis: Community-acquired pneumonia etiology varies by population and setting. S. pneumoniae remains the leading bacterial cause in most populations, particularly in adults without comorbidities.
-    
-    Answer: B
-    
   tier1_prompt: |
     TIER 1 - MEDICAL PATTERN RECOGNITION:
     Analyze the basic medical concepts, definitions, anatomy, and fundamental knowledge patterns.
-    
-    Focus areas:
-    • Medical terminology and definitions
-    • Basic anatomy and physiology
-    • Fundamental disease concepts
-    • Clinical presentations and symptoms
-    • Basic classifications and categories
-    
-    Use this foundational knowledge to understand what the question is asking about.
+    Focus on established medical facts, terminology, and basic pathophysiology.
     
   tier2_prompt: |
     TIER 2 - CLINICAL REASONING:
-    Apply clinical knowledge, pathophysiology, and diagnostic reasoning.
-    
-    Focus areas:
-    • Disease mechanisms and pathophysiology
-    • Clinical decision-making processes
-    • Diagnostic criteria and differential diagnosis
-    • Treatment principles and management approaches
-    • Risk factors and prognostic indicators
-    
-    Use this clinical knowledge to systematically evaluate each answer option.
+    Apply clinical reasoning and diagnostic thinking to the medical scenario.
+    Consider differential diagnosis, clinical presentations, and diagnostic approaches.
     
   tier3_prompt: |
-    TIER 3 - EVIDENCE-BASED CONFIRMATION:
-    Confirm with established medical facts, guidelines, and research evidence.
-    
-    Focus areas:
-    • Clinical practice guidelines (WHO, AHA, ESC, etc.)
-    • Evidence-based medicine and research findings
-    • Established medical standards and protocols
-    • Authoritative medical recommendations
-    • Definitive diagnostic and treatment criteria
-    
-    Use this authoritative knowledge to select the most accurate answer.
-
-# Web interface (GPU optimized)
-web:
-  host: 0.0.0.0
-  port: 8503
-  cors_origins: ["*"]
-  # GPU-specific web settings
-  max_concurrent_requests: 16
-  request_timeout: 120
-  enable_gpu_monitoring: true
-
-# Enhanced evaluation settings for GPU
-evaluation:
-  enable_answer_extraction: true
-  answer_validation_strict: true
-  require_final_answer_format: true
-  log_reasoning_steps: true
-  # GPU-specific evaluation settings
-  batch_evaluation: true
-  parallel_processing: true
-  gpu_memory_optimization: true
-  benchmark_optimization: "mirage"  # Optimize for MIRAGE benchmark
-
-# GPU performance monitoring
-gpu_monitoring:
-  enable_memory_tracking: true
-  enable_utilization_tracking: true
-  log_interval_seconds: 30
-  memory_warning_threshold: 0.9
-  temperature_warning_threshold: 80
+    TIER 3 - EVIDENCE CONFIRMATION:
+    Evaluate evidence-based medicine, treatment guidelines, and research findings.
+    Consider latest clinical guidelines, treatment protocols, and research evidence.
