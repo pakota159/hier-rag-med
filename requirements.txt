@@ -14,13 +14,14 @@ ollama>=0.1.6
 # ==========================================
 # MACHINE LEARNING & AI
 # ==========================================
-torch>=2.0.0
-transformers>=4.30.0
+torch>=2.6.0
+transformers>=4.35.0
 accelerate>=0.26.0
 scikit-learn>=1.4.0
 datasets>=2.16.0
 huggingface-hub>=0.12.0
 tokenizers>=0.13.0
+safetensors>=0.4.0
 
 # ==========================================
 # WEB INTERFACES

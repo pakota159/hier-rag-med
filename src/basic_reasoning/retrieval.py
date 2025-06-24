@@ -73,7 +73,7 @@ class HierarchicalRetriever:
             self._load_fallback_model(embedding_config)
 
     def _load_biomedical_model(self, model_name: str, device: str, config: Dict):
-        """Load BiomedNLP-PubMedBERT model with proper configuration."""
+        """Load BiomedNLP-PubMedBERT model with proper configuration and safetensors support."""
         try:
             from transformers import AutoTokenizer, AutoModel
             import torch
@@ -96,14 +96,31 @@ class HierarchicalRetriever:
             
             logger.info(f"   🧠 Loading model with dtype: {torch_dtype}")
             
-            # Load model with optimizations
-            self.embedding_model = AutoModel.from_pretrained(
-                model_name,
-                torch_dtype=torch_dtype,
-                trust_remote_code=config.get("trust_remote_code", False),
-                low_cpu_mem_usage=True,
+            # Load model with optimizations and safetensors preference
+            model_load_kwargs = {
+                "torch_dtype": torch_dtype,
+                "trust_remote_code": config.get("trust_remote_code", False),
+                "low_cpu_mem_usage": True,
+                "use_safetensors": True,  # Prefer safetensors format for security
                 **{k: v for k, v in model_kwargs.items() if k not in ["torch_dtype"]}
-            )
+            }
+            
+            try:
+                self.embedding_model = AutoModel.from_pretrained(
+                    model_name,
+                    **model_load_kwargs
+                )
+            except Exception as safetensors_error:
+                # Fallback to non-safetensors if safetensors fails
+                if "safetensors" in str(safetensors_error).lower():
+                    logger.warning("⚠️ Safetensors loading failed, falling back to standard loading")
+                    model_load_kwargs.pop("use_safetensors", None)
+                    self.embedding_model = AutoModel.from_pretrained(
+                        model_name,
+                        **model_load_kwargs
+                    )
+                else:
+                    raise safetensors_error
             
             # Move to device and set evaluation mode
             if device == "auto":
@@ -131,11 +148,12 @@ class HierarchicalRetriever:
             logger.info(f"✅ Successfully loaded medical embedding model on {device}")
             logger.info(f"   🎯 Batch size: {self.batch_size}")
             logger.info(f"   📏 Max length: {self.max_length}")
+            logger.info(f"   🔒 Secure loading: safetensors preference enabled")
             
         except Exception as e:
             logger.error(f"❌ Failed to load biomedical model: {e}")
             raise
-
+        
     def _load_sentence_transformer(self, model_name: str, device: str, config: Dict):
         """Load sentence transformer model."""
         try:

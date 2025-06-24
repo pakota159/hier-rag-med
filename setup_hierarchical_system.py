@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Setup script for Hierarchical Medical Q&A System
-Updated to support Microsoft BiomedNLP-PubMedBERT medical embedding
+Updated to support Microsoft BiomedNLP-PubMedBERT medical embedding with PyTorch 2.6+ compatibility
 
 File: setup_hierarchical_system.py
 """
@@ -24,7 +24,7 @@ from src.basic_reasoning.retrieval import HierarchicalRetriever
 
 
 def validate_medical_embedding_setup() -> bool:
-    """Validate that the system can load the medical embedding model."""
+    """Validate that the system can load the medical embedding model with safetensors support."""
     logger.info("🏥 Validating medical embedding setup...")
     
     try:
@@ -36,12 +36,13 @@ def validate_medical_embedding_setup() -> bool:
         logger.info(f"   📝 Testing tokenizer: {model_name}")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # Test model loading (just check if it can be initialized)
+        # Test model loading with safetensors preference
         logger.info(f"   🧠 Testing model loading: {model_name}")
         model = AutoModel.from_pretrained(
             model_name,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            trust_remote_code=False
+            trust_remote_code=False,
+            use_safetensors=True  # Prefer safetensors format
         )
         
         # Test a simple encoding
@@ -64,20 +65,27 @@ def validate_medical_embedding_setup() -> bool:
         
     except ImportError as e:
         logger.error(f"❌ Missing required packages for medical embedding: {e}")
-        logger.error("   💡 Run: pip install transformers>=4.35.0 torch>=2.1.0")
+        logger.error("   💡 Run: pip install transformers>=4.35.0 torch>=2.6.0")
         return False
     except Exception as e:
-        logger.error(f"❌ Medical embedding validation failed: {e}")
-        logger.error("   💡 Check internet connection and model availability")
+        error_msg = str(e)
+        if "torch.load" in error_msg and "CVE-2025-32434" in error_msg:
+            logger.error(f"❌ PyTorch version too old for security requirements: {e}")
+            logger.error("   💡 Run: pip install torch>=2.6.0 --upgrade")
+            logger.error("   💡 Or use safetensors format by upgrading transformers>=4.35.0")
+        else:
+            logger.error(f"❌ Medical embedding validation failed: {e}")
+            logger.error("   💡 Check internet connection and model availability")
         return False
 
 
 def check_system_requirements() -> Dict[str, bool]:
-    """Check system requirements for medical embedding support."""
+    """Check system requirements for medical embedding support with PyTorch 2.6+ compatibility."""
     logger.info("🔍 Checking system requirements...")
     
     requirements = {
         "torch": False,
+        "torch_version": False,
         "transformers": False,
         "sentence_transformers": False,
         "chromadb": False,
@@ -88,7 +96,19 @@ def check_system_requirements() -> Dict[str, bool]:
     try:
         import torch
         requirements["torch"] = True
-        logger.info(f"   ✅ PyTorch {torch.__version__}")
+        torch_version = torch.__version__
+        logger.info(f"   ✅ PyTorch {torch_version}")
+        
+        # Check if PyTorch version is 2.6+ for CVE-2025-32434 security fix
+        version_parts = torch_version.split('.')
+        major, minor = int(version_parts[0]), int(version_parts[1])
+        if major > 2 or (major == 2 and minor >= 6):
+            requirements["torch_version"] = True
+            logger.info(f"   ✅ PyTorch version {torch_version} meets security requirements")
+        else:
+            requirements["torch_version"] = False
+            logger.warning(f"   ⚠️ PyTorch {torch_version} < 2.6.0 has security vulnerability CVE-2025-32434")
+            logger.warning("   💡 Recommend upgrading: pip install torch>=2.6.0 --upgrade")
         
         # Check device support
         if torch.cuda.is_available():
@@ -136,11 +156,14 @@ def check_system_requirements() -> Dict[str, bool]:
     except ImportError:
         logger.warning("   ⚠️ ChromaDB not installed")
     
-    all_good = all(requirements.values())
+    # Check if core requirements are met (allow torch_version to be false for fallback)
+    core_requirements = ["torch", "transformers", "sentence_transformers", "chromadb", "sufficient_memory", "device_support"]
+    all_good = all(requirements[req] for req in core_requirements)
+    
     if all_good:
         logger.info("🎉 All system requirements satisfied")
     else:
-        failed = [k for k, v in requirements.items() if not v]
+        failed = [k for k, v in requirements.items() if not v and k in core_requirements]
         logger.warning(f"⚠️ Missing requirements: {failed}")
     
     return requirements
@@ -148,23 +171,27 @@ def check_system_requirements() -> Dict[str, bool]:
 
 def find_foundation_dataset() -> Path:
     """Find the foundation dataset file with enhanced search."""
-    logger.info("🔍 Searching for foundation dataset...")
-    
     search_paths = [
-        Path("data/foundation_dataset/foundation_medical_data.json"),
-        Path("data/foundation_dataset.json"),
-        Path("data/foundation_dataset/unified_dataset.json"),
-        Path("data/kg_raw/combined/all_medical_data.json"),
-        Path("foundation_dataset.json")
+        Path("data/foundation_data.json"),
+        Path("data/raw/foundation_data.json"),
+        Path("data/processed/foundation_data.json"),
+        Path("foundation_data.json"),
+        Path("data/enhanced_validated_fetchers_dataset.json"),
+        Path("data/raw/enhanced_validated_fetchers_dataset.json"),
+        Path("enhanced_validated_fetchers_dataset.json"),
+        Path("data/dataset.json"),
+        Path("data/raw/dataset.json"),
+        Path("dataset.json")
     ]
     
     for path in search_paths:
         if path.exists():
-            size_mb = path.stat().st_size / (1024 * 1024)
-            logger.info(f"✅ Found dataset: {path} ({size_mb:.1f} MB)")
+            logger.info(f"📁 Found dataset: {path}")
             return path
     
-    logger.error("❌ No foundation dataset found!")
+    logger.error("❌ Foundation dataset not found in any of these locations:")
+    for path in search_paths:
+        logger.error(f"   - {path}")
     logger.error("💡 Please run one of these first:")
     logger.error("   python fetch_foundation_data.py --max-results 50000")
     logger.error("   python fetch_data.py --source all --max-results 1000")
@@ -232,24 +259,37 @@ def load_foundation_dataset(dataset_path: Path) -> tuple[List[Dict], Dict]:
 
 
 def setup_enhanced_hierarchical_system():
-    """Main setup function with medical embedding support."""
+    """Main setup function with medical embedding support and PyTorch 2.6+ compatibility."""
     logger.info("🚀 Starting Enhanced Hierarchical Medical Q&A System Setup")
     logger.info("🏥 Optimized for Microsoft BiomedNLP-PubMedBERT embedding")
+    logger.info("🔒 Enhanced security with PyTorch 2.6+ and safetensors support")
     
     start_time = time.time()
     
     # Check system requirements
     requirements = check_system_requirements()
-    if not all(requirements.values()):
-        logger.error("❌ System requirements not met. Please install missing packages.")
+    core_reqs = ["torch", "transformers", "sentence_transformers", "chromadb", "sufficient_memory", "device_support"]
+    if not all(requirements[req] for req in core_reqs):
+        logger.error("❌ Core system requirements not met. Please install missing packages.")
         return False
     
-    # Validate medical embedding
-    if not validate_medical_embedding_setup():
-        logger.error("❌ Medical embedding validation failed. Using fallback may reduce performance.")
-        response = input("Continue with fallback model? (y/N): ")
-        if response.lower() != 'y':
+    # Warn about PyTorch version but continue
+    if not requirements["torch_version"]:
+        logger.warning("⚠️ PyTorch version < 2.6.0 detected. Security vulnerability present.")
+        logger.warning("   Continuing with safetensors fallback, but upgrade recommended.")
+    
+    # Validate medical embedding with fallback handling
+    medical_validation_success = validate_medical_embedding_setup()
+    if not medical_validation_success:
+        logger.warning("⚠️ Medical embedding validation failed.")
+        if not requirements["torch_version"]:
+            logger.error("❌ PyTorch version too old and medical model failed to load.")
+            logger.error("   Please upgrade PyTorch: pip install torch>=2.6.0 --upgrade")
             return False
+        else:
+            response = input("Continue with fallback model? (y/N): ")
+            if response.lower() != 'y':
+                return False
     
     # Initialize configuration
     try:
@@ -262,7 +302,8 @@ def setup_enhanced_hierarchical_system():
         logger.info(f"   🖥️  Environment: {device_info['environment']}")
         logger.info(f"   🎯 Device: {device_info['device']}")
         logger.info(f"   🧠 Embedding: {device_info['embedding_model']}")
-        logger.info(f"   🏥 Medical optimized: {device_info.get('medical_optimized', False)}")
+        logger.info(f"   🏥 Medical optimized: {device_info.get('medical_optimized', medical_validation_success)}")
+        logger.info(f"   🔒 PyTorch secure: {requirements['torch_version']}")
         
     except Exception as e:
         logger.error(f"❌ Configuration failed: {e}")
@@ -298,78 +339,48 @@ def setup_enhanced_hierarchical_system():
             
             if "BiomedNLP" not in stored_model and "BiomedNLP" in current_model:
                 logger.warning("⚠️ Collections were created with non-medical embedding")
-                response = input("Recreate collections with medical embedding for better performance? (Y/n): ")
-                if response.lower() != 'n':
+                response = input("Recreate collections with medical embedding for better performance? (y/N): ")
+                if response.lower() == 'y':
                     logger.info("🔄 Recreating collections with medical embedding...")
+                    retriever.clear_all_collections()
                 else:
-                    logger.info("✅ Using existing collections")
+                    logger.info("📚 Continuing with existing collections")
                     elapsed_time = time.time() - start_time
                     logger.info(f"⏱️ Setup completed in {elapsed_time:.1f} seconds")
                     return True
             else:
-                response = input("Recreate collections? (y/N): ")
-                if response.lower() != 'y':
-                    logger.info("✅ Using existing collections")
-                    elapsed_time = time.time() - start_time
-                    logger.info(f"⏱️ Setup completed in {elapsed_time:.1f} seconds")
-                    return True
-                    
-    except Exception:
-        logger.info("📝 No existing collections found, creating new ones...")
+                logger.info("📚 Collections compatible with current embedding model")
+                elapsed_time = time.time() - start_time
+                logger.info(f"⏱️ Setup completed in {elapsed_time:.1f} seconds")
+                return True
+        else:
+            logger.info("📄 No existing collections found. Creating new ones...")
+    except Exception as e:
+        logger.error(f"❌ Collection loading failed: {e}")
+        logger.info("🔄 Will create new collections...")
     
-    # Load and process foundation dataset
+    # Find and load foundation dataset
     try:
         dataset_path = find_foundation_dataset()
-        all_docs, foundation_analysis = load_foundation_dataset(dataset_path)
-        
-        logger.info("📊 Foundation Dataset Analysis:")
-        logger.info(f"   📚 Total documents: {foundation_analysis['total_documents']:,}")
-        logger.info(f"   🔬 Dataset type: {foundation_analysis['type']}")
-        logger.info(f"   ⭐ Data quality: {foundation_analysis['data_quality']}")
-        logger.info(f"   🏥 Medical specialties: {len(foundation_analysis['specialties'])}")
-        
+        all_documents, dataset_analysis = load_foundation_dataset(dataset_path)
     except Exception as e:
         logger.error(f"❌ Dataset loading failed: {e}")
-        return False
-    
-    # Process documents for hierarchical organization
-    try:
-        logger.info("🔧 Processing documents for medical hierarchical organization...")
-        all_docs = processor.preprocess_documents(all_docs)
-        
-        # Log tier distribution
-        tier_counts = {1: 0, 2: 0, 3: 0}
-        for doc in all_docs:
-            tier = doc["metadata"].get("tier", 2)
-            tier_counts[tier] = tier_counts.get(tier, 0) + 1
-        
-        logger.info("📊 Tier assignment results:")
-        logger.info(f"   Tier 1 (Pattern Recognition): {tier_counts.get(1, 0):,} documents")
-        logger.info(f"   Tier 2 (Clinical Reasoning): {tier_counts.get(2, 0):,} documents") 
-        logger.info(f"   Tier 3 (Evidence Confirmation): {tier_counts.get(3, 0):,} documents")
-        
-    except Exception as e:
-        logger.error(f"❌ Document processing failed: {e}")
         return False
     
     # Create hierarchical collections
     try:
         logger.info("🏗️ Creating hierarchical collections with medical embedding...")
-        retriever.create_hierarchical_collections()
-        
-        # Organize documents by tier
-        tier_docs = {1: [], 2: [], 3: []}
-        for doc in all_docs:
-            tier = doc["metadata"].get("tier", 2)
-            tier_docs[tier].append(doc)
-        
-        # Add documents to each tier
-        for tier, docs in tier_docs.items():
-            if docs:
-                logger.info(f"📚 Adding {len(docs):,} documents to Tier {tier}...")
-                retriever.add_documents_to_tier(docs, tier)
+        creation_stats = processor.create_hierarchical_collections(
+            all_documents, 
+            retriever,
+            medical_optimized=medical_validation_success
+        )
         
         logger.info("✅ Hierarchical collections created successfully")
+        logger.info("📊 Creation Statistics:")
+        for tier, stats in creation_stats.items():
+            if isinstance(stats, dict) and "processed" in stats:
+                logger.info(f"   {tier}: {stats['processed']:,} documents")
         
     except Exception as e:
         logger.error(f"❌ Collection creation failed: {e}")
@@ -377,11 +388,24 @@ def setup_enhanced_hierarchical_system():
     
     # Final validation
     try:
+        logger.info("🔍 Performing final system validation...")
+        
+        # Test retrieval
+        test_query = "What are the symptoms of diabetes mellitus?"
+        test_results = retriever.hierarchical_search(test_query, top_k=3)
+        
+        if test_results and len(test_results) > 0:
+            logger.info(f"✅ Test retrieval successful: {len(test_results)} results")
+        else:
+            logger.warning("⚠️ Test retrieval returned no results")
+        
+        # Get final statistics
         stats = retriever.get_collection_stats()
-        logger.info("🎉 Setup Complete! Final Statistics:")
+        logger.info("📊 Final Statistics:")
         logger.info(f"   📚 Total documents: {stats['total']:,}")
         logger.info(f"   🏥 Medical embedding: {stats['medical_optimized']}")
         logger.info(f"   🧠 Model: {stats['embedding_model']}")
+        logger.info(f"   🔒 Secure PyTorch: {requirements['torch_version']}")
         
         elapsed_time = time.time() - start_time
         logger.info(f"⏱️ Total setup time: {elapsed_time:.1f} seconds")
