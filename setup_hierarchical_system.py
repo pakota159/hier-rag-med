@@ -12,6 +12,7 @@ import json
 import torch
 from pathlib import Path
 from typing import Dict, List, Any
+import importlib
 
 # Add src to path
 project_root = Path(__file__).parent
@@ -23,42 +24,50 @@ from src.basic_reasoning.processing import HierarchicalDocumentProcessor
 from src.basic_reasoning.retrieval import HierarchicalRetriever
 
 
-def install_missing_packages():
-    """Install missing packages automatically."""
-    import subprocess
-    import sys
+def force_reload_modules():
+    """Force reload of modules that might be cached incorrectly."""
+    modules_to_reload = [
+        'sentence_transformers',
+        'transformers',
+        'torch'
+    ]
     
-    missing_packages = []
-    
-    try:
-        import sentence_transformers
-    except ImportError:
-        missing_packages.append("sentence-transformers>=2.2.2")
-    
-    try:
-        import transformers
-    except ImportError:
-        missing_packages.append("transformers>=4.35.0")
-    
-    try:
-        import safetensors
-    except ImportError:
-        missing_packages.append("safetensors>=0.4.0")
-    
-    if missing_packages:
-        logger.warning(f"🔧 Installing missing packages: {missing_packages}")
-        for package in missing_packages:
+    for module_name in modules_to_reload:
+        if module_name in sys.modules:
             try:
-                logger.info(f"   📦 Installing {package}...")
-                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-            except subprocess.CalledProcessError as e:
-                logger.error(f"❌ Failed to install {package}: {e}")
-                return False
-        
-        logger.info("✅ Missing packages installed successfully")
-        return True
+                importlib.reload(sys.modules[module_name])
+                logger.debug(f"Reloaded module: {module_name}")
+            except Exception as e:
+                logger.debug(f"Could not reload {module_name}: {e}")
+
+
+def check_import_with_retry(module_name: str, max_retries: int = 3):
+    """Try to import a module with retries and different approaches."""
+    for attempt in range(max_retries):
+        try:
+            if module_name == "sentence_transformers":
+                import sentence_transformers
+                return sentence_transformers
+            elif module_name == "transformers":
+                import transformers
+                return transformers
+            elif module_name == "chromadb":
+                import chromadb
+                return chromadb
+        except ImportError as e:
+            if attempt < max_retries - 1:
+                logger.debug(f"Import attempt {attempt + 1} failed for {module_name}: {e}")
+                # Force reload modules and clear cache
+                force_reload_modules()
+                # Clear import cache
+                if hasattr(importlib, 'invalidate_caches'):
+                    importlib.invalidate_caches()
+                time.sleep(1)  # Brief pause
+            else:
+                logger.error(f"All import attempts failed for {module_name}: {e}")
+                return None
     
-    return True
+    return None
 
 
 def validate_medical_embedding_setup() -> bool:
@@ -142,6 +151,9 @@ def check_system_requirements() -> Dict[str, bool]:
         "device_support": False
     }
     
+    # Force reload modules first
+    force_reload_modules()
+    
     try:
         import torch
         requirements["torch"] = True
@@ -184,34 +196,42 @@ def check_system_requirements() -> Dict[str, bool]:
     except ImportError:
         logger.warning("   ⚠️ PyTorch not installed")
     
-    try:
-        import transformers
+    # Check transformers with retry
+    transformers_module = check_import_with_retry("transformers")
+    if transformers_module:
         requirements["transformers"] = True
-        logger.info(f"   ✅ Transformers {transformers.__version__}")
-    except ImportError:
+        logger.info(f"   ✅ Transformers {transformers_module.__version__}")
+    else:
         logger.warning("   ⚠️ Transformers not installed")
     
-    try:
-        import sentence_transformers
+    # Check sentence-transformers with retry
+    sentence_transformers_module = check_import_with_retry("sentence_transformers")
+    if sentence_transformers_module:
         requirements["sentence_transformers"] = True
-        logger.info(f"   ✅ Sentence Transformers {sentence_transformers.__version__}")
-    except ImportError:
-        logger.warning("   ⚠️ Sentence Transformers not installed")
-        # Try to install it automatically
-        logger.info("   🔧 Attempting to install sentence-transformers...")
-        if install_missing_packages():
-            try:
-                import sentence_transformers
+        logger.info(f"   ✅ Sentence Transformers {sentence_transformers_module.__version__}")
+    else:
+        logger.warning("   ⚠️ Sentence Transformers import failed")
+        # Try direct approach
+        try:
+            import sys
+            import subprocess
+            result = subprocess.run([sys.executable, "-c", "import sentence_transformers; print(sentence_transformers.__version__)"], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                logger.info(f"   ✅ Sentence Transformers {version} (verified via subprocess)")
                 requirements["sentence_transformers"] = True
-                logger.info(f"   ✅ Sentence Transformers {sentence_transformers.__version__} installed successfully")
-            except ImportError:
-                logger.error("   ❌ Failed to import sentence-transformers after installation")
+            else:
+                logger.error(f"   ❌ Sentence Transformers subprocess check failed: {result.stderr}")
+        except Exception as e:
+            logger.error(f"   ❌ Sentence Transformers subprocess check error: {e}")
     
-    try:
-        import chromadb
+    # Check chromadb with retry
+    chromadb_module = check_import_with_retry("chromadb")
+    if chromadb_module:
         requirements["chromadb"] = True
-        logger.info(f"   ✅ ChromaDB {chromadb.__version__}")
-    except ImportError:
+        logger.info(f"   ✅ ChromaDB {chromadb_module.__version__}")
+    else:
         logger.warning("   ⚠️ ChromaDB not installed")
     
     # Check if core requirements are met (allow torch_version to be false for fallback)
@@ -224,16 +244,12 @@ def check_system_requirements() -> Dict[str, bool]:
         failed = [k for k, v in requirements.items() if not v and k in core_requirements]
         logger.warning(f"⚠️ Missing requirements: {failed}")
         
-        # Provide installation instructions
+        # If sentence_transformers is still failing, provide specific guidance
         if "sentence_transformers" in failed:
-            logger.error("💡 To install sentence-transformers:")
-            logger.error("   pip install sentence-transformers>=2.2.2")
-        if "transformers" in failed:
-            logger.error("💡 To install transformers:")
-            logger.error("   pip install transformers>=4.35.0")
-        if "chromadb" in failed:
-            logger.error("💡 To install chromadb:")
-            logger.error("   pip install chromadb>=0.4.22")
+            logger.error("💡 Sentence Transformers troubleshooting:")
+            logger.error("   1. Try: pip uninstall sentence-transformers -y && pip install sentence-transformers>=2.2.2")
+            logger.error("   2. Check Python path conflicts")
+            logger.error("   3. Restart Python interpreter")
     
     return requirements
 
@@ -335,29 +351,45 @@ def setup_enhanced_hierarchical_system():
     
     start_time = time.time()
     
-    # Check system requirements with auto-installation
+    # Check system requirements
     requirements = check_system_requirements()
     core_reqs = ["torch", "transformers", "sentence_transformers", "chromadb", "sufficient_memory", "device_support"]
+    
     if not all(requirements[req] for req in core_reqs):
-        logger.error("❌ Core system requirements not met.")
+        failed_reqs = [req for req in core_reqs if not requirements[req]]
+        logger.error(f"❌ Core system requirements not met: {failed_reqs}")
         
-        # Try to install missing packages automatically
-        missing_reqs = [req for req in core_reqs if not requirements[req]]
-        if any(req in missing_reqs for req in ["sentence_transformers", "transformers"]):
-            logger.info("🔧 Attempting to install missing packages...")
-            if install_missing_packages():
-                # Re-check requirements after installation
-                requirements = check_system_requirements()
-                if all(requirements[req] for req in core_reqs):
-                    logger.info("✅ All requirements now satisfied after installation")
-                else:
-                    logger.error("❌ Some requirements still not met after installation attempt")
-                    return False
-            else:
-                logger.error("❌ Failed to install missing packages")
-                return False
-        else:
-            logger.error("❌ Please install missing packages manually")
+        # Special handling for sentence_transformers import issue
+        if "sentence_transformers" in failed_reqs:
+            logger.warning("🔧 Attempting to resolve sentence_transformers import issue...")
+            
+            # Try to reinstall sentence_transformers
+            import subprocess
+            try:
+                logger.info("   📦 Reinstalling sentence-transformers...")
+                subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "sentence-transformers", "-y"])
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "sentence-transformers>=2.2.2", "--force-reinstall"])
+                
+                # Clear Python import cache
+                if hasattr(importlib, 'invalidate_caches'):
+                    importlib.invalidate_caches()
+                
+                # Try import again
+                time.sleep(2)  # Brief pause
+                try:
+                    import sentence_transformers
+                    logger.info(f"   ✅ Successfully imported sentence_transformers {sentence_transformers.__version__}")
+                    requirements["sentence_transformers"] = True
+                except ImportError as e:
+                    logger.error(f"   ❌ Still cannot import sentence_transformers: {e}")
+                    logger.error("   💡 Manual fix required: restart Python interpreter")
+                    
+            except subprocess.CalledProcessError as e:
+                logger.error(f"   ❌ Failed to reinstall sentence_transformers: {e}")
+        
+        # Re-check requirements
+        if not all(requirements[req] for req in core_reqs):
+            logger.error("❌ Requirements still not satisfied. Please fix manually and restart.")
             return False
     
     # Warn about PyTorch version but continue
