@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
-Enhanced Evaluation Script for HierRAGMed with Medical Embedding Support
+Enhanced Evaluation Script for HierRAGMed with GPU/Medical Embedding Support
 File: src/evaluation/run_evaluation.py
 
-Updated to support Microsoft BiomedNLP-PubMedBERT medical embedding and enhanced evaluation.
+Updated to support Microsoft BiomedNLP-PubMedBERT medical embedding and GPU environments.
 """
 
 import argparse
 import json
 import time
 import yaml
+import torch
 from pathlib import Path
 from typing import Dict, List, Optional
 import sys
+import os
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -20,10 +22,18 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
 from loguru import logger
+
+# Import available benchmarks only
 from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
+from src.evaluation.benchmarks.medreason_benchmark import MedReasonBenchmark
+from src.evaluation.benchmarks.msmarco_benchmark import MSMARCOBenchmark
+
+# Import evaluators
 from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
 from src.evaluation.evaluators.kg_evaluator import KGEvaluator
-from src.evaluation.metrics.qa_metrics import QAMetrics
+
+# Import config for hierarchical system
+from src.basic_reasoning.config import Config
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -51,13 +61,25 @@ def setup_logging(log_level: str = "INFO"):
 def parse_arguments():
     """Parse command line arguments with enhanced options."""
     parser = argparse.ArgumentParser(
-        description="Enhanced HierRAGMed Evaluation with Medical Embedding Support"
+        description="HierRAGMed Enhanced Evaluation System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Quick evaluation on GPU
+  python src/evaluation/run_evaluation.py --quick --models hierarchical_system --benchmark mirage
+  
+  # Full evaluation on all benchmarks
+  python src/evaluation/run_evaluation.py --full --models all --benchmark all
+  
+  # Custom evaluation
+  python src/evaluation/run_evaluation.py --max-questions 50 --models hierarchical_system
+        """
     )
     
     # Model selection
     parser.add_argument(
-        "--models",
-        nargs="+",
+        "--models", 
+        nargs="+", 
         choices=["hierarchical_system", "kg_system", "all"],
         default=["hierarchical_system"],
         help="Models to evaluate"
@@ -65,109 +87,163 @@ def parse_arguments():
     
     # Benchmark selection
     parser.add_argument(
-        "--benchmarks",
+        "--benchmark", 
         nargs="+", 
-        choices=["mirage", "med_qa", "pub_med_qa", "all"],
+        choices=["mirage", "medreason", "msmarco", "all"],
         default=["mirage"],
         help="Benchmarks to run"
     )
     
     # Evaluation modes
-    parser.add_argument(
-        "--quick",
-        action="store_true",
-        help="Quick evaluation with subset of questions"
-    )
-    
-    parser.add_argument(
-        "--full",
-        action="store_true", 
-        help="Full evaluation with all questions"
-    )
-    
-    parser.add_argument(
-        "--max-questions",
-        type=int,
-        default=None,
-        help="Maximum number of questions to evaluate per benchmark"
-    )
+    parser.add_argument("--quick", action="store_true", help="Quick evaluation (20 questions)")
+    parser.add_argument("--full", action="store_true", help="Full evaluation (all questions)")
+    parser.add_argument("--max-questions", type=int, help="Maximum questions per benchmark")
     
     # Configuration
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        help="Path to evaluation config file"
-    )
+    parser.add_argument("--config", type=str, help="Custom config file path")
+    parser.add_argument("--device", type=str, choices=["auto", "cuda", "cpu", "mps"], 
+                       default="auto", help="Device to use")
     
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="evaluation/results",
-        help="Output directory for results"
-    )
+    # Output
+    parser.add_argument("--output-dir", type=str, default="evaluation/results", 
+                       help="Output directory for results")
     
-    # Enhanced options
-    parser.add_argument(
-        "--device",
-        choices=["auto", "cuda", "mps", "cpu"],
-        default="auto",
-        help="Device to use for evaluation"
-    )
-    
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Verbose logging"
-    )
+    # Logging
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     
     return parser.parse_args()
-
-
-def load_evaluation_config(config_path: Optional[str], device: str) -> Dict:
-    """Load and validate evaluation configuration."""
-    if config_path:
-        # Use specified config
-        config_file = Path(config_path)
-    else:
-        # Auto-detect best config
-        config_dir = Path("src/evaluation")
-        
-        if device == "cuda" or (device == "auto" and is_cuda_available()):
-            gpu_config = config_dir / "gpu_runpod_config.yaml"
-            if gpu_config.exists():
-                config_file = gpu_config
-                logger.info("🎮 Using GPU configuration")
-            else:
-                config_file = config_dir / "config.yaml"
-                logger.info("💻 Using default configuration (GPU config not found)")
-        else:
-            config_file = config_dir / "config.yaml"
-            logger.info("💻 Using default configuration")
-    
-    if not config_file.exists():
-        logger.error(f"❌ Configuration file not found: {config_file}")
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    
-    try:
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        logger.info(f"✅ Loaded configuration from {config_file}")
-        return config
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to load config from {config_file}: {e}")
-        raise
 
 
 def is_cuda_available() -> bool:
     """Check if CUDA is available."""
     try:
-        import torch
         return torch.cuda.is_available()
     except ImportError:
         return False
+
+
+def is_runpod_environment() -> bool:
+    """Check if running in RunPod environment."""
+    return (os.path.exists("/workspace") or 
+            "RUNPOD_POD_ID" in os.environ or
+            "runpod" in os.environ.get("HOSTNAME", "").lower())
+
+
+def load_evaluation_config(config_path: Optional[str] = None, device: str = "auto") -> Dict:
+    """Load evaluation configuration with GPU support."""
+    logger.info("🔧 Loading evaluation configuration...")
+    
+    # Determine config file priority
+    config_files = []
+    
+    if config_path:
+        config_files.append(Path(config_path))
+    
+    # GPU environment detection and config selection
+    is_gpu = device == "cuda" or (device == "auto" and is_cuda_available())
+    is_runpod = is_runpod_environment()
+    
+    if is_gpu:
+        if is_runpod:
+            logger.info("🎮 Detected RunPod GPU environment")
+            config_files.extend([
+                Path("src/evaluation/configs/gpu_runpod_config.yaml"),
+                Path("src/evaluation/gpu_runpod_config.yaml"),
+            ])
+        else:
+            logger.info("🖥️ Detected local GPU environment")
+            config_files.extend([
+                Path("src/evaluation/configs/gpu_config.yaml"),
+                Path("src/evaluation/gpu_config.yaml"),
+            ])
+    
+    # Fallback configs
+    config_files.extend([
+        Path("src/evaluation/config.yaml"),
+        Path("config.yaml")
+    ])
+    
+    # Try loading configs in priority order
+    for config_file in config_files:
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    config = yaml.safe_load(f)
+                logger.info(f"✅ Loaded configuration from {config_file}")
+                
+                # Apply GPU optimizations if detected
+                if is_gpu:
+                    config = apply_gpu_optimizations(config, is_runpod)
+                
+                return config
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load config from {config_file}: {e}")
+                continue
+    
+    # Fallback to default config
+    logger.warning("⚠️ Using default configuration")
+    return get_default_config(is_gpu, is_runpod)
+
+
+def apply_gpu_optimizations(config: Dict, is_runpod: bool = False) -> Dict:
+    """Apply GPU-specific optimizations to config."""
+    logger.info("🚀 Applying GPU optimizations...")
+    
+    # Ensure models section exists
+    if "models" not in config:
+        config["models"] = {}
+    
+    # GPU-specific model settings
+    gpu_settings = {
+        "embedding": {
+            "device": "cuda",
+            "batch_size": 32 if is_runpod else 16,
+            "mixed_precision": True
+        },
+        "llm": {
+            "device": "cuda", 
+            "batch_size": 16 if is_runpod else 8,
+            "mixed_precision": True
+        }
+    }
+    
+    for model_type, settings in gpu_settings.items():
+        if model_type not in config["models"]:
+            config["models"][model_type] = {}
+        config["models"][model_type].update(settings)
+    
+    # Set environment flags
+    config["gpu_optimized"] = True
+    config["environment"] = "runpod_gpu" if is_runpod else "local_gpu"
+    
+    return config
+
+
+def get_default_config(is_gpu: bool = False, is_runpod: bool = False) -> Dict:
+    """Get default configuration."""
+    config = {
+        "results_dir": "evaluation/results",
+        "models": {
+            "embedding": {
+                "device": "cuda" if is_gpu else "cpu",
+                "batch_size": 32 if is_gpu else 8
+            },
+            "llm": {
+                "device": "cuda" if is_gpu else "cpu",
+                "batch_size": 16 if is_gpu else 4
+            }
+        },
+        "benchmarks": {
+            "mirage": {"enabled": True},
+            "medreason": {"enabled": True},
+            "msmarco": {"enabled": True}
+        }
+    }
+    
+    if is_gpu:
+        config = apply_gpu_optimizations(config, is_runpod)
+    
+    return config
 
 
 def initialize_benchmarks(
@@ -176,16 +252,43 @@ def initialize_benchmarks(
     max_questions: Optional[int] = None
 ) -> Dict[str, object]:
     """Initialize evaluation benchmarks."""
+    logger.info("📊 Initializing benchmarks...")
     benchmarks = {}
     
-    if "mirage" in benchmark_names or "all" in benchmark_names:
+    # Handle "all" selection
+    if "all" in benchmark_names:
+        benchmark_names = ["mirage", "medreason", "msmarco"]
+    
+    # Initialize MIRAGE benchmark
+    if "mirage" in benchmark_names:
         try:
             mirage = MIRAGEBenchmark(config)
             benchmarks["mirage"] = mirage
             logger.info("✅ MIRAGE benchmark initialized")
         except Exception as e:
             logger.error(f"❌ Failed to initialize MIRAGE: {e}")
-        
+    
+    # Initialize MedReason benchmark
+    if "medreason" in benchmark_names:
+        try:
+            medreason = MedReasonBenchmark(config)
+            benchmarks["medreason"] = medreason
+            logger.info("✅ MedReason benchmark initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to initialize MedReason: {e}")
+    
+    # Initialize MS MARCO benchmark
+    if "msmarco" in benchmark_names:
+        try:
+            msmarco = MSMARCOBenchmark(config)
+            benchmarks["msmarco"] = msmarco
+            logger.info("✅ MS MARCO benchmark initialized")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to initialize MS MARCO: {e}")
+    
+    if not benchmarks:
+        logger.error("❌ No benchmarks successfully initialized")
+    
     return benchmarks
 
 
@@ -194,32 +297,54 @@ def initialize_evaluators(
     config: Dict
 ) -> Dict[str, object]:
     """Initialize model evaluators."""
+    logger.info("🤖 Initializing evaluators...")
     evaluators = {}
     
-    if "hierarchical_system" in model_names or "all" in model_names:
+    # Handle "all" selection
+    if "all" in model_names:
+        model_names = ["hierarchical_system", "kg_system"]
+    
+    # Initialize Hierarchical System Evaluator
+    if "hierarchical_system" in model_names:
         try:
-            hierarchical_config = config.copy()
-            hierarchical_config["config_path"] = "src/basic_reasoning/config.yaml"
+            logger.info("🔧 Initializing Hierarchical System...")
             
-            hierarchical_evaluator = HierarchicalEvaluator(hierarchical_config)
-            hierarchical_evaluator.setup_model()
+            # Use the same pattern as debug_gen.py
+            hierarchical_config = Config()  # This handles GPU detection automatically
+            
+            # Create evaluator with proper config
+            evaluator_config = {
+                "hierarchical_config": hierarchical_config,
+                "model_name": "hierarchical_system",
+                "gpu_optimized": config.get("gpu_optimized", False)
+            }
+            
+            hierarchical_evaluator = HierarchicalEvaluator(evaluator_config)
             evaluators["hierarchical_system"] = hierarchical_evaluator
             logger.info("✅ Hierarchical system evaluator initialized")
+            
         except Exception as e:
             logger.error(f"❌ Failed to initialize hierarchical evaluator: {e}")
             raise
     
-    if "kg_system" in model_names or "all" in model_names:
+    # Initialize KG System Evaluator (optional)
+    if "kg_system" in model_names:
         try:
+            logger.info("🔧 Initializing KG System...")
+            
             kg_config = config.copy()
             kg_config["config_path"] = "src/kg/config.yaml"
             
             kg_evaluator = KGEvaluator(kg_config)
-            kg_evaluator.setup_model()
             evaluators["kg_system"] = kg_evaluator
             logger.info("✅ KG system evaluator initialized")
+            
         except Exception as e:
             logger.warning(f"⚠️ Failed to initialize KG evaluator: {e}")
+            logger.info("   Continuing without KG system...")
+    
+    if not evaluators:
+        logger.error("❌ No evaluators successfully initialized")
     
     return evaluators
 
@@ -241,14 +366,14 @@ def run_single_evaluation(
         questions = benchmark.get_questions()
         if not questions:
             logger.error(f"❌ No questions loaded from {benchmark_name}")
-            return {"error": "No questions loaded"}
+            return {"error": "No questions loaded", "accuracy": 0.0}
         
         # Limit questions if specified
         if max_questions and max_questions < len(questions):
             questions = questions[:max_questions]
             logger.info(f"📋 Limited to {max_questions} questions")
         
-        logger.info(f"📋 Loaded {len(questions)} questions from {benchmark_name}")
+        logger.info(f"📋 Processing {len(questions)} questions from {benchmark_name}")
         
         # Run evaluation
         results = []
@@ -256,65 +381,74 @@ def run_single_evaluation(
         
         for i, question in enumerate(questions):
             try:
-                # Evaluate single question
-                result = evaluator.evaluate_single(question)
-                results.append(result)
+                # Show progress every 10 questions
+                if (i + 1) % 10 == 0:
+                    logger.info(f"   Progress: {i + 1}/{len(questions)} questions")
                 
-                # Track accuracy
-                if result.get("is_correct", False):
+                # Retrieve documents
+                query = question.get("question", "")
+                retrieved_docs = evaluator.retrieve_documents(query, top_k=5)
+                
+                # Generate answer
+                answer = evaluator.generate_answer(query, retrieved_docs)
+                
+                # Evaluate the result using benchmark's evaluation method
+                evaluation_result = benchmark.evaluate_response(question, answer, retrieved_docs)
+                
+                # Extract accuracy information
+                is_correct = evaluation_result.get("is_correct", False)
+                if is_correct:
                     correct_count += 1
                 
-                # Progress logging
-                if (i + 1) % 10 == 0:
-                    current_accuracy = (correct_count / (i + 1)) * 100
-                    logger.info(f"   📊 Progress: {i + 1}/{len(questions)} ({current_accuracy:.1f}% accuracy)")
+                results.append({
+                    "question_id": question.get("id", f"q_{i}"),
+                    "question": query,
+                    "answer": answer,
+                    "correct_answer": question.get("answer", ""),
+                    "is_correct": is_correct,
+                    "evaluation": evaluation_result
+                })
                 
             except Exception as e:
-                logger.error(f"❌ Failed to evaluate question {i}: {e}")
+                logger.error(f"❌ Error processing question {i + 1}: {e}")
                 results.append({
                     "question_id": question.get("id", f"q_{i}"),
                     "error": str(e),
-                    "is_correct": False,
-                    "accuracy": 0.0
+                    "is_correct": False
                 })
         
         # Calculate final metrics
-        total_time = time.time() - start_time
-        accuracy = (correct_count / len(questions)) * 100 if questions else 0
+        total_questions = len(questions)
+        accuracy = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+        evaluation_time = time.time() - start_time
         
-        # Calculate additional metrics
-        qa_metrics = QAMetrics()
-        detailed_metrics = qa_metrics.calculate_metrics(results, questions)
-        
-        evaluation_result = {
+        final_result = {
             "model": model_name,
             "benchmark": benchmark_name,
-            "total_questions": len(questions),
+            "total_questions": total_questions,
             "correct_answers": correct_count,
             "accuracy": accuracy,
-            "total_time": total_time,
-            "avg_time_per_question": total_time / len(questions) if questions else 0,
-            "detailed_metrics": detailed_metrics,
-            "results": results
+            "evaluation_time": evaluation_time,
+            "detailed_results": results
         }
         
-        logger.info(f"✅ {model_name} on {benchmark_name}: {accuracy:.1f}% accuracy ({correct_count}/{len(questions)})")
-        
-        return evaluation_result
+        logger.info(f"✅ {model_name} on {benchmark_name}: {accuracy:.1f}% ({correct_count}/{total_questions})")
+        return final_result
         
     except Exception as e:
-        logger.error(f"❌ Evaluation failed for {model_name} on {benchmark_name}: {e}")
+        logger.error(f"❌ Evaluation failed: {e}")
         return {
             "model": model_name,
             "benchmark": benchmark_name,
             "error": str(e),
             "accuracy": 0.0,
-            "total_time": time.time() - start_time
+            "total_questions": 0,
+            "correct_answers": 0
         }
 
 
 def save_results(results: Dict, output_dir: str, timestamp: str):
-    """Save evaluation results."""
+    """Save evaluation results to files."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     
@@ -390,7 +524,7 @@ def main():
     
     logger.info("🚀 Starting Enhanced HierRAGMed Evaluation")
     logger.info(f"🎯 Models: {args.models}")
-    logger.info(f"📊 Benchmarks: {args.benchmarks}")
+    logger.info(f"📊 Benchmarks: {args.benchmark}")
     
     # Load configuration
     try:
@@ -414,8 +548,7 @@ def main():
     
     # Initialize benchmarks
     try:
-        benchmark_names = ["all"] if "all" in args.benchmarks else args.benchmarks
-        benchmarks = initialize_benchmarks(benchmark_names, config, max_questions)
+        benchmarks = initialize_benchmarks(args.benchmark, config, max_questions)
         
         if not benchmarks:
             logger.error("❌ No benchmarks initialized successfully")
@@ -427,8 +560,7 @@ def main():
     
     # Initialize evaluators
     try:
-        model_names = ["all"] if "all" in args.models else args.models
-        evaluators = initialize_evaluators(model_names, config)
+        evaluators = initialize_evaluators(args.models, config)
         
         if not evaluators:
             logger.error("❌ No evaluators initialized successfully")
@@ -460,9 +592,10 @@ def main():
         
         # Cleanup evaluator
         try:
-            evaluator.cleanup()
-        except:
-            pass
+            if hasattr(evaluator, 'cleanup'):
+                evaluator.cleanup()
+        except Exception as e:
+            logger.warning(f"⚠️ Cleanup warning for {model_name}: {e}")
     
     # Save results and print summary
     save_results(all_results, args.output_dir, timestamp)
