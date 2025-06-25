@@ -21,8 +21,6 @@ sys.path.insert(0, str(project_root / "src"))
 
 from loguru import logger
 from src.evaluation.benchmarks.mirage_benchmark import MIRAGEBenchmark
-from src.evaluation.benchmarks.med_qa_benchmark import MedQABenchmark
-from src.evaluation.benchmarks.pub_med_qa_benchmark import PubMedQABenchmark
 from src.evaluation.evaluators.hierarchical_evaluator import HierarchicalEvaluator
 from src.evaluation.evaluators.kg_evaluator import KGEvaluator
 from src.evaluation.metrics.qa_metrics import QAMetrics
@@ -187,23 +185,7 @@ def initialize_benchmarks(
             logger.info("✅ MIRAGE benchmark initialized")
         except Exception as e:
             logger.error(f"❌ Failed to initialize MIRAGE: {e}")
-    
-    if "med_qa" in benchmark_names or "all" in benchmark_names:
-        try:
-            med_qa = MedQABenchmark(config)
-            benchmarks["med_qa"] = med_qa
-            logger.info("✅ MedQA benchmark initialized")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to initialize MedQA: {e}")
-    
-    if "pub_med_qa" in benchmark_names or "all" in benchmark_names:
-        try:
-            pub_med_qa = PubMedQABenchmark(config)
-            benchmarks["pub_med_qa"] = pub_med_qa
-            logger.info("✅ PubMedQA benchmark initialized")
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to initialize PubMedQA: {e}")
-    
+        
     return benchmarks
 
 
