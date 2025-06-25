@@ -54,6 +54,18 @@ class HierarchicalEvaluator(BaseEvaluator):
             # Load Hierarchical configuration
             logger.info("📋 Loading hierarchical configuration...")
             self.hierarchical_config = Config()
+
+            # ADD LOGGING HERE - Debug config paths
+            logger.info(f"🔍 EVALUATOR Config data_dir: {self.hierarchical_config.config.get('data_dir', 'NOT_SET')}")
+            vector_db_path = self.hierarchical_config.get_data_dir("vector_db")
+            logger.info(f"🔍 EVALUATOR Vector DB path: {vector_db_path}")
+            logger.info(f"🔍 EVALUATOR Vector DB exists: {vector_db_path.exists()}")
+            logger.info(f"🔍 EVALUATOR Current working directory: {Path.cwd()}")
+
+            # Check if collections exist at this path
+            if vector_db_path.exists():
+                contents = list(vector_db_path.iterdir())
+                logger.info(f"🔍 EVALUATOR Vector DB contents: {[str(p.name) for p in contents]}")
             
             # Validate medical setup
             if not self.hierarchical_config.validate_medical_setup():

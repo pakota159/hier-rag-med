@@ -22,6 +22,19 @@ class HierarchicalRetriever:
     def __init__(self, config: Config):
         """Initialize hierarchical retriever with medical embedding."""
         self.config = config
+
+        # ADD LOGGING HERE - Debug the vector_db path
+        vector_db_path = config.get_data_dir("vector_db")
+        logger.info(f"🔍 HierarchicalRetriever initializing with vector_db path: {vector_db_path}")
+        logger.info(f"🔍 Config data_dir: {config.config.get('data_dir', 'NOT_SET')}")
+        logger.info(f"🔍 Vector DB path exists: {vector_db_path.exists()}")
+        
+        if vector_db_path.exists():
+            # List contents of vector_db directory
+            contents = list(vector_db_path.iterdir())
+            logger.info(f"🔍 Vector DB directory contents: {[str(p.name) for p in contents]}")
+        else:
+            logger.warning(f"⚠️ Vector DB path does not exist: {vector_db_path}")
         
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(
@@ -356,9 +369,31 @@ class HierarchicalRetriever:
     def load_hierarchical_collections(self) -> bool:
         """Load existing hierarchical collections."""
         try:
+            # List all available collections
+            available_collections = [col.name for col in self.client.list_collections()]
+            logger.info(f"🔍 Available ChromaDB collections: {available_collections}")
+            
+            # Check for expected collection names
+            expected_collections = ["tier1_pattern_recognition", "tier2_hypothesis_testing", "tier3_confirmation"]
+            missing_collections = [col for col in expected_collections if col not in available_collections]
+            
+            if missing_collections:
+                logger.warning(f"⚠️ Missing expected collections: {missing_collections}")
+                logger.info(f"🔍 This suggests collections weren't created or are in different location")
+                return False
+            
+            # Try to load each collection
+            logger.info("🔍 Attempting to load tier1_pattern_recognition...")
             self.tier1_collection = self.client.get_collection("tier1_pattern_recognition")
+            logger.info("✅ tier1_pattern_recognition loaded successfully")
+            
+            logger.info("🔍 Attempting to load tier2_hypothesis_testing...")
             self.tier2_collection = self.client.get_collection("tier2_hypothesis_testing")
+            logger.info("✅ tier2_hypothesis_testing loaded successfully")
+            
+            logger.info("🔍 Attempting to load tier3_confirmation...")
             self.tier3_collection = self.client.get_collection("tier3_confirmation")
+            logger.info("✅ tier3_confirmation loaded successfully")
             
             # Validate embedding model compatibility
             self._validate_collection_compatibility()
@@ -367,7 +402,8 @@ class HierarchicalRetriever:
             return True
             
         except Exception as e:
-            logger.warning(f"⚠️ Failed to load hierarchical collections: {e}")
+            logger.error(f"⚠️ Failed to load hierarchical collections: {e}")
+            logger.error(f"🔍 ChromaDB client path: {self.client._settings.persist_directory}")
             return False
 
     def _validate_collection_compatibility(self):
