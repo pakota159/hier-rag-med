@@ -362,7 +362,7 @@ def run_single_evaluation(
     start_time = time.time()
     
     try:
-        # CRITICAL FIX: Setup the model before evaluation
+        # Setup model
         logger.info(f"🔧 Setting up {model_name} model...")
         evaluator.setup_model()
         logger.info(f"✅ {model_name} model setup completed")
@@ -386,30 +386,72 @@ def run_single_evaluation(
         
         for i, question in enumerate(questions):
             try:
-                # Show progress every 10 questions
+                # DETAILED QUESTION LOGGING
+                question_id = question.get("id", f"q_{i}")
+                query = question.get("question", "")
+                correct_answer = question.get("answer", "").strip().upper()
+                options = question.get("options", {})
+                
+                logger.info(f"\n{'='*80}")
+                logger.info(f"📝 QUESTION {i+1}/{len(questions)} - ID: {question_id}")
+                logger.info(f"❓ Question: {query[:100]}..." if len(query) > 100 else f"❓ Question: {query}")
+                
+                # Log all options
+                if options:
+                    logger.info(f"📋 Options:")
+                    if isinstance(options, dict):
+                        for key in sorted(options.keys()):
+                            logger.info(f"   {key}: {options[key]}")
+                    elif isinstance(options, list):
+                        for j, option in enumerate(options):
+                            letter = chr(65 + j)  # A, B, C, D, E
+                            logger.info(f"   {letter}: {option}")
+                
+                logger.info(f"✅ Correct Answer: {correct_answer}")
+                
+                # Show progress every 10 questions (in addition to detailed logging)
                 if (i + 1) % 10 == 0:
-                    logger.info(f"   Progress: {i + 1}/{len(questions)} questions")
+                    logger.info(f"📊 Progress: {i + 1}/{len(questions)} questions processed")
                 
                 # Retrieve documents
-                query = question.get("question", "")
+                logger.info(f"🔍 Retrieving documents...")
                 retrieved_docs = evaluator.retrieve_documents(query, top_k=5)
+                logger.info(f"📄 Retrieved {len(retrieved_docs)} documents")
                 
                 # Generate answer
+                logger.info(f"🤖 Generating answer...")
                 answer = evaluator.generate_answer(query, retrieved_docs)
+                logger.info(f"💬 Generated Response: {answer}")
                 
-                # Evaluate the result using benchmark's evaluation method
+                # Extract predicted answer
                 evaluation_result = benchmark.evaluate_response(question, answer, retrieved_docs)
-                
-                # Extract accuracy information
+                predicted_answer = evaluation_result.get("extracted_answer", "NONE")
                 is_correct = evaluation_result.get("is_correct", False)
+                
+                # DETAILED ANSWER COMPARISON LOGGING
+                logger.info(f"🎯 ANSWER ANALYSIS:")
+                logger.info(f"   📍 Predicted Answer: {predicted_answer}")
+                logger.info(f"   ✅ Correct Answer: {correct_answer}")
+                logger.info(f"   {'✅ CORRECT' if is_correct else '❌ INCORRECT'}")
+                
                 if is_correct:
                     correct_count += 1
+                    logger.info(f"🎉 Question {i+1} answered correctly!")
+                else:
+                    logger.info(f"💔 Question {i+1} answered incorrectly.")
+                
+                # Running accuracy
+                current_accuracy = (correct_count / (i + 1)) * 100
+                logger.info(f"📊 Running Accuracy: {correct_count}/{i+1} ({current_accuracy:.1f}%)")
+                logger.info(f"{'='*80}")
                 
                 results.append({
-                    "question_id": question.get("id", f"q_{i}"),
+                    "question_id": question_id,
                     "question": query,
+                    "options": options,
                     "answer": answer,
-                    "correct_answer": question.get("answer", ""),
+                    "correct_answer": correct_answer,
+                    "predicted_answer": predicted_answer,
                     "is_correct": is_correct,
                     "evaluation": evaluation_result
                 })
@@ -426,6 +468,19 @@ def run_single_evaluation(
         total_questions = len(questions)
         accuracy = (correct_count / total_questions) * 100 if total_questions > 0 else 0.0
         evaluation_time = time.time() - start_time
+        
+        # FINAL SUMMARY LOGGING
+        logger.info(f"\n{'='*80}")
+        logger.info(f"🏁 EVALUATION COMPLETE")
+        logger.info(f"{'='*80}")
+        logger.info(f"📊 Model: {model_name}")
+        logger.info(f"📊 Benchmark: {benchmark_name}")
+        logger.info(f"📊 Total Questions: {total_questions}")
+        logger.info(f"📊 Correct Answers: {correct_count}")
+        logger.info(f"📊 Final Accuracy: {accuracy:.1f}%")
+        logger.info(f"⏱️ Total Time: {evaluation_time:.1f} seconds")
+        logger.info(f"⏱️ Average Time per Question: {evaluation_time/total_questions:.1f}s")
+        logger.info(f"{'='*80}")
         
         final_result = {
             "model": model_name,
@@ -448,7 +503,7 @@ def run_single_evaluation(
             "error": str(e),
             "accuracy": 0.0
         }
-
+    
 def save_results(results: Dict, output_dir: str, timestamp: str):
     """Save evaluation results to files."""
     output_path = Path(output_dir)
