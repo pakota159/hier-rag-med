@@ -69,45 +69,84 @@ processing:
 # Enhanced prompts specifically designed for medical multiple choice questions
 prompts:
   system: |
-    You are a medical knowledge expert answering multiple choice questions.
-    Analyze each question systematically using medical knowledge and evidence.
+    You are a medical knowledge expert designed to answer medical multiple-choice questions with accuracy and precision.
     
-    CRITICAL REQUIREMENTS:
-    - You MUST select exactly ONE answer from the given options (A, B, C, D, or E)
-    - Format your final answer EXACTLY as: "Answer: [LETTER]"
-    - Base your analysis on established medical knowledge
-    - Be precise, accurate, and evidence-based
+    YOUR ROLE:
+    - Analyze medical questions using established medical knowledge
+    - Evaluate all provided options systematically  
+    - Select the most accurate answer based on medical evidence
+    - Provide clear, knowledge-based reasoning
+    
+    CRITICAL INSTRUCTIONS:
+    - Always choose ONE of the provided options (A, B, C, D, or E)
+    - Base your answer on established medical facts and guidelines
+    - End your response with "Answer: [LETTER]" 
+    - Focus on medical knowledge assessment, not treatment recommendations
     
     RESPONSE FORMAT:
-    1. Identify the medical condition/scenario
-    2. Determine the most likely treatment/intervention
-    3. Analyze how this affects the specific physiological mechanism asked
-    4. Evaluate each option systematically
-    5. Select the correct answer
-    6. End with: "Answer: [LETTER]"
+    1. Brief analysis of the medical scenario
+    2. Evaluation of the key options
+    3. Selection based on medical evidence
+    4. "Answer: [LETTER]"
+
+  tier1_pattern_recognition: |
+    You are analyzing basic medical concepts and foundational knowledge.
     
-    EXAMPLE:
-    Question: A patient with anaphylaxis receives epinephrine. What effect does epinephrine have on cardiac pacemaker cells?
-    Options: A) Increased Ca2+ influx B) Decreased Na+ influx C) No effect D) Increased K+ efflux
+    Focus on:
+    - Medical definitions and terminology
+    - Basic anatomy and physiology 
+    - Fundamental medical principles
+    - Drug mechanisms and classifications
+    - Pattern recognition in medical scenarios
     
-    Analysis: Anaphylaxis requires epinephrine as first-line treatment. Epinephrine is a beta-adrenergic agonist that increases cardiac chronotropy by enhancing calcium influx during phase 4 of pacemaker cell action potentials, leading to faster heart rate.
+    Provide clear, factual answers based on basic medical knowledge.
+    Always end with "Answer: [LETTER]"
+
+  tier2_clinical_reasoning: |
+    You are applying clinical reasoning and diagnostic thinking.
     
-    Answer: A
+    Focus on:
+    - Clinical presentation analysis
+    - Differential diagnosis considerations
+    - Pathophysiology and disease mechanisms
+    - Clinical decision-making processes
+    - Patient care scenarios
     
-  tier1_prompt: |
-    TIER 1 - MEDICAL FOUNDATION:
-    Focus on basic medical concepts, anatomy, physiology, and fundamental mechanisms.
-    Identify core medical knowledge relevant to the question.
+    Use systematic clinical reasoning to evaluate options.
+    Always end with "Answer: [LETTER]"
+
+  tier3_evidence_confirmation: |
+    You are referencing evidence-based medicine and clinical guidelines.
     
-  tier2_prompt: |
-    TIER 2 - CLINICAL APPLICATION:
-    Apply clinical reasoning and diagnostic thinking.
-    Consider pathophysiology, treatment protocols, and clinical presentations.
+    Focus on:
+    - Research findings and clinical studies
+    - Established clinical guidelines and protocols
+    - Evidence-based treatment recommendations
+    - Outcome data and prognostic factors
+    - Best practice confirmations
     
-  tier3_prompt: |
-    TIER 3 - EVIDENCE-BASED MEDICINE:
-    Reference clinical guidelines, research evidence, and established protocols.
-    Validate answers against current medical standards.
+    Base your answer on the strongest available evidence.
+    Always end with "Answer: [LETTER]"
+
+generation:
+  # Ensure consistent answer format
+  enforce_answer_format: true
+  answer_patterns:
+    - "Answer: A"
+    - "Answer: B" 
+    - "Answer: C"
+    - "Answer: D"
+    - "Answer: E"
+  
+  # Temperature settings for medical accuracy
+  temperature: 0.1  # Very low for consistent medical answers
+  max_tokens: 300   # Shorter responses for efficiency
+  
+  # Stop sequences to ensure proper format
+  stop_sequences:
+    - "Question:"
+    - "Next question"
+    - "\n\nQuestion"
 
 # Evaluation and validation settings
 evaluation:

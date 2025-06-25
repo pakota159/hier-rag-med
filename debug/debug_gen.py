@@ -299,8 +299,14 @@ def extract_answer_choice(response: str) -> Optional[str]:
     return None
 
 def analyze_accuracy(question: Dict, response: str):
-    """Analyze answer accuracy."""
-    correct_answer = question.get("answer", "").strip().upper()
+    """Analyze answer accuracy with correct field names."""
+    # FIX: Use correct field name from MIRAGE benchmark
+    correct_answer = question.get("correct_answer", "").strip().upper()
+    
+    # Fallback to 'answer' field for compatibility
+    if not correct_answer:
+        correct_answer = question.get("answer", "").strip().upper()
+    
     extracted_answer = extract_answer_choice(response)
     
     print(f"\n📊 Accuracy Analysis:")

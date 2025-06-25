@@ -386,10 +386,17 @@ def run_single_evaluation(
         
         for i, question in enumerate(questions):
             try:
-                # DETAILED QUESTION LOGGING
+                # FIXED: Use correct field names from MIRAGE benchmark
                 question_id = question.get("id", f"q_{i}")
                 query = question.get("question", "")
-                correct_answer = question.get("answer", "").strip().upper()
+                
+                # FIX: Use 'correct_answer' field (not 'answer')
+                correct_answer = question.get("correct_answer", "").strip().upper()
+                
+                # Fallback to 'answer' field for compatibility
+                if not correct_answer:
+                    correct_answer = question.get("answer", "").strip().upper()
+                
                 options = question.get("options", {})
                 
                 logger.info(f"\n{'='*80}")
@@ -425,15 +432,16 @@ def run_single_evaluation(
                 
                 # Extract predicted answer
                 evaluation_result = benchmark.evaluate_response(question, answer, retrieved_docs)
-                predicted_answer = evaluation_result.get("extracted_answer", "NONE")
+                predicted_answer = evaluation_result.get("predicted_answer", "NONE")
                 is_correct = evaluation_result.get("is_correct", False)
+
                 
                 # DETAILED ANSWER COMPARISON LOGGING
                 logger.info(f"🎯 ANSWER ANALYSIS:")
                 logger.info(f"   📍 Predicted Answer: {predicted_answer}")
                 logger.info(f"   ✅ Correct Answer: {correct_answer}")
                 logger.info(f"   {'✅ CORRECT' if is_correct else '❌ INCORRECT'}")
-                
+
                 if is_correct:
                     correct_count += 1
                     logger.info(f"🎉 Question {i+1} answered correctly!")

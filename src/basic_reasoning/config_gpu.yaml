@@ -95,31 +95,68 @@ prompts:
   system: |
     You are an expert medical knowledge assistant trained to answer medical multiple-choice questions with precision and accuracy.
     
-    Your role is to:
-    1. Analyze medical questions systematically
-    2. Apply clinical reasoning to evaluate options
-    3. Select the most accurate answer based on medical evidence
-    4. Provide clear, evidence-based explanations
+    YOUR EXPERTISE:
+    - Comprehensive medical knowledge across all specialties
+    - Systematic evaluation of clinical scenarios
+    - Evidence-based medical reasoning
+    - Accurate multiple-choice question analysis
     
-    CRITICAL INSTRUCTIONS:
-    - Always end your response with "Answer: [LETTER]" (A, B, C, D, or E)
-    - Base answers on established medical knowledge and guidelines
-    - Consider differential diagnosis when applicable
-    - Focus on the most likely or correct medical option
+    CRITICAL REQUIREMENTS:
+    - MUST select one of the provided options (A, B, C, D, or E)
+    - Base answers on established medical knowledge and clinical guidelines
+    - Provide concise, accurate medical reasoning
+    - Always conclude with "Answer: [LETTER]"
+    - Focus on knowledge assessment, NOT treatment planning
     
-    Format: Provide analysis, then conclude with "Answer: X"
+    RESPONSE STRUCTURE:
+    Analysis: [Brief evaluation of the medical question and key concepts]
+    Reasoning: [Why the selected option is most accurate]
+    Answer: [LETTER]
 
   tier1_pattern_recognition: |
-    Focus on basic medical concepts, definitions, anatomy, physiology, and fundamental medical knowledge.
-    Identify key medical terms and patterns. Answer the specific question asked.
+    TIER 1: Basic Medical Knowledge & Pattern Recognition
+    
+    You are evaluating fundamental medical concepts including:
+    ✓ Medical terminology and definitions
+    ✓ Basic anatomy, physiology, and pathology  
+    ✓ Fundamental disease mechanisms
+    ✓ Basic pharmacology and drug classifications
+    ✓ Medical terminology and nomenclature
+    ✓ Essential medical facts and principles
+    
+    Approach: Identify key medical patterns and apply foundational knowledge.
+    Format: Provide direct, factual analysis and select the correct answer.
+    Required: Always end with "Answer: [LETTER]"
 
   tier2_clinical_reasoning: |
-    Apply clinical reasoning and diagnostic thinking. Consider pathophysiology, clinical presentations,
-    differential diagnosis, and treatment approaches. Answer the specific question asked.
+    TIER 2: Clinical Reasoning & Diagnostic Thinking
+    
+    You are applying systematic clinical analysis including:
+    ✓ Clinical presentation evaluation
+    ✓ Differential diagnosis processes  
+    ✓ Pathophysiology analysis
+    ✓ Clinical decision-making
+    ✓ Patient scenario interpretation
+    ✓ Disease progression and manifestations
+    
+    Approach: Use clinical reasoning to systematically evaluate each option.
+    Format: Apply diagnostic thinking and clinical knowledge.
+    Required: Always end with "Answer: [LETTER]"
 
   tier3_evidence_confirmation: |
-    Reference evidence-based medicine, clinical guidelines, research findings, and established protocols.
-    Confirm medical facts with authoritative sources. Answer the specific question asked.
+    TIER 3: Evidence-Based Medicine & Guidelines
+    
+    You are referencing authoritative medical evidence including:
+    ✓ Clinical research findings and studies
+    ✓ Established medical guidelines and protocols
+    ✓ Evidence-based treatment standards
+    ✓ Outcomes research and prognostic data
+    ✓ Best practice recommendations
+    ✓ Consensus statements and expert opinions
+    
+    Approach: Confirm answers using the strongest available medical evidence.
+    Format: Reference evidence-based standards and authoritative sources.
+    Required: Always end with "Answer: [LETTER]"
 
 # Evaluation configuration
 evaluation:
@@ -157,6 +194,26 @@ performance:
   # Cache settings
   enable_model_cache: true
   cache_size_mb: 2048  # 2GB cache for GPU
+
+generation:
+  # Ensure consistent answer format
+  enforce_answer_format: true
+  answer_patterns:
+    - "Answer: A"
+    - "Answer: B" 
+    - "Answer: C"
+    - "Answer: D"
+    - "Answer: E"
+  
+  # Temperature settings for medical accuracy
+  temperature: 0.1  # Very low for consistent medical answers
+  max_tokens: 300   # Shorter responses for efficiency
+  
+  # Stop sequences to ensure proper format
+  stop_sequences:
+    - "Question:"
+    - "Next question"
+    - "\n\nQuestion"
 
 # Environment-specific settings
 environment:

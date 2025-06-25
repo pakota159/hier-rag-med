@@ -1,0 +1,120 @@
+{
+  "total_questions": 7663,
+  "questions_with_answers": 7663,
+  "questions_without_answers": 0,
+  "questions_with_options": 7663,
+  "questions_without_options": 0,
+  "datasets": {
+    "medqa": {
+      "total": 1273,
+      "with_answers": 1273,
+      "without_answers": 0,
+      "with_options": 1273,
+      "answer_distribution": {
+        "B": 309,
+        "D": 265,
+        "C": 346,
+        "A": 353
+      }
+    },
+    "medmcqa": {
+      "total": 4183,
+      "with_answers": 4183,
+      "without_answers": 0,
+      "with_options": 4183,
+      "answer_distribution": {
+        "A": 1348,
+        "C": 925,
+        "B": 1085,
+        "D": 825
+      }
+    },
+    "pubmedqa": {
+      "total": 500,
+      "with_answers": 500,
+      "without_answers": 0,
+      "with_options": 500,
+      "answer_distribution": {
+        "A": 276,
+        "B": 169,
+        "C": 55
+      }
+    },
+    "bioasq": {
+      "total": 618,
+      "with_answers": 618,
+      "without_answers": 0,
+      "with_options": 618,
+      "answer_distribution": {
+        "B": 223,
+        "A": 395
+      }
+    },
+    "mmlu": {
+      "total": 1089,
+      "with_answers": 1089,
+      "without_answers": 0,
+      "with_options": 1089,
+      "answer_distribution": {
+        "A": 235,
+        "B": 254,
+        "C": 248,
+        "D": 352
+      }
+    }
+  },
+  "missing_answers_by_dataset": {},
+  "answer_distribution": {
+    "B": 2040,
+    "D": 1442,
+    "C": 1574,
+    "A": 2607
+  },
+  "option_count_distribution": {
+    "4": 6545,
+    "3": 500,
+    "2": 618
+  },
+  "sample_questions": {
+    "with_answers": [
+      {
+        "dataset": "medqa",
+        "id": "0000",
+        "question": "A junior orthopaedic surgery resident is completing a carpal tunnel repair with the department chair...",
+        "answer": "B",
+        "options": {
+          "A": "Disclose the error to the patient and put it in the operative report",
+          "B": "Tell the attending that he cannot fail to disclose this mistake",
+          "C": "Report the physician to the ethics committee",
+          "D": "Refuse to dictate the operative report"
+        }
+      },
+      {
+        "dataset": "medqa",
+        "id": "0001",
+        "question": "A 67-year-old man with transitional cell carcinoma of the bladder comes to the physician because of ...",
+        "answer": "D",
+        "options": {
+          "A": "Inhibition of proteasome",
+          "B": "Hyperstabilization of microtubules",
+          "C": "Generation of free radicals",
+          "D": "Cross-linking of DNA"
+        }
+      },
+      {
+        "dataset": "medqa",
+        "id": "0002",
+        "question": "Two weeks after undergoing an emergency cardiac catherization with stenting for unstable angina pect...",
+        "answer": "B",
+        "options": {
+          "A": "Renal papillary necrosis",
+          "B": "Cholesterol embolization",
+          "C": "Eosinophilic granulomatosis with polyangiitis",
+          "D": "Polyarteritis nodosa"
+        }
+      }
+    ],
+    "without_answers": [],
+    "malformed": []
+  }
+}
