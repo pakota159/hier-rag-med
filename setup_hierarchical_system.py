@@ -508,7 +508,13 @@ def setup_enhanced_hierarchical_system():
         retriever.create_hierarchical_collections()
         
         # Process documents into tiers using processor
-        organized_docs = processor.organize_by_reasoning_type(all_documents)
+        processed_docs = processor.preprocess_documents(all_documents)
+
+        # Group processed documents by tier for hierarchical collections
+        organized_docs = {"tier1": [], "tier2": [], "tier3": []}
+        for doc in processed_docs:
+            tier = doc["metadata"].get("tier", 2)
+            organized_docs[f"tier{tier}"].append(doc)
         
         # Add documents to tiers using retriever
         retriever.add_documents_to_tiers(organized_docs)
