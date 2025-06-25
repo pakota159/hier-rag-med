@@ -54,15 +54,14 @@ class HierarchicalEvaluator(BaseEvaluator):
             # Load Hierarchical configuration
             logger.info("📋 Loading hierarchical configuration...")
             self.hierarchical_config = Config()
-
-            # ADD LOGGING HERE - Debug config paths
+            
+            # Debug paths
             logger.info(f"🔍 EVALUATOR Config data_dir: {self.hierarchical_config.config.get('data_dir', 'NOT_SET')}")
             vector_db_path = self.hierarchical_config.get_data_dir("vector_db")
             logger.info(f"🔍 EVALUATOR Vector DB path: {vector_db_path}")
             logger.info(f"🔍 EVALUATOR Vector DB exists: {vector_db_path.exists()}")
             logger.info(f"🔍 EVALUATOR Current working directory: {Path.cwd()}")
-
-            # Check if collections exist at this path
+            
             if vector_db_path.exists():
                 contents = list(vector_db_path.iterdir())
                 logger.info(f"🔍 EVALUATOR Vector DB contents: {[str(p.name) for p in contents]}")
@@ -84,7 +83,19 @@ class HierarchicalEvaluator(BaseEvaluator):
             logger.info("🔧 Initializing retrieval system...")
             self.retriever = HierarchicalRetriever(self.hierarchical_config)
             
-            # Perform health check
+            # CRITICAL FIX: Load collections FIRST, then do health check
+            logger.info("📚 Loading hierarchical collections...")
+            if not self.retriever.load_hierarchical_collections():
+                logger.error("❌ Failed to load hierarchical collections")
+                # Add diagnostic info
+                available_collections = [col.name for col in self.retriever.client.list_collections()]
+                logger.error(f"🔍 Available collections: {available_collections}")
+                raise RuntimeError("Failed to load hierarchical collections")
+            
+            # Optimize for inference
+            self.retriever.optimize_for_inference()
+            
+            # NOW perform health check after collections are loaded
             health = self.retriever.health_check()
             logger.info("🔍 System Health Check:")
             for check, status in health.items():
@@ -92,15 +103,19 @@ class HierarchicalEvaluator(BaseEvaluator):
                 logger.info(f"   {status_icon} {check}: {status}")
             
             if not all(health.values()):
+                # Don't fail immediately - add more diagnostics
+                logger.error("❌ Health check failed - investigating...")
+                
+                # Check what collections actually exist
+                available_collections = [col.name for col in self.retriever.client.list_collections()]
+                logger.error(f"🔍 Available collections: {available_collections}")
+                
+                # Check collection loading status
+                logger.error(f"🔍 tier1_collection: {self.retriever.tier1_collection}")
+                logger.error(f"🔍 tier2_collection: {self.retriever.tier2_collection}")
+                logger.error(f"🔍 tier3_collection: {self.retriever.tier3_collection}")
+                
                 raise RuntimeError("Health check failed - system not ready")
-            
-            # Optimize for inference
-            self.retriever.optimize_for_inference()
-            
-            # Load hierarchical collections
-            logger.info("📚 Loading hierarchical collections...")
-            if not self.retriever.load_hierarchical_collections():
-                raise RuntimeError("Failed to load hierarchical collections")
             
             # Get collection statistics
             stats = self.retriever.get_collection_stats()

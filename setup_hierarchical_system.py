@@ -518,6 +518,21 @@ def setup_enhanced_hierarchical_system():
         
         # Add documents to tiers using retriever
         retriever.add_documents_to_tiers(organized_docs)
+
+        logger.info("🔍 Verifying collection creation...")
+        available_collections = [col.name for col in retriever.client.list_collections()]
+        logger.info(f"📋 Created collections: {available_collections}")
+        
+        expected_collections = ["tier1_pattern_recognition", "tier2_hypothesis_testing", "tier3_confirmation"]
+        missing_collections = [col for col in expected_collections if col not in available_collections]
+        
+        if missing_collections:
+            logger.error(f"❌ Missing expected collections: {missing_collections}")
+            logger.error("❌ Collection creation failed - collections not properly named")
+            return False
+        else:
+            logger.info("✅ All expected collections created successfully")
+
         
         # Get creation statistics
         stats = retriever.get_collection_stats()
