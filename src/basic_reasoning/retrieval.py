@@ -485,6 +485,40 @@ class HierarchicalRetriever:
         
         logger.info(f"✅ Tier {tier} complete: {added_count:,} added, {failed_count:,} failed")
 
+    def add_documents_to_tiers(self, organized_docs: Dict[str, List[Dict]]):
+        """Add documents to multiple tiers from organized document dictionary.
+        
+        Args:
+            organized_docs: Dictionary with tier names as keys (e.g., 'tier1', 'tier2', 'tier3')
+                        and lists of documents as values
+        """
+        logger.info("📚 Adding documents to hierarchical tiers...")
+        
+        total_added = 0
+        for tier_name, docs in organized_docs.items():
+            if not docs:
+                logger.info(f"⚠️ No documents found for {tier_name}")
+                continue
+                
+            # Extract tier number from tier name (e.g., 'tier1' -> 1)
+            try:
+                tier_number = int(tier_name.replace("tier", ""))
+            except ValueError:
+                logger.error(f"❌ Invalid tier name: {tier_name}")
+                continue
+                
+            # Validate tier number
+            if tier_number not in [1, 2, 3]:
+                logger.error(f"❌ Invalid tier number: {tier_number}")
+                continue
+                
+            logger.info(f"📁 Adding {len(docs):,} documents to {tier_name}")
+            self.add_documents_to_tier(docs, tier_number)
+            total_added += len(docs)
+        
+        logger.info(f"✅ Total documents added across all tiers: {total_added:,}")
+        return total_added
+
     def _clean_metadata_for_chromadb(self, metadata: Dict) -> Dict:
         """Clean metadata to ensure ChromaDB compatibility."""
         import json
