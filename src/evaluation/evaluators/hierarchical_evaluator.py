@@ -174,6 +174,37 @@ class HierarchicalEvaluator(BaseEvaluator):
             logger.error(f"❌ Answer generation failed: {e}")
             return f"Error generating answer: {str(e)}"
     
+    def generate_response(self, question: str, context: Optional[str] = None) -> str:
+        """
+        Generate response for a given question using the hierarchical system.
+        
+        This method implements the abstract method from BaseEvaluator by internally
+        calling the HierarchicalGenerator.generate_answer() method, just like debug_gen.py does.
+        
+        Args:
+            question (str): The medical question to answer
+            context (Optional[str]): Optional context string (not used in hierarchical approach)
+            
+        Returns:
+            str: Generated answer response
+        """
+        if not self.generator:
+            logger.error("❌ Generator not initialized")
+            return "Error: Generator not initialized"
+        
+        try:
+            # Retrieve relevant documents first
+            documents = self.retrieve_documents(question, top_k=10)
+            
+            # Use the existing generate_answer method which calls HierarchicalGenerator.generate_answer()
+            response = self.generate_answer(question, documents)
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"❌ generate_response failed: {e}")
+            return f"Error generating response: {str(e)}"
+    
     def _format_question_for_generation(self, query: str) -> str:
         """Format question for generation, preserving options if present."""
         # The query might already be formatted with options from the benchmark
