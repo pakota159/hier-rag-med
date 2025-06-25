@@ -1,120 +1,166 @@
-# Enhanced Basic Reasoning - GPU Configuration
-# Optimized for CUDA/RunPod environments with Microsoft BiomedNLP-PubMedBERT
+# Enhanced GPU Configuration for HierRAGMed Basic Reasoning
+# File: src/basic_reasoning/config_gpu.yaml
+# Optimized for RunPod RTX 4090 GPU environment
 
-data_dir: data/foundation
+# Data directories
+data_dir: "data/foundation"
+logs_dir: "logs"
 
-# Model configurations optimized for GPU with medical embeddings
+# Model configurations
 models:
   embedding:
-    name: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
-    fallback_name: sentence-transformers/all-MiniLM-L6-v2
-    device: cuda
-    batch_size: 32  # Higher batch size for GPU
+    name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext"
+    device: "cuda"
+    batch_size: 32  # Increased for GPU
     max_length: 512
     normalize_embeddings: true
-    trust_remote_code: false
     use_medical_embedding: true
     
-    # GPU optimizations
-    model_kwargs:
-      torch_dtype: float16
-      attn_implementation: "flash_attention_2"  # Use flash attention if available
-    
-    # GPU performance settings
-    compile_model: true
+    # GPU optimizations - FIXED: Remove Flash Attention for BERT
     mixed_precision: true
-    gradient_checkpointing: false  # Disable for inference
-    memory_efficient: true
+    compile_model: false  # Disable model compilation for stability
+    pin_memory: true
+    num_workers: 4
+    
+    # REMOVED: Flash Attention (not supported by BERT)
+    # use_flash_attention: false
+    
+    # Fallback configuration
+    fallback_model: "sentence-transformers/all-MiniLM-L6-v2"
+    enable_fallback: true
 
   llm:
-    name: mistral:7b-instruct
-    temperature: 0.2  # Lower for GPU consistency
-    context_window: 4096
-    device: cuda
+    name: "mistral:7b-instruct"
+    base_url: "http://localhost:11434"
+    device: "cuda"
+    batch_size: 16  # Increased for GPU
+    temperature: 0.3  # Lower for more consistent medical answers
+    max_tokens: 512
+    timeout: 120
     
     # GPU optimizations
-    batch_size: 16
     mixed_precision: true
-    use_flash_attention: true
+    pin_memory: true
 
-# Enhanced hierarchical retrieval for GPU
+# Hierarchical retrieval configuration
 hierarchical_retrieval:
-  tier1_top_k: 8        # Increased for GPU processing power
-  tier2_top_k: 6        # More documents for better coverage
-  tier3_top_k: 4        # More evidence retrieval
+  # Tier configurations
+  tier1_top_k: 15  # Increased for GPU
+  tier2_top_k: 20  # Increased for GPU  
+  tier3_top_k: 10
+  
+  # Medical enhancements
+  medical_entity_boost: 1.2
+  clinical_context_window: 3
   enable_evidence_stratification: true
   enable_temporal_weighting: true
   medical_specialty_boost: true
-  balanced_tier_distribution: true
   
-  # GPU-specific optimizations
-  batch_retrieval: true
-  parallel_tier_processing: true
-  gpu_accelerated_search: true
+  # GPU-optimized search
+  batch_search: true
+  max_batch_size: 64  # Increased for GPU
+  enable_parallel_search: true
+  
+  # Similarity thresholds optimized for medical content
+  similarity_thresholds:
+    tier1: 0.7
+    tier2: 0.75
+    tier3: 0.8
 
-# Processing optimized for GPU memory
+# Document processing configuration
 processing:
-  chunk_size: 384
-  chunk_overlap: 96
+  chunk_size: 512
+  chunk_overlap: 100
   min_content_length: 50
-  enable_medical_entity_recognition: true
-  preserve_medical_terminology: true
+  max_chunks_per_document: 20  # Increased for GPU
   
-  # GPU batch processing
-  batch_size: 64
-  num_workers: 4
+  # Enhanced medical processing
+  enable_medical_entity_recognition: true
+  enable_clinical_terminology_extraction: true
+  enable_drug_name_recognition: true
+  
+  # GPU-optimized processing
+  batch_size: 64  # Increased for GPU
+  num_workers: 8  # Increased for GPU
   pin_memory: true
   
-  target_tier_distribution:
-    tier1: 0.30
-    tier2: 0.40
-    tier3: 0.30
+  # Tier balancing for MIRAGE optimization
+  target_tier_ratios:
+    tier1: 0.25  # Basic knowledge
+    tier2: 0.55  # Clinical reasoning (most MIRAGE questions)
+    tier3: 0.20  # Evidence-based
 
-# Performance settings for GPU
-performance:
-  use_gpu_acceleration: true
-  mixed_precision: true
-  compile_models: true
-  memory_efficient: true
-  
-  # CUDA optimizations
-  cuda_deterministic: false
-  cuda_benchmark: true
-  
-  # Memory management for GPU
-  gpu_memory_fraction: 0.8
-  memory_growth: true
-  max_memory_per_process: "20GB"
-
-# Enhanced prompts (same as base config)
+# Generation prompts optimized for MIRAGE
 prompts:
   system: |
-    You are a medical knowledge expert answering multiple choice questions.
-    Analyze each question systematically using hierarchical medical reasoning.
+    You are an expert medical knowledge assistant trained to answer medical multiple-choice questions with precision and accuracy.
     
-    CRITICAL REQUIREMENTS:
-    - Select ONLY ONE answer: A, B, C, D, or E
-    - Format your final answer as: "Answer: [LETTER]"
-    - Base your answer on medical evidence and established knowledge
-    - Be precise, accurate, and evidence-based
+    Your role is to:
+    1. Analyze medical questions systematically
+    2. Apply clinical reasoning to evaluate options
+    3. Select the most accurate answer based on medical evidence
+    4. Provide clear, evidence-based explanations
     
-    RESPONSE FORMAT:
-    1. Brief analysis of the question topic
-    2. Systematic evaluation of key options
-    3. Selection of the best answer
-    4. Final answer: "Answer: [LETTER]"
+    CRITICAL INSTRUCTIONS:
+    - Always end your response with "Answer: [LETTER]" (A, B, C, D, or E)
+    - Base answers on established medical knowledge and guidelines
+    - Consider differential diagnosis when applicable
+    - Focus on the most likely or correct medical option
     
-  tier1_prompt: |
-    TIER 1 - MEDICAL PATTERN RECOGNITION:
-    Analyze the basic medical concepts, definitions, anatomy, and fundamental knowledge patterns.
-    Focus on established medical facts, terminology, and basic pathophysiology.
-    
-  tier2_prompt: |
-    TIER 2 - CLINICAL REASONING:
-    Apply clinical reasoning and diagnostic thinking to the medical scenario.
-    Consider differential diagnosis, clinical presentations, and diagnostic approaches.
-    
-  tier3_prompt: |
-    TIER 3 - EVIDENCE CONFIRMATION:
-    Evaluate evidence-based medicine, treatment guidelines, and research findings.
-    Consider latest clinical guidelines, treatment protocols, and research evidence.
+    Format: Provide analysis, then conclude with "Answer: X"
+
+  tier1_pattern_recognition: |
+    Focus on basic medical concepts, definitions, anatomy, physiology, and fundamental medical knowledge.
+    Identify key medical terms and patterns. Answer the specific question asked.
+
+  tier2_clinical_reasoning: |
+    Apply clinical reasoning and diagnostic thinking. Consider pathophysiology, clinical presentations,
+    differential diagnosis, and treatment approaches. Answer the specific question asked.
+
+  tier3_evidence_confirmation: |
+    Reference evidence-based medicine, clinical guidelines, research findings, and established protocols.
+    Confirm medical facts with authoritative sources. Answer the specific question asked.
+
+# Evaluation configuration
+evaluation:
+  enable_medical_validation: true
+  check_medical_terminology: true
+  validate_drug_interactions: false  # Disabled for performance
+  enable_clinical_reasoning_check: true
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name} | {message}"
+  file_rotation: "100 MB"
+  
+  # GPU-specific logging
+  log_gpu_memory: true
+  log_inference_times: true
+
+# Performance optimization for GPU
+performance:
+  # Memory management
+  gpu_memory_fraction: 0.8
+  enable_memory_growth: true
+  allow_memory_growth: true
+  
+  # Compute optimizations
+  enable_mixed_precision: true
+  enable_tf32: true  # For RTX 4090
+  enable_cudnn_benchmark: true
+  
+  # Parallel processing
+  max_concurrent_requests: 16  # Increased for GPU
+  enable_async_processing: true
+  
+  # Cache settings
+  enable_model_cache: true
+  cache_size_mb: 2048  # 2GB cache for GPU
+
+# Environment-specific settings
+environment:
+  type: "runpod_gpu"
+  gpu_optimization: true
+  cuda_device: 0
+  tensor_parallel_size: 1
