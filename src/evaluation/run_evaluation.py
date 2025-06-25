@@ -362,6 +362,11 @@ def run_single_evaluation(
     start_time = time.time()
     
     try:
+        # CRITICAL FIX: Setup the model before evaluation
+        logger.info(f"🔧 Setting up {model_name} model...")
+        evaluator.setup_model()
+        logger.info(f"✅ {model_name} model setup completed")
+        
         # Get questions from benchmark
         questions = benchmark.get_questions()
         if not questions:
@@ -419,7 +424,7 @@ def run_single_evaluation(
         
         # Calculate final metrics
         total_questions = len(questions)
-        accuracy = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+        accuracy = (correct_count / total_questions) * 100 if total_questions > 0 else 0.0
         evaluation_time = time.time() - start_time
         
         final_result = {
@@ -429,23 +434,20 @@ def run_single_evaluation(
             "correct_answers": correct_count,
             "accuracy": accuracy,
             "evaluation_time": evaluation_time,
-            "detailed_results": results
+            "results": results
         }
         
-        logger.info(f"✅ {model_name} on {benchmark_name}: {accuracy:.1f}% ({correct_count}/{total_questions})")
+        logger.info(f"✅ {benchmark_name} evaluation completed: {accuracy:.1f}% accuracy ({correct_count}/{total_questions})")
         return final_result
         
     except Exception as e:
-        logger.error(f"❌ Evaluation failed: {e}")
+        logger.error(f"❌ Evaluation failed for {model_name} on {benchmark_name}: {e}")
         return {
             "model": model_name,
             "benchmark": benchmark_name,
             "error": str(e),
-            "accuracy": 0.0,
-            "total_questions": 0,
-            "correct_answers": 0
+            "accuracy": 0.0
         }
-
 
 def save_results(results: Dict, output_dir: str, timestamp: str):
     """Save evaluation results to files."""
