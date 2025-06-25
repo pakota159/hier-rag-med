@@ -19,11 +19,25 @@ class Config:
 
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration with medical embedding support."""
-        self.config_path = config_path or Path(__file__).parent / "config.yaml"
         
-        # Auto-detect environment
+        # Auto-detect environment FIRST
         self.environment = self._detect_environment()
         logger.info(f"🔧 Detected environment: {self.environment}")
+        
+        # FIX: Choose config file based on environment if no explicit path provided
+        if config_path is None:
+            if self.environment in ["runpod_gpu", "local_gpu", "colab_gpu"]:
+                # Use GPU-optimized config for GPU environments
+                self.config_path = Path(__file__).parent / "config_gpu.yaml"
+                logger.info(f"🎯 Using GPU config: {self.config_path}")
+            else:
+                # Use default config for CPU environments
+                self.config_path = Path(__file__).parent / "config.yaml"
+                logger.info(f"🖥️ Using default config: {self.config_path}")
+        else:
+            # Use explicitly provided config path
+            self.config_path = config_path
+            logger.info(f"📋 Using custom config: {self.config_path}")
         
         # Load configuration
         self.config = self._load_config()
