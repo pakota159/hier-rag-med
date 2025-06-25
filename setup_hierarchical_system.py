@@ -444,7 +444,7 @@ def setup_enhanced_hierarchical_system():
     
     # Initialize components
     try:
-        processor = HierarchicalDocumentProcessor(config["processing"])
+        processor = HierarchicalDocumentProcessor(config)
         retriever = HierarchicalRetriever(config)
         logger.info("✅ Components initialized")
     except Exception as e:
