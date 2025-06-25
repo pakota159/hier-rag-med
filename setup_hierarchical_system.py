@@ -539,10 +539,15 @@ def setup_enhanced_hierarchical_system():
         
         # Test retrieval
         test_query = "What are the symptoms of diabetes mellitus?"
-        test_results = retriever.hierarchical_search(test_query, top_k=3)
+        test_results = retriever.search_hierarchical(test_query, use_all_tiers=True)
         
-        if test_results and len(test_results) > 0:
-            logger.info(f"✅ Test retrieval successful: {len(test_results)} results")
+        # Extract combined results from the dictionary response
+        combined_results = test_results.get("combined", [])
+        
+        if test_results and len(combined_results) > 0:
+            logger.info(f"✅ Test retrieval successful: {len(combined_results)} results")
+            logger.info(f"🎯 Query classification: {test_results.get('query_classification', {}).get('primary_tier', 'unknown')}")
+            logger.info(f"🔍 Search strategy: {test_results.get('search_strategy', 'unknown')}")
         else:
             logger.warning("⚠️ Test retrieval returned no results")
         
